@@ -5,8 +5,11 @@ const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
+  const missing: string[] = [];
+  if (!supabaseUrl) missing.push("EXPO_PUBLIC_SUPABASE_URL");
+  if (!supabaseAnonKey) missing.push("EXPO_PUBLIC_SUPABASE_ANON_KEY");
   throw new Error(
-    "Missing Supabase environment variables. Ensure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY are set.",
+    `Missing Supabase environment variables: ${missing.join(", ")}. Copy .env.example to .env and set non-empty values (Supabase Dashboard → Project Settings → API). Restart Expo after changing .env.`,
   );
 }
 
