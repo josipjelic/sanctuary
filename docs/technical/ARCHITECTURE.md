@@ -137,7 +137,7 @@ Exports `colors`, `typography`, `shadows`, `spacing`, `radius`, and `animation` 
 
 ## Mobile Architecture
 
-> Last updated: 2026-03-28 by @react-native-developer (task #002; Library tab + stack appended)
+> Last updated: 2026-03-29 — Quick Capture aligned to `.assets/quick_capture_home`
 
 ### Folder Structure
 
@@ -166,6 +166,11 @@ Navigation is handled by **Expo Router v6** using file-based routing. The `src/a
 Deep linking is configured via `app.json` (`scheme: "sanctuary"`) and the `expo-router` plugin. All navigable screens must declare a deep link route once they are implemented (task #005 and beyond).
 
 Route params will be typed in `src/navigation/types.ts` once the full navigation hierarchy is defined (task #005).
+
+#### Quick Capture (home tab)
+
+- **Design reference**: `.assets/quick_capture_home/code.html` (and `screen.png`) — header with brand mark and settings affordance, hero “Speak your mind.” / “Your thoughts are safe here.”, large primary voice control with soft glow and pulse ring, typed capture in a tonal field with pill **Capture** CTA, **Recent Thoughts** row to the inbox (subtitle shows today’s capture count).
+- **Implementation**: `src/app/(app)/index.tsx` — registered as the first tab in `(app)/_layout.tsx`.
 
 #### Library (topics)
 

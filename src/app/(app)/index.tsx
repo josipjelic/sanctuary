@@ -6,7 +6,9 @@ import {
   validateCaptureText,
 } from "@/lib/capture";
 import { supabase } from "@/lib/supabase";
-import { colors, spacing, typography } from "@/lib/theme";
+import { colors, radius, spacing, typography } from "@/lib/theme";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   AudioModule,
   AudioQuality,
@@ -17,17 +19,22 @@ import {
   useAudioRecorderState,
 } from "expo-audio";
 import type { RecordingOptions } from "expo-audio";
-import { Redirect } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { Redirect, router } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
+  Image,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -45,7 +52,6 @@ const VOICE_RECORDING_OPTIONS: RecordingOptions = {
   numberOfChannels: 1,
   bitRate: 128000,
   android: {
-    // WebM + default encoder fails MediaRecorder.prepare() on many devices; use AAC in MP4/M4A.
     outputFormat: "mpeg4",
     audioEncoder: "aac",
     sampleRate: 16000,
@@ -66,8 +72,15 @@ const VOICE_RECORDING_OPTIONS: RecordingOptions = {
   },
 };
 
+function startOfLocalDay(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export default function QuickCaptureScreen() {
   const { session } = useAuth();
+  const { width } = useWindowDimensions();
   const audioRecorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(audioRecorder, 250);
 
@@ -75,6 +88,9 @@ export default function QuickCaptureScreen() {
     return <Redirect href="/(auth)/sign-in" />;
   }
   const userId = session.user.id;
+
+  const micSize = Math.min(256, Math.round(width * 0.58));
+  const heroTitleSize = Math.min(48, Math.round(width * 0.11));
 
   const [text, setText] = useState("");
   const [textError, setTextError] = useState<string | null>(null);
@@ -84,10 +100,34 @@ export default function QuickCaptureScreen() {
 
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
 
+  const [todayCount, setTodayCount] = useState<number | null>(null);
+
   const successOpacity = useRef(new Animated.Value(0)).current;
   const [successVisible, setSuccessVisible] = useState(false);
   const pulseOpacity = useRef(new Animated.Value(1)).current;
   const pulseAnimation = useRef<Animated.CompositeAnimation | null>(null);
+  const ringScale = useRef(new Animated.Value(1)).current;
+  const ringAnimation = useRef<Animated.CompositeAnimation | null>(null);
+
+  const loadTodayCount = useCallback(async () => {
+    const start = startOfLocalDay().toISOString();
+    const { count, error } = await supabase
+      .from("thoughts")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", start);
+    if (error) {
+      setTodayCount(0);
+      return;
+    }
+    setTodayCount(count ?? 0);
+  }, [userId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadTodayCount();
+    }, [loadTodayCount]),
+  );
 
   useEffect(() => {
     const recorder = audioRecorder;
@@ -126,6 +166,27 @@ export default function QuickCaptureScreen() {
       pulseOpacity.setValue(1);
     }
   }, [recordingState, pulseOpacity]);
+
+  useEffect(() => {
+    ringAnimation.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ringScale, {
+          toValue: 1.05,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(ringScale, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    ringAnimation.current.start();
+    return () => {
+      ringAnimation.current?.stop();
+    };
+  }, [ringScale]);
 
   function triggerSuccessAnimation() {
     setSuccessVisible(true);
@@ -168,6 +229,7 @@ export default function QuickCaptureScreen() {
         })
         .catch(() => {});
       setText("");
+      void loadTodayCount();
       triggerSuccessAnimation();
     } finally {
       setIsSubmitting(false);
@@ -253,10 +315,10 @@ export default function QuickCaptureScreen() {
       return;
     }
 
+    void loadTodayCount();
     triggerSuccessAnimation();
     setRecordingState("idle");
 
-    // Fire-and-forget — transcribe edge function (task #007)
     sendAudioForTranscription(uri, inserted.id).catch(() => {
       supabase
         .from("thoughts")
@@ -302,86 +364,209 @@ export default function QuickCaptureScreen() {
   const canCapture =
     text.trim().length > 0 && !isSubmitting && recordingState === "idle";
 
+  const todaySubtitle =
+    todayCount === null
+      ? "…"
+      : todayCount === 0
+        ? "No captures today"
+        : `${todayCount} ${todayCount === 1 ? "capture" : "captures"} today`;
+
+  const micIconSize = Math.round(micSize * 0.28);
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <TextInput
-          value={text}
-          onChangeText={(t) => {
-            setText(t);
-            if (textError) setTextError(null);
-            if (submitError) setSubmitError(null);
-          }}
-          placeholder="What's on your mind?"
-          placeholderTextColor={colors.outlineVariant}
-          multiline
-          textAlignVertical="top"
-          style={styles.heroInput}
-          editable={recordingState === "idle" && !isSubmitting}
-          autoFocus
-          testID="capture-input"
-        />
-
-        <View style={styles.errorContainer}>
-          {(textError || submitError || permissionError) && (
-            <Text style={styles.errorText}>
-              {textError ?? submitError ?? permissionError}
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.actionRow}>
-          <Animated.View style={{ opacity: pulseOpacity }}>
-            <TouchableOpacity
-              onPress={handleMicPress}
-              disabled={isProcessing || isSubmitting}
-              style={[
-                styles.micButton,
-                isRecording && styles.micButtonRecording,
-                (isProcessing || isSubmitting) && styles.micButtonDisabled,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={
-                isRecording ? "Stop recording" : "Start voice recording"
-              }
-              testID="mic-button"
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <View style={styles.avatarWrap}>
+                <Image
+                  source={require("../../../assets/icon.png")}
+                  style={styles.avatarImage}
+                  accessibilityIgnoresInvertColors
+                />
+              </View>
+              <Text style={styles.brandMark}>Sanctuary</Text>
+            </View>
+            <View
+              style={styles.headerIconSlot}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
             >
-              {isProcessing ? (
-                <Text style={styles.micIcon}>…</Text>
-              ) : isRecording ? (
-                <Text style={styles.micDuration}>
-                  {formatDuration(recordingDurationSec)}
-                </Text>
-              ) : (
-                <Text style={styles.micIcon}>●</Text>
-              )}
-            </TouchableOpacity>
-          </Animated.View>
+              <Ionicons
+                name="settings-outline"
+                size={22}
+                color={colors.primary}
+              />
+            </View>
+          </View>
 
-          <TouchableOpacity
-            onPress={handleTextCapture}
-            disabled={!canCapture}
-            style={[
-              styles.captureButton,
-              !canCapture && styles.captureButtonDisabled,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Capture thought"
-            testID="capture-submit"
-          >
+          <View style={styles.heroBlock}>
             <Text
               style={[
-                styles.captureLabel,
-                !canCapture && styles.captureLabelDisabled,
+                styles.heroTitle,
+                { fontSize: heroTitleSize, lineHeight: heroTitleSize + 6 },
               ]}
             >
-              {isSubmitting ? "Saving…" : "Capture"}
+              Speak your mind.
             </Text>
-          </TouchableOpacity>
-        </View>
+            <Text style={styles.heroSubtitle}>
+              Your thoughts are safe here.
+            </Text>
+          </View>
+
+          <View style={styles.micSection}>
+            <View
+              style={[
+                styles.micStack,
+                { width: micSize + 72, height: micSize + 72 },
+              ]}
+            >
+              <View
+                style={[
+                  styles.micGlow,
+                  {
+                    width: micSize + 40,
+                    height: micSize + 40,
+                    borderRadius: (micSize + 40) / 2,
+                  },
+                ]}
+              />
+              <Animated.View
+                style={[
+                  styles.micPulseRing,
+                  {
+                    width: micSize + 20,
+                    height: micSize + 20,
+                    borderRadius: (micSize + 20) / 2,
+                    transform: [{ scale: ringScale }],
+                  },
+                ]}
+              />
+              <Animated.View style={{ opacity: pulseOpacity }}>
+                <TouchableOpacity
+                  onPress={handleMicPress}
+                  disabled={isProcessing || isSubmitting}
+                  style={[
+                    styles.micMain,
+                    {
+                      width: micSize,
+                      height: micSize,
+                      borderRadius: micSize / 2,
+                    },
+                    isRecording && styles.micMainRecording,
+                    (isProcessing || isSubmitting) && styles.micMainDisabled,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    isRecording ? "Stop recording" : "Start voice recording"
+                  }
+                  testID="mic-button"
+                  activeOpacity={0.92}
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator color={colors.onPrimary} />
+                  ) : isRecording ? (
+                    <Text style={styles.micDuration}>
+                      {formatDuration(recordingDurationSec)}
+                    </Text>
+                  ) : (
+                    <Ionicons
+                      name="mic"
+                      size={micIconSize}
+                      color={colors.onPrimary}
+                    />
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
+            </View>
+          </View>
+
+          <View style={styles.typeSection}>
+            <TextInput
+              value={text}
+              onChangeText={(t) => {
+                setText(t);
+                if (textError) setTextError(null);
+                if (submitError) setSubmitError(null);
+              }}
+              placeholder="What's on your mind?"
+              placeholderTextColor={colors.outlineVariant}
+              multiline
+              textAlignVertical="top"
+              style={styles.typeInput}
+              editable={recordingState === "idle" && !isSubmitting}
+              testID="capture-input"
+            />
+            <TouchableOpacity
+              onPress={handleTextCapture}
+              disabled={!canCapture}
+              style={[
+                styles.captureButton,
+                !canCapture && styles.captureButtonDisabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Capture thought"
+              testID="capture-submit"
+              activeOpacity={0.9}
+            >
+              <Text
+                style={[
+                  styles.captureLabel,
+                  !canCapture && styles.captureLabelDisabled,
+                ]}
+              >
+                {isSubmitting ? "Saving…" : "Capture"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.errorContainer}>
+            {(textError || submitError || permissionError) && (
+              <Text style={styles.errorText}>
+                {textError ?? submitError ?? permissionError}
+              </Text>
+            )}
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.recentCard,
+              pressed && styles.recentCardPressed,
+            ]}
+            onPress={() => router.push("/(app)/inbox")}
+            accessibilityRole="button"
+            accessibilityLabel="Recent thoughts, open inbox"
+          >
+            <View style={styles.recentLeft}>
+              <View style={styles.recentIconCircle}>
+                <Ionicons
+                  name="time-outline"
+                  size={22}
+                  color={colors.primary}
+                />
+              </View>
+              <View>
+                <Text style={styles.recentTitle}>Recent Thoughts</Text>
+                <Text style={styles.recentSubtitle}>{todaySubtitle}</Text>
+              </View>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={22}
+              color={colors.secondary}
+              style={styles.recentChevron}
+            />
+          </Pressable>
+        </ScrollView>
       </KeyboardAvoidingView>
 
       {successVisible && (
@@ -402,65 +587,127 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surface,
   },
-  heroInput: {
-    flex: 1,
-    minHeight: "60%",
-    fontFamily: "Manrope_400Regular",
-    fontSize: 22,
-    lineHeight: 32,
-    color: colors.onSurface,
-    backgroundColor: "transparent",
-    paddingHorizontal: spacing.s6,
-    paddingTop: spacing.s8,
-    paddingBottom: spacing.s4,
-    textAlignVertical: "top",
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.s8,
+    paddingBottom: spacing.s24,
   },
-  errorContainer: {
-    minHeight: 20,
-    paddingHorizontal: spacing.s6,
-    marginBottom: spacing.s2,
-  },
-  errorText: {
-    ...typography.labelMd,
-    color: colors.error,
-  },
-  actionRow: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: spacing.s6,
+    justifyContent: "space-between",
+    paddingTop: spacing.s4,
     paddingBottom: spacing.s6,
-    gap: spacing.s4,
   },
-  micButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 1.5,
-    borderColor: colors.outline,
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  headerIconSlot: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "transparent",
   },
-  micButtonRecording: {
-    backgroundColor: "#c0392b",
-    borderColor: "#c0392b",
+  avatarWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: colors.surfaceContainerLow,
   },
-  micButtonDisabled: {
-    opacity: 0.4,
+  avatarImage: {
+    width: 40,
+    height: 40,
+    resizeMode: "cover",
   },
-  micIcon: {
+  brandMark: {
+    fontFamily: "Manrope_700Bold",
+    fontSize: 24,
+    color: colors.primary,
+    letterSpacing: -0.6,
+  },
+  heroBlock: {
+    alignItems: "center",
+    marginBottom: spacing.s16,
+  },
+  heroTitle: {
+    fontFamily: "Manrope_700Bold",
+    letterSpacing: -1.2,
+    color: colors.onSurface,
+    textAlign: "center",
+    marginBottom: spacing.s4,
+  },
+  heroSubtitle: {
+    fontFamily: "PlusJakartaSans_600SemiBold",
     fontSize: 18,
-    color: colors.onSurfaceVariant,
+    lineHeight: 26,
+    color: colors.secondary,
+    opacity: 0.6,
+    textAlign: "center",
+  },
+  micSection: {
+    alignItems: "center",
+    marginBottom: spacing.s16,
+  },
+  micStack: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micGlow: {
+    position: "absolute",
+    backgroundColor: colors.primaryContainer,
+    opacity: 0.22,
+  },
+  micPulseRing: {
+    position: "absolute",
+    borderWidth: 2,
+    borderColor: "rgba(215, 231, 211, 0.45)",
+  },
+  micMain: {
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 24 },
+    shadowOpacity: 0.15,
+    shadowRadius: 48,
+    elevation: 14,
+  },
+  micMainRecording: {
+    backgroundColor: colors.error,
+    shadowColor: colors.error,
+  },
+  micMainDisabled: {
+    opacity: 0.45,
   },
   micDuration: {
     ...typography.labelMd,
-    color: "#ffffff",
-    fontFamily: "Manrope_400Regular",
+    color: colors.onError,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    fontSize: 16,
+  },
+  typeSection: {
+    gap: spacing.s4,
+    marginBottom: spacing.s4,
+  },
+  typeInput: {
+    minHeight: 100,
+    maxHeight: 160,
+    fontFamily: "PlusJakartaSans_400Regular",
+    fontSize: 16,
+    lineHeight: 26,
+    color: colors.onSurface,
+    backgroundColor: colors.surfaceContainerHigh,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.s6,
+    paddingVertical: spacing.s4,
   },
   captureButton: {
-    flex: 1,
     height: 56,
-    borderRadius: 28,
+    borderRadius: radius.full,
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
@@ -470,10 +717,55 @@ const styles = StyleSheet.create({
   },
   captureLabel: {
     ...typography.bodyLg,
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: colors.onPrimary,
   },
   captureLabelDisabled: {
     color: colors.onSurfaceVariant,
+  },
+  errorContainer: {
+    minHeight: 20,
+    marginBottom: spacing.s4,
+  },
+  errorText: {
+    ...typography.labelMd,
+    color: colors.error,
+    textAlign: "center",
+  },
+  recentCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surfaceContainerLow,
+    borderRadius: radius.lg,
+    padding: spacing.s8,
+  },
+  recentCardPressed: {
+    backgroundColor: colors.surfaceContainerHigh,
+  },
+  recentLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.s4,
+    flex: 1,
+  },
+  recentIconCircle: {
+    padding: 12,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceContainerLowest,
+  },
+  recentTitle: {
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    fontSize: 14,
+    color: colors.onSurface,
+  },
+  recentSubtitle: {
+    ...typography.labelMd,
+    color: colors.secondary,
+    marginTop: 2,
+  },
+  recentChevron: {
+    opacity: 0.45,
   },
   successToast: {
     position: "absolute",
