@@ -7,7 +7,7 @@ import {
 } from "@/lib/capture";
 import { supabase } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   AudioModule,
@@ -24,7 +24,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
-  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -387,11 +386,15 @@ export default function QuickCaptureScreen() {
         >
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <View style={styles.avatarWrap}>
-                <Image
-                  source={require("../../../assets/icon.png")}
-                  style={styles.avatarImage}
-                  accessibilityIgnoresInvertColors
+              <View
+                style={styles.avatarWrap}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+              >
+                <MaterialCommunityIcons
+                  name="spa-outline"
+                  size={24}
+                  color={colors.primary}
                 />
               </View>
               <Text style={styles.brandMark}>Sanctuary</Text>
@@ -615,13 +618,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: colors.surfaceContainerLow,
-  },
-  avatarImage: {
-    width: 40,
-    height: 40,
-    resizeMode: "cover",
   },
   brandMark: {
     fontFamily: "Manrope_700Bold",
