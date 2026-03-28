@@ -45,9 +45,9 @@ const VOICE_RECORDING_OPTIONS: RecordingOptions = {
   numberOfChannels: 1,
   bitRate: 128000,
   android: {
-    extension: ".webm",
-    outputFormat: "webm",
-    audioEncoder: "default",
+    // WebM + default encoder fails MediaRecorder.prepare() on many devices; use AAC in MP4/M4A.
+    outputFormat: "mpeg4",
+    audioEncoder: "aac",
     sampleRate: 16000,
   },
   ios: {
@@ -90,18 +90,19 @@ export default function QuickCaptureScreen() {
   const pulseAnimation = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
+    const recorder = audioRecorder;
     return () => {
       void (async () => {
         try {
-          if (audioRecorder.getStatus().isRecording) {
-            await audioRecorder.stop();
+          if (recorder.getStatus().isRecording) {
+            await recorder.stop();
           }
         } catch {
           /* recorder may already be stopped */
         }
       })();
     };
-  }, [audioRecorder.id]);
+  }, [audioRecorder]);
 
   useEffect(() => {
     if (recordingState === "recording") {
@@ -199,6 +200,8 @@ export default function QuickCaptureScreen() {
         playsInSilentMode: true,
         allowsRecording: true,
         interruptionMode: "doNotMix",
+        shouldPlayInBackground: false,
+        shouldRouteThroughEarpiece: false,
       });
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
@@ -268,7 +271,7 @@ export default function QuickCaptureScreen() {
     thoughtId: string,
   ): Promise<void> {
     const filename = uri.split("/").pop()?.split("?")[0] ?? "recording.m4a";
-    const mimeType = Platform.OS === "ios" ? "audio/mp4" : "audio/webm";
+    const mimeType = Platform.OS === "web" ? "audio/webm" : "audio/mp4";
     const formData = new FormData();
     if (Platform.OS === "web") {
       const res = await fetch(uri);
