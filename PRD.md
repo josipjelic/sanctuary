@@ -3,12 +3,12 @@
 > [!IMPORTANT]
 > This document is the source of truth for what we are building.
 > Claude agents must READ this document to understand requirements.
-> **Do not edit, rewrite, or "update to reflect current state" without explicit human instruction.**
+> **Edits require explicit human approval in the current conversation** (see project `CLAUDE.md`). Do not rewrite or sync to implementation on your own initiative.
 > When in doubt, leave it unchanged and ask the human.
 
 ---
 
-**Version**: 1.0
+**Version**: 1.1
 **Status**: Draft
 **Last updated by human**: 2026-03-28
 **Product owner**: Josip
@@ -17,7 +17,7 @@
 
 ## 1. Executive Summary
 
-Sanctuary is a mobile app (React Native/Expo) that gives individuals a calm, friction-free space to capture and reflect on their thoughts. Users record anything — an idea, a feeling, a grocery list, a voice memo — and AI (via OpenRouter) transcribes and auto-tags it. The app supports journaling (expanding captured thoughts), daily check-ins for mood tracking, and an organized inbox and library for browsing past captures. Sanctuary is designed as the antithesis of "hustle-culture" productivity apps: serene, spacious, and intentional. The target audience is individuals seeking calm and clarity who want to stop losing fleeting thoughts and start building a personal reflection practice.
+Sanctuary is a mobile app (React Native/Expo) that gives individuals a calm, friction-free space to capture and reflect on their thoughts. Users record anything — an idea, a feeling, a grocery list, a voice memo — and AI (via OpenRouter) transcribes voice capture and assigns a **topic** from each user’s personal topic list (or creates a new topic when nothing fits well enough). The app supports journaling (expanding captured thoughts), daily check-ins for mood tracking, and an organized inbox and library for browsing past captures. Sanctuary is designed as the antithesis of "hustle-culture" productivity apps: serene, spacious, and intentional. The target audience is individuals seeking calm and clarity who want to stop losing fleeting thoughts and start building a personal reflection practice.
 
 ---
 
@@ -33,7 +33,7 @@ The moment a thought arrives and the moment you have time to act on it are rarel
 
 ### 2.3 Why Now
 
-Voice transcription has become fast and affordable via APIs. AI tagging and summarization are mature enough to be genuinely useful without being invasive. Mindfulness and digital wellness are mainstream concerns — there is clear user demand for intentional, calm alternatives to engagement-optimized apps. The tooling (Expo, Supabase, OpenRouter) now makes a high-quality mobile app achievable by a small team without backend infrastructure overhead.
+Voice transcription has become fast and affordable via APIs. AI-assisted labeling (topics, prompts, summarization) is mature enough to be genuinely useful without being invasive. Mindfulness and digital wellness are mainstream concerns — there is clear user demand for intentional, calm alternatives to engagement-optimized apps. The tooling (Expo, Supabase, OpenRouter) now makes a high-quality mobile app achievable by a small team without backend infrastructure overhead.
 
 ---
 
@@ -93,24 +93,24 @@ Voice transcription has become fast and affordable via APIs. AI tagging and summ
 - **FR-010**: Users must be able to capture a thought as free-form text from a persistent quick-access screen
 - **FR-011**: Users must be able to record a voice message as an alternative to typing
 - **FR-012**: Voice recordings must be automatically transcribed to text using an OpenRouter-routed AI model
-- **FR-013**: Each captured thought must be automatically tagged by AI with one or more descriptive tags (e.g., "idea", "grocery", "feeling", "task")
+- **FR-013**: Each captured thought must be automatically assigned **one primary topic** by AI. Topics are **per user**: stored in the user’s topic catalog in the database. The model sees the user’s existing topics and should **prefer reusing** an existing topic when it is a strong match; when no existing topic is a sufficient match, the system **creates a new topic** and assigns the thought to it (see ADR-002 / technical docs for the match-threshold rule)
 - **FR-014**: Capture must not restrict content type — any text or voice input is accepted without categorization required from the user
 - **FR-015**: Every captured thought must be associated with the authenticated user's account
-- **FR-016**: Capture must succeed and persist the raw text/audio immediately; AI transcription and tagging may complete asynchronously after capture
+- **FR-016**: Capture must succeed and persist the raw text (or empty body + pending transcription for voice) immediately; AI transcription (voice) and **topic assignment** may complete asynchronously after capture. For voice, topic assignment runs in the same server pipeline as transcription after the transcript is saved; for text capture, topic assignment is triggered separately but still asynchronous from the user’s perspective
 
 ### 5.3 Thought Inbox & Library
 
 - **FR-020**: Users must be able to view all their captured thoughts in a chronological inbox view, newest first
-- **FR-021**: Users must be able to filter the inbox/library by tag (AI-assigned or manually added)
+- **FR-021**: Users must be able to filter the inbox/library by **topic** (AI-assigned or manually adjusted in detail view)
 - **FR-022**: Users must be able to search thoughts by keyword across the full text content
-- **FR-023**: Users must be able to browse thoughts organized by tag in a library view
+- **FR-023**: Users must be able to browse thoughts organized by **topic** in a library view
 
 ### 5.4 Thought Detail & Journaling
 
 - **FR-030**: Users must be able to open any captured thought and expand it into a longer, free-form text entry (journaling)
 - **FR-031**: Users must be able to edit the text of any captured thought
 - **FR-032**: Users must be able to delete a thought (with confirmation)
-- **FR-033**: The thought detail view must display auto-assigned tags and allow the user to add or remove tags manually
+- **FR-033**: The thought detail view must display the auto-assigned **topic** and allow the user to change it manually (including picking another existing topic or creating a new one, consistent with the per-user topic catalog)
 - **FR-034**: Users must be able to request an AI-generated reflection prompt for any thought, displayed inline in the detail view
 
 ### 5.5 Daily Check-in
@@ -147,7 +147,7 @@ Voice transcription has become fast and affordable via APIs. AI tagging and summ
 
 ### Reliability
 - Supabase-managed uptime SLA applies
-- Failed AI tagging must not block capture — thoughts are saved regardless of AI availability
+- Failed AI **topic assignment** must not block capture — thoughts are saved regardless of AI availability
 
 ---
 
@@ -172,7 +172,7 @@ The following will **not** be built in the initial version:
 | # | Question | Owner | Status |
 |---|----------|-------|--------|
 | 1 | Which OpenRouter model for voice transcription? (Whisper, Groq Whisper, etc.) | Josip | Open |
-| 2 | Which OpenRouter model for tagging and reflection prompts? (claude-3-haiku, gpt-4o-mini, etc.) | Josip | Open |
+| 2 | Which OpenRouter model(s) for topic assignment and reflection prompts? (configurable via Supabase secrets; defaults documented in `docs/technical/API.md`) | Josip | Open |
 | 3 | E2E test framework: Detox or Maestro? | Josip | Open |
 | 4 | Should voice audio files be stored in Supabase Storage, or only the transcript? | Josip | **Resolved: transcripts only — audio stored locally on device, never uploaded** |
 
@@ -180,8 +180,9 @@ The following will **not** be built in the initial version:
 
 ## 9. Revision History
 
-> Human entries only. Agents do not modify this section.
+> Human-owned changelog. Agents add entries only when the human has directed a PRD update in-session.
 
 | Date | Author | Change Description |
 |------|--------|--------------------|
 | 2026-03-28 | Josip | Initial draft — onboarding complete |
+| 2026-03-28 | Josip | v1.1 — FR-013/016/021/023/033 and reliability: user-scoped **topics** (one per thought), reuse-vs-create behavior, pipeline notes; executive summary and open questions aligned |
