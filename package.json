@@ -11,7 +11,8 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
-    "db:push": "npx supabase@2.84.4 db push"
+    "db:push": "npx supabase@2.84.4 db push",
+    "env:supabase": "node scripts/sync-expo-supabase-env.js"
   },
   "dependencies": {
     "@expo-google-fonts/manrope": "^0.4.2",
