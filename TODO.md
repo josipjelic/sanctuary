@@ -13,7 +13,6 @@
 
 ## Up Next (prioritized)
 
-- [ ] #004 — Implement design system tokens and base components [area: design] → [.tasks/004-design-system-tokens.md](.tasks/004-design-system-tokens.md)
 - [ ] #005 — Build user authentication screens (sign up, sign in, password reset) [area: mobile] → [.tasks/005-auth-screens.md](.tasks/005-auth-screens.md)
 
 ---
@@ -39,6 +38,7 @@
 - [x] #001 — Design database schema (thoughts, tags, daily_checkins) [area: database] → [.tasks/001-database-schema.md](.tasks/001-database-schema.md)
 - [x] #002 — Initialize Expo project with navigation and Supabase client [area: mobile] → [.tasks/002-expo-project-init.md](.tasks/002-expo-project-init.md)
 - [x] #003 — Configure Supabase project (tables, RLS policies, auth settings) [area: backend] → [.tasks/003-supabase-config.md](.tasks/003-supabase-config.md)
+- [x] #004 — Implement design system tokens and base components [area: design] → [.tasks/004-design-system-tokens.md](.tasks/004-design-system-tokens.md)
 
 ---
 

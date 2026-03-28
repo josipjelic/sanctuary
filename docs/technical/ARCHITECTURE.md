@@ -12,7 +12,7 @@ Read by: All agents. Always read before making implementation decisions.
 
 # System Architecture
 
-> Last updated: 2026-03-28
+> Last updated: 2026-03-28 (task #004 — design system implementation)
 > Version: 0.1.0
 
 ---
@@ -97,7 +97,27 @@ The design system is codified as "The Serene Interface" — a high-end editorial
 - **No border lines** — separation via background color shifts only
 - **Corner radius**: `xl` (3rem) or `lg` (2rem) for all cards
 
-Full token set and component specs to be implemented in task #004.
+Full token set and component specs implemented in task #004.
+
+### Implementation (added by @frontend-developer, task #004)
+
+The design tokens and base component library are implemented as of 2026-03-28:
+
+**Token file**: `src/lib/theme.ts`
+Exports `colors`, `typography`, `shadows`, `spacing`, `radius`, and `animation` as typed `const` objects. Import individual token groups — e.g., `import { colors, spacing } from '@/lib/theme'`.
+
+**Base components** (`src/components/`):
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `Button` | `Button.tsx` | Primary (`#536253`) and secondary (`#dae4e9`) variants, full border radius, `activeOpacity: 0.9` (no darkening on press) |
+| `Card` | `Card.tsx` | `lg` (24pt) or `xl` (32pt) radius; `elevated` variant applies ambient shadow (`4% opacity, 32px blur`); no border lines |
+| `TextInput` | `TextInput.tsx` | `surfaceContainerHigh` background, ghost border focus ring (`primary` at 20% opacity), no bottom line |
+| `Tag` | `Tag.tsx` | Pill-shaped tag for AI-assigned and manual thought tags |
+
+**Barrel export**: `src/components/index.ts` — import any component with `import { Button, Card, TextInput, Tag } from '@/components'`.
+
+**Fonts**: Manrope (400/600/700) and Plus Jakarta Sans (400/600) loaded via `@expo-google-fonts/manrope` and `@expo-google-fonts/plus-jakarta-sans`. Font loading and splash screen management live in `src/app/_layout.tsx`.
 
 ---
 
