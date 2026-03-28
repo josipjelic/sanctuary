@@ -106,7 +106,7 @@ Scan the QR code with Expo Go to run on your physical device.
 
 ## Documentation
 
-- [`PRD.md`](PRD.md) — Product requirements (read-only)
+- [`PRD.md`](PRD.md) — Product requirements (edit only with explicit human approval in-session; see `CLAUDE.md`)
 - [`TODO.md`](TODO.md) — Prioritized backlog
 - [`docs/technical/ARCHITECTURE.md`](docs/technical/ARCHITECTURE.md) — System design
 - [`docs/technical/DECISIONS.md`](docs/technical/DECISIONS.md) — Architecture Decision Records

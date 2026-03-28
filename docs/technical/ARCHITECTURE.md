@@ -19,7 +19,7 @@ Read by: All agents. Always read before making implementation decisions.
 
 ## Product deltas (vs PRD.md)
 
-PRD.md is read-only in this repo. The following shipped behaviors extend or refine FR-013 / FR-016:
+PRD.md may be edited only when a human explicitly approves in-session (see `CLAUDE.md`). Until FR text is updated there, the following shipped behaviors extend or refine FR-013 / FR-016:
 
 - User-facing vocabulary is **topics** (not “tags”): each user has a `user_topics` catalog; each thought has **one primary topic** assigned by AI.
 - Topic assignment reuses an existing topic only when the model reports `best_match_score` **>** **0.2**; otherwise a new catalog row is created (see ADR-002).

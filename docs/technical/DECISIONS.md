@@ -102,4 +102,4 @@ Early v1 stored free-form labels on each thought as `thoughts.tags` (`text[]`) w
 
 - One OpenRouter call chain per voice capture for transcribe + topics (higher latency than split calls, fewer client failures).
 - Reuse quality depends on model calibration of `best_match_score`; prompts and monitoring may need iteration.
-- PRD.md still uses “tags” in places; product deltas are documented in `docs/technical/ARCHITECTURE.md` (Product deltas) while PRD remains governed by repo rules.
+- PRD.md still uses “tags” in places; product deltas are documented in `docs/technical/ARCHITECTURE.md` (Product deltas). PRD edits require explicit human approval in-session per `CLAUDE.md`.
