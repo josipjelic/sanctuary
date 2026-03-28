@@ -115,6 +115,11 @@ max_frequency = "5s"
 timebox = 0
 inactivity_timeout = 0
 
+# Browser CORS preflight sends OPTIONS without Authorization; gateway JWT check
+# would return 401 before our handler. Auth for POST is enforced in the function.
+[functions.transcribe]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 policy = "oneshot"
