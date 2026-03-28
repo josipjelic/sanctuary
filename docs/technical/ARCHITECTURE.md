@@ -12,7 +12,7 @@ Read by: All agents. Always read before making implementation decisions.
 
 # System Architecture
 
-> Last updated: 2026-03-28 (user-scoped topics + assign-topics pipeline)
+> Last updated: 2026-03-28 (Library tab + topic folder grid; user-scoped topics + assign-topics pipeline)
 > Version: 0.1.0
 
 ---
@@ -126,8 +126,10 @@ Exports `colors`, `typography`, `shadows`, `spacing`, `radius`, and `animation` 
 | `Card` | `Card.tsx` | `lg` (24pt) or `xl` (32pt) radius; `elevated` variant applies ambient shadow (`4% opacity, 32px blur`); no border lines |
 | `TextInput` | `TextInput.tsx` | `surfaceContainerHigh` background, ghost border focus ring (`primary` at 20% opacity), no bottom line |
 | `Topic` | `Topic.tsx` | Pill-shaped chip for the thought’s primary topic |
+| `ThoughtListCard` | `ThoughtListCard.tsx` | Inbox / Library list row — body preview, topic chips, relative time |
+| `TopicFolderCard` | `TopicFolderCard.tsx` | Library index “folder” tile (see `.assets/library_lists/code.html`) |
 
-**Barrel export**: `src/components/index.ts` — import any component with `import { Button, Card, TextInput, Topic } from '@/components'`.
+**Barrel export**: `src/components/index.ts` — import any component with `import { Button, Card, TextInput, ThoughtListCard, Topic, TopicFolderCard } from '@/components'`.
 
 **Fonts**: Manrope (400/600/700) and Plus Jakarta Sans (400/600) loaded via `@expo-google-fonts/manrope` and `@expo-google-fonts/plus-jakarta-sans`. Font loading and splash screen management live in `src/app/_layout.tsx`.
 
@@ -135,7 +137,7 @@ Exports `colors`, `typography`, `shadows`, `spacing`, `radius`, and `animation` 
 
 ## Mobile Architecture
 
-> Last updated: 2026-03-28 by @react-native-developer (task #002)
+> Last updated: 2026-03-28 by @react-native-developer (task #002; Library tab + stack appended)
 
 ### Folder Structure
 
@@ -164,6 +166,13 @@ Navigation is handled by **Expo Router v6** using file-based routing. The `src/a
 Deep linking is configured via `app.json` (`scheme: "sanctuary"`) and the `expo-router` plugin. All navigable screens must declare a deep link route once they are implemented (task #005 and beyond).
 
 Route params will be typed in `src/navigation/types.ts` once the full navigation hierarchy is defined (task #005).
+
+#### Library (topics)
+
+- **Design reference**: `.assets/library_lists/code.html` — editorial header, **Manage lists** CTA, folder-style topic cards (one topic per row; asset mockup uses a wider bento grid), reflection footer.
+- **Tab + stack**: `src/app/(app)/_layout.tsx` registers a **Library** tab. `src/app/(app)/library/_layout.tsx` is a nested `<Stack>`: `library/index.tsx` (topic grid) → `library/[topicId].tsx` (thoughts whose denormalized `thoughts.topics` array contains that catalog topic’s `name`).
+- **Data**: Topics load from `user_topics` (ordered by `name`). Per-topic thought counts aggregate client-side from `thoughts.topics`. **Add topic** inserts into `user_topics` using `src/lib/normalizeTopicLabel.ts`, kept in sync with `supabase/functions/_shared/assign-topics.ts`.
+- **Deferred vs PRD**: “All thoughts” library filter and **daily check-in history** ([FR-042](PRD.md)) are not implemented on this screen yet.
 
 ### Supabase Client
 
