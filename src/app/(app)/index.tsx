@@ -228,14 +228,23 @@ export default function QuickCaptureScreen() {
     uri: string,
     thoughtId: string,
   ): Promise<void> {
-    const filename = uri.split("/").pop() ?? "recording.m4a";
+    const filename = uri.split("/").pop()?.split("?")[0] ?? "recording.m4a";
     const mimeType = Platform.OS === "ios" ? "audio/mp4" : "audio/webm";
     const formData = new FormData();
-    formData.append("audio", {
-      uri,
-      name: filename,
-      type: mimeType,
-    } as unknown as Blob);
+    if (Platform.OS === "web") {
+      const res = await fetch(uri);
+      const blob = await res.blob();
+      formData.append(
+        "audio",
+        new File([blob], filename, { type: blob.type || mimeType }),
+      );
+    } else {
+      formData.append("audio", {
+        uri,
+        name: filename,
+        type: mimeType,
+      } as unknown as Blob);
+    }
     formData.append("thought_id", thoughtId);
     const { error } = await supabase.functions.invoke("transcribe", {
       body: formData,

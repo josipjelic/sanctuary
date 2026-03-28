@@ -67,6 +67,8 @@ Sessions are automatically injected into all database queries by the Supabase cl
 
 **Notes**: Audio is sent directly as a file upload — it is NOT stored in Supabase Storage. Only the transcript text is persisted (to `thoughts.body`). Sets `transcription_status: 'complete'` on success. To be implemented in task #007.
 
+**Browser / CORS**: The Edge Function must answer `OPTIONS` preflight and attach CORS headers on all responses. Use `corsHeaders` from `@supabase/supabase-js/cors` (see [Supabase CORS guide](https://supabase.com/docs/guides/functions/cors)) so Expo Web and other browser clients can call `/transcribe` cross-origin. On web, append a real `File`/`Blob` to `FormData` (not the React Native `{ uri, name, type }` object), or the part body becomes the string `[object Object]` and the function returns 400.
+
 ---
 
 ### POST /tag-thought

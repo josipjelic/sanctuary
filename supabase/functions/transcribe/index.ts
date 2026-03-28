@@ -1,0 +1,189 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.49.4";
+import { corsHeaders } from "npm:@supabase/supabase-js@2.49.4/cors";
+import { encodeBase64 } from "jsr:@std/encoding@1/base64";
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function audioFormatFromMime(mime: string, filename: string): string {
+  const m = mime.toLowerCase();
+  if (m.includes("webm")) return "webm";
+  if (m.includes("mp4") || m.includes("audio/mp4") || m.includes("m4a"))
+    return "aac";
+  if (m.includes("mpeg")) return "mp3";
+  if (m.includes("wav")) return "wav";
+  if (m.includes("flac")) return "flac";
+  if (m.includes("ogg")) return "ogg";
+  const ext = filename.split(".").pop()?.toLowerCase();
+  if (ext === "webm") return "webm";
+  if (ext === "m4a" || ext === "mp4") return "aac";
+  if (ext === "mp3") return "mp3";
+  return "aac";
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return jsonResponse({ error: "Method not allowed" }, 405);
+  }
+
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return jsonResponse({ error: "Server configuration error" }, 500);
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
+  }
+
+  let formData: FormData;
+  try {
+    formData = await req.formData();
+  } catch {
+    return jsonResponse({ error: "Invalid multipart body" }, 400);
+  }
+
+  const thoughtId = formData.get("thought_id");
+  const audio = formData.get("audio");
+
+  if (!thoughtId || typeof thoughtId !== "string") {
+    return jsonResponse({ error: "thought_id required" }, 400);
+  }
+
+  if (!audio || !(audio instanceof File)) {
+    return jsonResponse(
+      { error: "audio file required (send a File/Blob, not a JSON object)" },
+      400,
+    );
+  }
+
+  const { data: thought, error: fetchError } = await supabase
+    .from("thoughts")
+    .select("id, user_id")
+    .eq("id", thoughtId)
+    .single();
+
+  if (fetchError || !thought || thought.user_id !== user.id) {
+    return jsonResponse({ error: "Thought not found" }, 404);
+  }
+
+  await supabase
+    .from("thoughts")
+    .update({ transcription_status: "pending" })
+    .eq("id", thoughtId);
+
+  const arrayBuffer = await audio.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  const base64 = encodeBase64(bytes);
+  const format = audioFormatFromMime(audio.type, audio.name);
+
+  const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
+  if (!openrouterKey) {
+    await supabase
+      .from("thoughts")
+      .update({ transcription_status: "failed" })
+      .eq("id", thoughtId);
+    return jsonResponse({ error: "Server configuration error" }, 500);
+  }
+
+  const model =
+    Deno.env.get("OPENROUTER_TRANSCRIPTION_MODEL") ??
+    "google/gemini-2.0-flash-001";
+
+  const orHeaders: Record<string, string> = {
+    Authorization: `Bearer ${openrouterKey}`,
+    "Content-Type": "application/json",
+    "X-Title": "Sanctuary",
+  };
+  const referer = Deno.env.get("OPENROUTER_HTTP_REFERER");
+  if (referer) {
+    orHeaders["HTTP-Referer"] = referer;
+  }
+
+  const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: orHeaders,
+    body: JSON.stringify({
+      model,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Transcribe this audio verbatim. Reply with only the spoken words, no commentary.",
+            },
+            {
+              type: "input_audio",
+              input_audio: {
+                data: base64,
+                format,
+              },
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!orRes.ok) {
+    const errText = await orRes.text();
+    console.error("OpenRouter error", orRes.status, errText);
+    await supabase
+      .from("thoughts")
+      .update({ transcription_status: "failed" })
+      .eq("id", thoughtId);
+    return jsonResponse({ error: "Transcription failed" }, 502);
+  }
+
+  const orData = (await orRes.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const transcript = orData.choices?.[0]?.message?.content?.trim() ?? "";
+
+  if (!transcript) {
+    await supabase
+      .from("thoughts")
+      .update({ transcription_status: "failed" })
+      .eq("id", thoughtId);
+    return jsonResponse({ error: "Empty transcript" }, 502);
+  }
+
+  const { error: updateError } = await supabase
+    .from("thoughts")
+    .update({
+      body: transcript,
+      transcription_status: "complete",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", thoughtId);
+
+  if (updateError) {
+    console.error(updateError);
+    return jsonResponse({ error: "Failed to save transcript" }, 500);
+  }
+
+  return jsonResponse({ transcript, thought_id: thoughtId });
+});
