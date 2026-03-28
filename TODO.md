@@ -20,7 +20,6 @@
 ## Backlog
 
 - [ ] #010 — Build thought detail / journaling screen [area: mobile] → [.tasks/010-thought-detail-screen.md](.tasks/010-thought-detail-screen.md)
-- [ ] #011 — Build library / tag-filtered browse view [area: mobile] → [.tasks/011-library-browse-screen.md](.tasks/011-library-browse-screen.md)
 - [ ] #012 — Build daily check-in screen [area: mobile] → [.tasks/012-daily-checkin-screen.md](.tasks/012-daily-checkin-screen.md)
 - [ ] #013 — E2E tests for authentication flow [area: qa] → [.tasks/013-e2e-auth-tests.md](.tasks/013-e2e-auth-tests.md)
 - [ ] #014 — E2E tests for thought capture flow [area: qa] → [.tasks/014-e2e-capture-tests.md](.tasks/014-e2e-capture-tests.md)
@@ -40,6 +39,7 @@
 - [x] #007 — Integrate OpenRouter for voice transcription [area: backend] → [.tasks/007-openrouter-transcription.md](.tasks/007-openrouter-transcription.md)
 - [x] #008 — Implement AI auto-tagging via OpenRouter [area: backend] → [.tasks/008-ai-auto-tagging.md](.tasks/008-ai-auto-tagging.md)
 - [x] #009 — Build thought inbox screen [area: mobile] → [.tasks/009-thought-inbox-screen.md](.tasks/009-thought-inbox-screen.md)
+- [x] #011 — Build library / topic browse view (folder grid + add topic) [area: mobile] → [.tasks/011-library-browse-screen.md](.tasks/011-library-browse-screen.md)
 - [x] #016 — User-scoped topics schema (user_topics, thought_topics, tags→topics) [area: database] → [.tasks/016-user-topics-schema.md](.tasks/016-user-topics-schema.md)
 - [x] #017 — assign-topics edge function + transcribe pipeline + mobile wiring [area: backend] → [.tasks/017-assign-topics-pipeline.md](.tasks/017-assign-topics-pipeline.md)
 

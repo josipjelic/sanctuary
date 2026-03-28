@@ -1,6 +1,6 @@
 import { colors, radius, shadows } from "@/lib/theme";
 import { StyleSheet, View } from "react-native";
-import type { ViewStyle } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
 
 type CardSize = "lg" | "xl";
 type CardVariant = "elevated" | "flat";
@@ -9,7 +9,7 @@ interface CardProps {
   children: React.ReactNode;
   variant?: CardVariant;
   size?: CardSize;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   testID?: string;
 }
 

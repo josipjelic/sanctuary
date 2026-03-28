@@ -1,7 +1,7 @@
-import { Card, Topic } from "@/components";
+import { Card, ThoughtListCard } from "@/components";
 import { supabase } from "@/lib/supabase";
 import { colors, spacing, typography } from "@/lib/theme";
-import type { Thought } from "@/types/thought";
+import type { ThoughtListPreview } from "@/types/thoughtList";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -14,39 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const PAGE_SIZE = 50;
 
-type InboxThought = Pick<
-  Thought,
-  | "id"
-  | "body"
-  | "topics"
-  | "transcription_status"
-  | "tagging_status"
-  | "created_at"
->;
-
-function formatRelativeTime(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffMs = now - then;
-
-  const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 60) return "just now";
-
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
-
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
-
-  const years = Math.floor(months / 12);
-  return `${years} year${years === 1 ? "" : "s"} ago`;
-}
+type InboxThought = ThoughtListPreview;
 
 async function fetchThoughtsPage(offset: number): Promise<InboxThought[]> {
   const { data, error } = await supabase
@@ -63,45 +31,10 @@ async function fetchThoughtsPage(offset: number): Promise<InboxThought[]> {
 
 function SkeletonRow() {
   return (
-    <Card style={styles.card} testID="skeleton-row">
+    <Card style={styles.skeletonCard} testID="skeleton-row">
       <View style={[styles.skeletonLine, styles.skeletonLineLong]} />
       <View style={[styles.skeletonLine, styles.skeletonLineShort]} />
       <View style={[styles.skeletonLine, styles.skeletonLineXShort]} />
-    </Card>
-  );
-}
-
-function ThoughtRow({ item }: { item: InboxThought }) {
-  const isPending =
-    item.transcription_status === "pending" || item.body.trim() === "";
-  const topicPending = item.tagging_status === "pending";
-
-  return (
-    <Card style={styles.card} testID={`thought-row-${item.id}`}>
-      <Text
-        style={[styles.bodyText, isPending && styles.bodyTextPending]}
-        numberOfLines={2}
-        accessibilityLabel={isPending ? "Transcribing" : item.body}
-      >
-        {isPending ? "Transcribing\u2026" : item.body}
-      </Text>
-
-      {topicPending && (
-        <View style={styles.topicsRow} accessibilityLabel="Assigning topic">
-          <ActivityIndicator size="small" color={colors.secondary} />
-        </View>
-      )}
-      {!topicPending && item.topics.length > 0 && (
-        <View style={styles.topicsRow} accessibilityRole="list">
-          {item.topics.map((topic) => (
-            <Topic key={topic} label={topic} testID={`topic-${topic}`} />
-          ))}
-        </View>
-      )}
-
-      <Text style={styles.timestampText}>
-        {formatRelativeTime(item.created_at)}
-      </Text>
     </Card>
   );
 }
@@ -172,7 +105,7 @@ export default function InboxScreen() {
       <FlatList
         data={thoughts}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <ThoughtRow item={item} />}
+        renderItem={({ item }) => <ThoughtListCard item={item} />}
         contentContainerStyle={
           thoughts.length === 0 ? styles.emptyContainer : styles.listContent
         }
@@ -221,28 +154,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.s4,
   },
-  card: {
+  skeletonCard: {
     padding: spacing.s6,
     gap: spacing.s2,
-  },
-  bodyText: {
-    ...typography.bodyLg,
-    color: colors.onSurface,
-  },
-  bodyTextPending: {
-    color: colors.outlineVariant,
-    fontStyle: "italic",
-  },
-  topicsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.s2,
-    marginTop: spacing.s2,
-  },
-  timestampText: {
-    ...typography.labelMd,
-    color: colors.outlineVariant,
-    marginTop: spacing.s2,
   },
   emptyState: {
     flex: 1,
