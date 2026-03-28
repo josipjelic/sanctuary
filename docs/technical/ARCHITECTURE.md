@@ -103,9 +103,50 @@ Full token set and component specs to be implemented in task #004.
 
 ## Mobile Architecture
 
-> To be filled in by @react-native-developer after task #002 (Expo initialization) is complete.
+> Last updated: 2026-03-28 by @react-native-developer (task #002)
 
-[Screen structure, navigation hierarchy, state management approach, data fetching patterns]
+### Folder Structure
+
+```
+src/
+  app/              # Expo Router screens and layouts (file-based routing)
+    _layout.tsx     # Root layout — wraps the entire navigator stack
+    index.tsx       # Home screen (maps to "/" route)
+  components/       # Shared UI components (empty at init; populated per task)
+  lib/
+    supabase.ts     # Supabase JS client singleton, initialized with AsyncStorage
+  hooks/            # Custom React hooks (empty at init)
+  types/            # TypeScript types and interfaces (empty at init)
+assets/             # Static images, icons, fonts
+tests/
+  e2e/              # E2E tests (framework TBD — Detox or Maestro)
+```
+
+### Navigation
+
+Navigation is handled by **Expo Router v4** using file-based routing. The `src/app/` directory is the route root, following the Expo Router convention for a `src/`-based layout.
+
+- `src/app/_layout.tsx` — Root layout. Renders a `<Stack>` navigator. Also imports the URL polyfill (`react-native-url-polyfill/auto`) required by the Supabase client.
+- `src/app/index.tsx` — Entry screen, maps to the `/` route. Shown immediately after the app loads.
+
+Deep linking is configured via `app.json` (`scheme: "sanctuary"`) and the `expo-router` plugin. All navigable screens must declare a deep link route once they are implemented (task #005 and beyond).
+
+Route params will be typed in `src/navigation/types.ts` once the full navigation hierarchy is defined (task #005).
+
+### Supabase Client
+
+The Supabase JS client is initialized in `src/lib/supabase.ts` as a module-level singleton. Key configuration:
+
+- **Storage**: `AsyncStorage` from `@react-native-async-storage/async-storage` — persists the auth session across app restarts.
+- **autoRefreshToken**: `true` — the client automatically refreshes expiring JWTs.
+- **detectSessionInUrl**: `false` — disabled because React Native does not use URL-based OAuth callbacks the same way as web apps.
+- **Environment variables**: `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` are read at module initialization. The client throws a descriptive error at startup if either variable is missing, preventing silent failures in misconfigured environments.
+
+### State Management
+
+State management strategy is **TBD** — to be decided in task #004. Candidates are Zustand (for global app state) and React Context (for simpler shared state). Server data will use React Query once task #004 is resolved.
+
+Local UI state (form inputs, toggle open/closed) uses `useState` throughout. No global state library is introduced until task #004 is complete.
 
 ---
 
