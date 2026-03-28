@@ -1,14 +1,14 @@
 ---
 id: "001"
 title: "Design database schema (thoughts, tags, daily_checkins)"
-status: "todo"
+status: "completed"
 area: "database"
 agent: "@database-expert"
 priority: "high"
 created_at: "2026-03-28"
 due_date: null
 started_at: null
-completed_at: null
+completed_at: "2026-03-28"
 prd_refs: ["FR-010", "FR-013", "FR-015", "FR-016", "FR-020", "FR-040", "FR-042", "FR-043"]
 blocks: ["003"]
 blocked_by: []
@@ -20,12 +20,12 @@ Design and document the complete PostgreSQL schema for Sanctuary's core data mod
 
 ## Acceptance Criteria
 
-- [ ] `thoughts` table schema fully defined with all columns, types, constraints, and indexes
-- [ ] `daily_checkins` table schema fully defined with UNIQUE constraint on `(user_id, check_in_date)`
-- [ ] RLS policies specified for all tables (SELECT, INSERT, UPDATE, DELETE)
-- [ ] Migration files drafted (`.sql` or Supabase migration format)
-- [ ] `docs/technical/DATABASE.md` updated with final schema
-- [ ] Schema reviewed against FR-010 through FR-043 requirements
+- [x] `thoughts` table schema fully defined with all columns, types, constraints, and indexes
+- [x] `daily_checkins` table schema fully defined with UNIQUE constraint on `(user_id, check_in_date)`
+- [x] RLS policies specified for all tables (SELECT, INSERT, UPDATE, DELETE)
+- [x] Migration files drafted (`.sql` or Supabase migration format)
+- [x] `docs/technical/DATABASE.md` updated with final schema
+- [x] Schema reviewed against FR-010 through FR-043 requirements
 
 ## Technical Notes
 
@@ -40,3 +40,4 @@ Design and document the complete PostgreSQL schema for Sanctuary's core data mod
 | Date | Agent / Human | Event |
 |------|--------------|-------|
 | 2026-03-28 | human | Task created during onboarding |
+| 2026-03-28 | @database-expert | Migration files written: 001_create_thoughts.sql, 002_create_daily_checkins.sql. DATABASE.md migrations log updated. Task marked complete. |

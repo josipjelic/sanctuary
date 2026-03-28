@@ -1,14 +1,14 @@
 ---
 id: "004"
 title: "Implement design system tokens and base components"
-status: "todo"
+status: "completed"
 area: "design"
-agent: "@ui-ux-designer"
+agent: "@frontend-developer"
 priority: "high"
 created_at: "2026-03-28"
 due_date: null
-started_at: null
-completed_at: null
+started_at: "2026-03-28"
+completed_at: "2026-03-28"
 prd_refs: []
 blocks: ["005", "006", "009", "010", "011", "012"]
 blocked_by: ["002"]
@@ -20,15 +20,15 @@ Translate the "Serene Interface" design system (documented in `.assets/DESIGN.md
 
 ## Acceptance Criteria
 
-- [ ] `src/lib/theme.ts` created with all color tokens from `.assets/DESIGN.md`
-- [ ] Typography scale defined (display-lg, headline-md, body-lg, label-md) with correct fonts and letter spacing
-- [ ] Spacing constants defined (`spacing-6` through `spacing-24`)
-- [ ] `Button` component: primary and secondary variants, full corner radius, no-darkening hover
-- [ ] `Card` component: `xl` or `lg` corner radius, no border lines, correct surface background
-- [ ] `TextInput` component: surface-container-high background, ghost border focus state
-- [ ] `Tag` component: for displaying thought tags
-- [ ] Fonts loaded: Manrope + Plus Jakarta Sans via `expo-google-fonts`
-- [ ] `docs/technical/ARCHITECTURE.md` Design System section updated with token reference
+- [x] `src/lib/theme.ts` created with all color tokens from `.assets/DESIGN.md`
+- [x] Typography scale defined (display-lg, headline-md, body-lg, label-md) with correct fonts and letter spacing
+- [x] Spacing constants defined (`spacing-6` through `spacing-24`)
+- [x] `Button` component: primary and secondary variants, full corner radius, no-darkening hover
+- [x] `Card` component: `xl` or `lg` corner radius, no border lines, correct surface background
+- [x] `TextInput` component: surface-container-high background, ghost border focus state
+- [x] `Tag` component: for displaying thought tags
+- [x] Fonts loaded: Manrope + Plus Jakarta Sans via `expo-google-fonts`
+- [x] `docs/technical/ARCHITECTURE.md` Design System section updated with token reference
 
 ## Technical Notes
 
@@ -43,3 +43,4 @@ Translate the "Serene Interface" design system (documented in `.assets/DESIGN.md
 | Date | Agent / Human | Event |
 |------|--------------|-------|
 | 2026-03-28 | human | Task created during onboarding |
+| 2026-03-28 | @frontend-developer | Implemented theme.ts, Button, Card, TextInput, Tag components, font loading in _layout.tsx; all tests pass |

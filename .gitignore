@@ -68,3 +68,4 @@ Desktop.ini
 .cache/
 tmp/
 temp/
+.claude/worktrees/

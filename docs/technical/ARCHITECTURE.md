@@ -12,7 +12,7 @@ Read by: All agents. Always read before making implementation decisions.
 
 # System Architecture
 
-> Last updated: 2026-03-28
+> Last updated: 2026-03-28 (task #004 — design system implementation)
 > Version: 0.1.0
 
 ---
@@ -97,23 +97,149 @@ The design system is codified as "The Serene Interface" — a high-end editorial
 - **No border lines** — separation via background color shifts only
 - **Corner radius**: `xl` (3rem) or `lg` (2rem) for all cards
 
-Full token set and component specs to be implemented in task #004.
+Full token set and component specs implemented in task #004.
+
+### Implementation (added by @frontend-developer, task #004)
+
+The design tokens and base component library are implemented as of 2026-03-28:
+
+**Token file**: `src/lib/theme.ts`
+Exports `colors`, `typography`, `shadows`, `spacing`, `radius`, and `animation` as typed `const` objects. Import individual token groups — e.g., `import { colors, spacing } from '@/lib/theme'`.
+
+**Base components** (`src/components/`):
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `Button` | `Button.tsx` | Primary (`#536253`) and secondary (`#dae4e9`) variants, full border radius, `activeOpacity: 0.9` (no darkening on press) |
+| `Card` | `Card.tsx` | `lg` (24pt) or `xl` (32pt) radius; `elevated` variant applies ambient shadow (`4% opacity, 32px blur`); no border lines |
+| `TextInput` | `TextInput.tsx` | `surfaceContainerHigh` background, ghost border focus ring (`primary` at 20% opacity), no bottom line |
+| `Tag` | `Tag.tsx` | Pill-shaped tag for AI-assigned and manual thought tags |
+
+**Barrel export**: `src/components/index.ts` — import any component with `import { Button, Card, TextInput, Tag } from '@/components'`.
+
+**Fonts**: Manrope (400/600/700) and Plus Jakarta Sans (400/600) loaded via `@expo-google-fonts/manrope` and `@expo-google-fonts/plus-jakarta-sans`. Font loading and splash screen management live in `src/app/_layout.tsx`.
 
 ---
 
 ## Mobile Architecture
 
-> To be filled in by @react-native-developer after task #002 (Expo initialization) is complete.
+> Last updated: 2026-03-28 by @react-native-developer (task #002)
 
-[Screen structure, navigation hierarchy, state management approach, data fetching patterns]
+### Folder Structure
+
+```
+src/
+  app/              # Expo Router screens and layouts (file-based routing)
+    _layout.tsx     # Root layout — wraps the entire navigator stack
+    index.tsx       # Home screen (maps to "/" route)
+  components/       # Shared UI components (empty at init; populated per task)
+  lib/
+    supabase.ts     # Supabase JS client singleton, initialized with AsyncStorage
+  hooks/            # Custom React hooks (empty at init)
+  types/            # TypeScript types and interfaces (empty at init)
+assets/             # Static images, icons, fonts
+tests/
+  e2e/              # E2E tests (framework TBD — Detox or Maestro)
+```
+
+### Navigation
+
+Navigation is handled by **Expo Router v4** using file-based routing. The `src/app/` directory is the route root, following the Expo Router convention for a `src/`-based layout.
+
+- `src/app/_layout.tsx` — Root layout. Renders a `<Stack>` navigator. Also imports the URL polyfill (`react-native-url-polyfill/auto`) required by the Supabase client.
+- `src/app/index.tsx` — Entry screen, maps to the `/` route. Shown immediately after the app loads.
+
+Deep linking is configured via `app.json` (`scheme: "sanctuary"`) and the `expo-router` plugin. All navigable screens must declare a deep link route once they are implemented (task #005 and beyond).
+
+Route params will be typed in `src/navigation/types.ts` once the full navigation hierarchy is defined (task #005).
+
+### Supabase Client
+
+The Supabase JS client is initialized in `src/lib/supabase.ts` as a module-level singleton. Key configuration:
+
+- **Storage**: `AsyncStorage` from `@react-native-async-storage/async-storage` — persists the auth session across app restarts.
+- **autoRefreshToken**: `true` — the client automatically refreshes expiring JWTs.
+- **detectSessionInUrl**: `false` — disabled because React Native does not use URL-based OAuth callbacks the same way as web apps.
+- **Environment variables**: `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` are read at module initialization. The client throws a descriptive error at startup if either variable is missing, preventing silent failures in misconfigured environments.
+
+### State Management
+
+State management strategy is **TBD** — to be decided in task #004. Candidates are Zustand (for global app state) and React Context (for simpler shared state). Server data will use React Query once task #004 is resolved.
+
+Local UI state (form inputs, toggle open/closed) uses `useState` throughout. No global state library is introduced until task #004 is complete.
 
 ---
 
 ## Backend Architecture
 
-> To be filled in by @backend-developer after task #003 (Supabase configuration) is complete.
+> Last updated: 2026-03-28 by @backend-developer (task #003)
 
-[Edge function inventory, RLS policy patterns, auth configuration details]
+### Edge Function Inventory
+
+All edge functions are deployed to Supabase and live under `supabase/functions/`. They are invoked by the mobile app via `supabase.functions.invoke()`, which automatically injects the user's session token as a Bearer header.
+
+| Function | Method | Description | Status |
+|----------|--------|-------------|--------|
+| `transcribe` | POST | Receives audio file (multipart/form-data), sends to OpenRouter (Whisper/Groq), writes transcript to `thoughts.body`, sets `transcription_status: 'complete'` | Planned — task #007 |
+| `tag-thought` | POST | Receives thought text, sends to OpenRouter (Claude/GPT), writes tag array to `thoughts.tags`, sets `tagging_status: 'complete'` | Planned — task #008 |
+| `reflection-prompt` | POST | Receives thought text, returns an AI-generated reflection question — does not persist to DB | Planned — task #010 |
+
+All edge functions:
+- Require a valid Supabase session token (enforced by Supabase's built-in JWT verification)
+- Use the Supabase service role key internally to write back to the database (bypasses RLS for trusted server-side writes)
+- Access `OPENROUTER_API_KEY` via Supabase project secrets — this key is never present in the mobile app bundle
+
+**Adding a new edge function**: create `supabase/functions/<name>/index.ts`, deploy with `supabase functions deploy <name>`, and set any required secrets with `supabase secrets set KEY=value`.
+
+### RLS Policy Patterns
+
+Row Level Security is enabled on all user-data tables. The pattern is uniform across all tables:
+
+| Operation | Policy expression |
+|-----------|-------------------|
+| SELECT | `USING (user_id = auth.uid())` |
+| INSERT | `WITH CHECK (user_id = auth.uid())` |
+| UPDATE | `USING (user_id = auth.uid())` |
+| DELETE | `USING (user_id = auth.uid())` |
+
+Key rules:
+- The `user_id` column on every table is a `uuid` foreign key to `auth.users.id` with `ON DELETE CASCADE`.
+- INSERT policies use `WITH CHECK` (not `USING`) — this is a Supabase requirement for insert-time enforcement.
+- Edge functions use the Supabase **service role key** (never the anon key) for DB writes that must bypass RLS (e.g., updating `thoughts.body` after transcription). This key is stored as a Supabase project secret and is never exposed client-side.
+- The anon key used by the mobile app is safe to ship — it cannot bypass RLS.
+
+### Auth Configuration
+
+Auth is handled entirely by Supabase Auth (email + password). There is no custom auth server.
+
+**Session lifecycle**:
+- Sessions are stored in `AsyncStorage` (via the Supabase JS client config in `src/lib/supabase.ts`)
+- `autoRefreshToken: true` — the client refreshes the JWT silently before expiry (1-hour JWT, refresh token rotation enabled)
+- `refresh_token_reuse_interval: 10s` — prevents replay attacks on refresh tokens
+- On app start, the Supabase client restores the persisted session automatically; no explicit "restore session" call is needed
+
+**Local dev vs production**:
+- Local dev (`supabase start`): email confirmation is **disabled** (`enable_confirmations = false` in `supabase/config.toml`) — sign up succeeds without verifying email, enabling fast local iteration
+- Production: set `enable_confirmations = true` in the production Supabase project dashboard before launching; this is intentionally not set via `config.toml` to avoid accidental commits that weaken production security
+
+**Password policy**: minimum 8 characters (`minimum_password_length = 8` in `config.toml`).
+
+**Auth providers enabled**: email + password only. SMS and MFA are disabled for v1.
+
+### Environment Separation
+
+| Concern | Local dev | Production |
+|---------|-----------|------------|
+| Start Supabase | `supabase start` (Docker-based local stack) | Supabase cloud project |
+| Apply migrations | `supabase db reset` (re-runs all migrations) or `supabase migration up` | `supabase db push` |
+| Edge functions | `supabase functions serve` (local) | `supabase functions deploy <name>` |
+| Secrets | `.env.local` for edge function dev; `supabase secrets set` for local Docker stack | `supabase secrets set` against production project |
+| Config file | `supabase/config.toml` controls all local services | Cloud project settings managed via Supabase dashboard |
+
+**Required environment variables** (see `.env.example`):
+- `EXPO_PUBLIC_SUPABASE_URL` — Supabase project URL (client-side, safe to expose)
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key (client-side, safe to expose; RLS enforces access control)
+- `OPENROUTER_API_KEY` — OpenRouter API key (server-side only; stored as a Supabase project secret, never in the app bundle)
 
 ---
 
