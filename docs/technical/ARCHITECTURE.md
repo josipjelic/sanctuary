@@ -152,9 +152,74 @@ Local UI state (form inputs, toggle open/closed) uses `useState` throughout. No 
 
 ## Backend Architecture
 
-> To be filled in by @backend-developer after task #003 (Supabase configuration) is complete.
+> Last updated: 2026-03-28 by @backend-developer (task #003)
 
-[Edge function inventory, RLS policy patterns, auth configuration details]
+### Edge Function Inventory
+
+All edge functions are deployed to Supabase and live under `supabase/functions/`. They are invoked by the mobile app via `supabase.functions.invoke()`, which automatically injects the user's session token as a Bearer header.
+
+| Function | Method | Description | Status |
+|----------|--------|-------------|--------|
+| `transcribe` | POST | Receives audio file (multipart/form-data), sends to OpenRouter (Whisper/Groq), writes transcript to `thoughts.body`, sets `transcription_status: 'complete'` | Planned — task #007 |
+| `tag-thought` | POST | Receives thought text, sends to OpenRouter (Claude/GPT), writes tag array to `thoughts.tags`, sets `tagging_status: 'complete'` | Planned — task #008 |
+| `reflection-prompt` | POST | Receives thought text, returns an AI-generated reflection question — does not persist to DB | Planned — task #010 |
+
+All edge functions:
+- Require a valid Supabase session token (enforced by Supabase's built-in JWT verification)
+- Use the Supabase service role key internally to write back to the database (bypasses RLS for trusted server-side writes)
+- Access `OPENROUTER_API_KEY` via Supabase project secrets — this key is never present in the mobile app bundle
+
+**Adding a new edge function**: create `supabase/functions/<name>/index.ts`, deploy with `supabase functions deploy <name>`, and set any required secrets with `supabase secrets set KEY=value`.
+
+### RLS Policy Patterns
+
+Row Level Security is enabled on all user-data tables. The pattern is uniform across all tables:
+
+| Operation | Policy expression |
+|-----------|-------------------|
+| SELECT | `USING (user_id = auth.uid())` |
+| INSERT | `WITH CHECK (user_id = auth.uid())` |
+| UPDATE | `USING (user_id = auth.uid())` |
+| DELETE | `USING (user_id = auth.uid())` |
+
+Key rules:
+- The `user_id` column on every table is a `uuid` foreign key to `auth.users.id` with `ON DELETE CASCADE`.
+- INSERT policies use `WITH CHECK` (not `USING`) — this is a Supabase requirement for insert-time enforcement.
+- Edge functions use the Supabase **service role key** (never the anon key) for DB writes that must bypass RLS (e.g., updating `thoughts.body` after transcription). This key is stored as a Supabase project secret and is never exposed client-side.
+- The anon key used by the mobile app is safe to ship — it cannot bypass RLS.
+
+### Auth Configuration
+
+Auth is handled entirely by Supabase Auth (email + password). There is no custom auth server.
+
+**Session lifecycle**:
+- Sessions are stored in `AsyncStorage` (via the Supabase JS client config in `src/lib/supabase.ts`)
+- `autoRefreshToken: true` — the client refreshes the JWT silently before expiry (1-hour JWT, refresh token rotation enabled)
+- `refresh_token_reuse_interval: 10s` — prevents replay attacks on refresh tokens
+- On app start, the Supabase client restores the persisted session automatically; no explicit "restore session" call is needed
+
+**Local dev vs production**:
+- Local dev (`supabase start`): email confirmation is **disabled** (`enable_confirmations = false` in `supabase/config.toml`) — sign up succeeds without verifying email, enabling fast local iteration
+- Production: set `enable_confirmations = true` in the production Supabase project dashboard before launching; this is intentionally not set via `config.toml` to avoid accidental commits that weaken production security
+
+**Password policy**: minimum 8 characters (`minimum_password_length = 8` in `config.toml`).
+
+**Auth providers enabled**: email + password only. SMS and MFA are disabled for v1.
+
+### Environment Separation
+
+| Concern | Local dev | Production |
+|---------|-----------|------------|
+| Start Supabase | `supabase start` (Docker-based local stack) | Supabase cloud project |
+| Apply migrations | `supabase db reset` (re-runs all migrations) or `supabase migration up` | `supabase db push` |
+| Edge functions | `supabase functions serve` (local) | `supabase functions deploy <name>` |
+| Secrets | `.env.local` for edge function dev; `supabase secrets set` for local Docker stack | `supabase secrets set` against production project |
+| Config file | `supabase/config.toml` controls all local services | Cloud project settings managed via Supabase dashboard |
+
+**Required environment variables** (see `.env.example`):
+- `EXPO_PUBLIC_SUPABASE_URL` — Supabase project URL (client-side, safe to expose)
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key (client-side, safe to expose; RLS enforces access control)
+- `OPENROUTER_API_KEY` — OpenRouter API key (server-side only; stored as a Supabase project secret, never in the app bundle)
 
 ---
 
