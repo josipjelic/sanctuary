@@ -13,13 +13,12 @@
 
 ## Up Next (prioritized)
 
-- [ ] #005 — Build user authentication screens (sign up, sign in, password reset) [area: mobile] → [.tasks/005-auth-screens.md](.tasks/005-auth-screens.md)
+- [ ] #006 — Build quick capture screen (text input + voice recording UI) [area: mobile] → [.tasks/006-quick-capture-screen.md](.tasks/006-quick-capture-screen.md)
 
 ---
 
 ## Backlog
 
-- [ ] #006 — Build quick capture screen (text input + voice recording UI) [area: mobile] → [.tasks/006-quick-capture-screen.md](.tasks/006-quick-capture-screen.md)
 - [ ] #007 — Integrate OpenRouter for voice transcription [area: backend] → [.tasks/007-openrouter-transcription.md](.tasks/007-openrouter-transcription.md)
 - [ ] #008 — Implement AI auto-tagging via OpenRouter [area: backend] → [.tasks/008-ai-auto-tagging.md](.tasks/008-ai-auto-tagging.md)
 - [ ] #009 — Build thought inbox screen [area: mobile] → [.tasks/009-thought-inbox-screen.md](.tasks/009-thought-inbox-screen.md)
@@ -39,6 +38,7 @@
 - [x] #002 — Initialize Expo project with navigation and Supabase client [area: mobile] → [.tasks/002-expo-project-init.md](.tasks/002-expo-project-init.md)
 - [x] #003 — Configure Supabase project (tables, RLS policies, auth settings) [area: backend] → [.tasks/003-supabase-config.md](.tasks/003-supabase-config.md)
 - [x] #004 — Implement design system tokens and base components [area: design] → [.tasks/004-design-system-tokens.md](.tasks/004-design-system-tokens.md)
+- [x] #005 — Build user authentication screens (sign up, sign in, password reset) [area: mobile] → [.tasks/005-auth-screens.md](.tasks/005-auth-screens.md)
 
 ---
 
