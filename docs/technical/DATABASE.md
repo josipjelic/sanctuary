@@ -11,7 +11,7 @@ Read by: All agents. Always read before writing queries or designing schema chan
 > **Engine**: PostgreSQL 15 (managed by Supabase)
 > **Access layer**: `@supabase/supabase-js` client (direct table queries with RLS)
 > **Connection**: Via `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` (client) and service role key (edge functions only)
-> **Last updated**: 2026-03-28
+> **Last updated**: 2026-03-28 (task #001 — schema migrations written)
 
 ---
 
@@ -38,7 +38,7 @@ auth.users (managed by Supabase Auth)
 
 ## Tables
 
-> Full schema to be designed by @database-expert in task #001. This file documents the agreed schema after that task is complete.
+> Schema designed and migration files written by @database-expert in task #001. See `supabase/migrations/` for the authoritative DDL.
 
 ---
 
@@ -104,8 +104,8 @@ auth.users (managed by Supabase Auth)
 
 | Migration File | Date | Description | Reversible | Deployment Risk |
 |----------------|------|-------------|------------|-----------------|
-| `001_create_thoughts.sql` | [TBD] | Create thoughts table with RLS | Yes | None |
-| `002_create_daily_checkins.sql` | [TBD] | Create daily_checkins table with RLS | Yes | None |
+| `001_create_thoughts.sql` | 2026-03-28 | Create thoughts table with RLS | Yes | None |
+| `002_create_daily_checkins.sql` | 2026-03-28 | Create daily_checkins table with RLS | Yes | None |
 
 ---
 
