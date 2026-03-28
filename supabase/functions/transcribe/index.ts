@@ -1,7 +1,30 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2.49.4";
-import { corsHeaders } from "npm:@supabase/supabase-js@2.49.4/cors";
-import { encodeBase64 } from "jsr:@std/encoding@1/base64";
+/**
+ * Transcribe edge function.
+ * Use esm.sh + inline CORS — npm:/jsr: imports caused BOOT_ERROR (503) on hosted runtime.
+ */
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods":
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+};
+
+function encodeBase64(bytes: Uint8Array): string {
+  const chunk = 8192;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunk) {
+    let part = "";
+    const end = Math.min(i + chunk, bytes.length);
+    for (let j = i; j < end; j++) {
+      part += String.fromCharCode(bytes[j]!);
+    }
+    binary += part;
+  }
+  return btoa(binary);
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
