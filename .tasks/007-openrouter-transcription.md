@@ -1,14 +1,14 @@
 ---
 id: "007"
 title: "Integrate OpenRouter for voice transcription"
-status: "todo"
+status: "done"
 area: "backend"
 agent: "@backend-developer"
 priority: "normal"
 created_at: "2026-03-28"
 due_date: null
 started_at: null
-completed_at: null
+completed_at: "2026-03-28"
 prd_refs: ["FR-011", "FR-012", "FR-016"]
 blocks: ["008", "014"]
 blocked_by: ["003"]
@@ -20,14 +20,14 @@ Build the Supabase Edge Function `transcribe` that receives an audio file path (
 
 ## Acceptance Criteria
 
-- [ ] Supabase Edge Function `transcribe` created at `supabase/functions/transcribe/index.ts`
-- [ ] Function authenticates caller via Supabase JWT (rejects unauthenticated requests)
-- [ ] Function receives audio as `multipart/form-data` file upload directly from device (no Supabase Storage)
-- [ ] Audio sent to OpenRouter transcription endpoint (model configurable via env var)
-- [ ] Transcript text saved to `thoughts.body` (or `thoughts.body_transcribed` — to be decided in #001)
-- [ ] `transcription_status` updated to `'complete'` on success, `'failed'` on error
-- [ ] On failure: `transcription_status` set to `'failed'`, original thought remains accessible
-- [ ] `docs/technical/API.md` `/transcribe` endpoint section updated with final implementation details
+- [x] Supabase Edge Function `transcribe` created at `supabase/functions/transcribe/index.ts`
+- [x] Function authenticates caller via Supabase JWT (rejects unauthenticated requests)
+- [x] Function receives audio as `multipart/form-data` file upload directly from device (no Supabase Storage)
+- [x] Audio sent to OpenRouter transcription endpoint (model configurable via env var)
+- [x] Transcript text saved to `thoughts.body` (or `thoughts.body_transcribed` — to be decided in #001)
+- [x] `transcription_status` updated to `'complete'` on success, `'failed'` on error
+- [x] On failure: `transcription_status` set to `'failed'`, original thought remains accessible
+- [x] `docs/technical/API.md` `/transcribe` endpoint section updated with final implementation details
 - [ ] Unit tests for the edge function logic (mock OpenRouter responses)
 
 ## Technical Notes
@@ -43,3 +43,4 @@ Build the Supabase Edge Function `transcribe` that receives an audio file path (
 | Date | Agent / Human | Event |
 |------|--------------|-------|
 | 2026-03-28 | human | Task created during onboarding |
+| 2026-03-28 | implementation | Marked done — transcribe implemented; extended in #017 with in-function topic assignment |

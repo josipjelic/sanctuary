@@ -13,7 +13,7 @@
 
 ## Up Next (prioritized)
 
-- [ ] #007 — Integrate OpenRouter for voice transcription [area: backend] → [.tasks/007-openrouter-transcription.md](.tasks/007-openrouter-transcription.md)
+*(nothing queued — pull next item from Backlog)*
 
 ---
 
@@ -37,8 +37,11 @@
 - [x] #004 — Implement design system tokens and base components [area: design] → [.tasks/004-design-system-tokens.md](.tasks/004-design-system-tokens.md)
 - [x] #005 — Build user authentication screens (sign up, sign in, password reset) [area: mobile] → [.tasks/005-auth-screens.md](.tasks/005-auth-screens.md)
 - [x] #006 — Build quick capture screen (text input + voice recording UI) [area: mobile] → [.tasks/006-quick-capture-screen.md](.tasks/006-quick-capture-screen.md)
+- [x] #007 — Integrate OpenRouter for voice transcription [area: backend] → [.tasks/007-openrouter-transcription.md](.tasks/007-openrouter-transcription.md)
 - [x] #008 — Implement AI auto-tagging via OpenRouter [area: backend] → [.tasks/008-ai-auto-tagging.md](.tasks/008-ai-auto-tagging.md)
 - [x] #009 — Build thought inbox screen [area: mobile] → [.tasks/009-thought-inbox-screen.md](.tasks/009-thought-inbox-screen.md)
+- [x] #016 — User-scoped topics schema (user_topics, thought_topics, tags→topics) [area: database] → [.tasks/016-user-topics-schema.md](.tasks/016-user-topics-schema.md)
+- [x] #017 — assign-topics edge function + transcribe pipeline + mobile wiring [area: backend] → [.tasks/017-assign-topics-pipeline.md](.tasks/017-assign-topics-pipeline.md)
 
 ---
 

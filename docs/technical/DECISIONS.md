@@ -21,6 +21,7 @@ Read by: All agents. Check this file before proposing changes that may conflict 
 | ID | Title | Status | Date |
 |----|-------|--------|------|
 | ADR-001 | Expo + Supabase + OpenRouter stack selection | Accepted | 2026-03-28 |
+| ADR-002 | User-scoped topics, match threshold, transcribe pipeline | Accepted | 2026-03-28 |
 
 ---
 
@@ -78,3 +79,27 @@ Supabase eliminates the need for a custom server while providing a production-gr
 - Edge functions add ~50ms cold-start latency vs a warm API server — acceptable for async AI operations
 - Supabase free tier has 500MB database and 1GB storage limits — sufficient for beta
 - OpenRouter adds a proxy layer vs calling models directly — slight cost overhead, justified by flexibility
+
+---
+
+## ADR-002: User-Scoped Topics, Match Threshold, Transcribe Pipeline
+
+**Date**: 2026-03-28
+**Status**: Accepted
+
+### Context
+
+Early v1 stored free-form labels on each thought as `thoughts.tags` (`text[]`) with no per-user vocabulary. AI tagging did not see prior labels, causing inconsistent duplicates (“grocery” vs “groceries”). The product direction is **topics** (user-owned catalog), **one primary topic per thought**, reuse when the model is confident, and **voice** flows that do not require a second client round-trip after transcription.
+
+### Decision
+
+1. **Schema**: `user_topics` (per-user catalog) and `thought_topics` (junction). Denormalized `thoughts.topics` (`text[]`, renamed from `tags`) for simple inbox queries and `@>` filters.
+2. **Threshold**: The model returns structured JSON including `best_match_score` (0–1). The server reuses an existing topic only when `best_match_score` **>** **0.2** and `best_existing_normalized_name` matches a catalog row; otherwise it creates a new `user_topics` row from `new_topic`.
+3. **Pipeline**: Topic assignment runs **inside** `transcribe` immediately after a successful transcript write. Typed capture calls a separate `assign-topics` edge function that imports the same shared Deno module (`supabase/functions/_shared/assign-topics.ts`).
+4. **Naming**: Product and schema use **topics**; `tagging_status` is retained for less migration churn (it tracks topic assignment lifecycle).
+
+### Consequences
+
+- One OpenRouter call chain per voice capture for transcribe + topics (higher latency than split calls, fewer client failures).
+- Reuse quality depends on model calibration of `best_match_score`; prompts and monitoring may need iteration.
+- PRD.md still uses “tags” in places; product deltas are documented in `docs/technical/ARCHITECTURE.md` (Product deltas) while PRD remains governed by repo rules.

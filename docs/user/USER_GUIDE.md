@@ -103,7 +103,7 @@ An account with this email already exists. Tap **Log In** instead, or use "Forgo
 |-------|-------------|------------|
 | "Session expired" on open | Supabase session timed out | Tap Log In and sign back in |
 | Voice recording not working | Microphone permission not granted | Go to phone Settings > Sanctuary > allow Microphone |
-| Thought saved but no tags showing | AI tagging is async — may take a few seconds | Wait a moment and pull to refresh |
+| Thought saved but no topic showing | AI topic assignment is async — may take a few seconds | Wait a moment and pull to refresh |
 
 ### Getting Help
 

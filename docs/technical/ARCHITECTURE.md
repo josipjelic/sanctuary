@@ -12,14 +12,25 @@ Read by: All agents. Always read before making implementation decisions.
 
 # System Architecture
 
-> Last updated: 2026-03-28 (task #004 — design system implementation)
+> Last updated: 2026-03-28 (user-scoped topics + assign-topics pipeline)
 > Version: 0.1.0
+
+---
+
+## Product deltas (vs PRD.md)
+
+PRD.md is read-only in this repo. The following shipped behaviors extend or refine FR-013 / FR-016:
+
+- User-facing vocabulary is **topics** (not “tags”): each user has a `user_topics` catalog; each thought has **one primary topic** assigned by AI.
+- Topic assignment reuses an existing topic only when the model reports `best_match_score` **>** **0.2**; otherwise a new catalog row is created (see ADR-002).
+- **Voice**: `/transcribe` writes the transcript then runs topic assignment in the same edge invocation (no separate client call).
+- **Text**: `/assign-topics` runs the same shared logic after insert.
 
 ---
 
 ## Overview
 
-Sanctuary is a React Native mobile application (built with Expo) backed by Supabase as a managed backend-as-a-service. The mobile app communicates directly with Supabase for authentication, database reads/writes, and file storage. AI capabilities (voice transcription and thought tagging) are handled by Supabase Edge Functions that proxy to OpenRouter, keeping API credentials server-side.
+Sanctuary is a React Native mobile application (built with Expo) backed by Supabase as a managed backend-as-a-service. The mobile app communicates directly with Supabase for authentication, database reads/writes, and file storage. AI capabilities (voice transcription and topic assignment) are handled by Supabase Edge Functions that proxy to OpenRouter, keeping API credentials server-side.
 
 The architecture prioritizes simplicity and fast iteration: there is no custom API server. All business logic runs either in the mobile app or in Supabase Edge Functions. Row Level Security (RLS) on all Supabase tables ensures each user can only access their own data.
 
@@ -39,8 +50,8 @@ The architecture prioritizes simplicity and fast iteration: there is no custom A
 |  Auth  |  PostgreSQL  |  Storage          |
 |                                           |
 |  Edge Functions                           |
-|    +-- transcribe (voice -> text)         |
-|    +-- tag-thought (text -> tags)         |
+|    +-- transcribe (voice -> text + topics)|
+|    +-- assign-topics (text -> topics)     |
 +------------------+-----------------------+
                    |
                    |  OpenRouter API
@@ -49,7 +60,7 @@ The architecture prioritizes simplicity and fast iteration: there is no custom A
 |              OpenRouter                   |
 |  (model-flexible AI proxy)                |
 |  - Whisper / Groq for transcription       |
-|  - Claude / GPT for tagging + prompts     |
+|  - Claude / GPT for topics + prompts      |
 +------------------------------------------+
 ```
 
@@ -113,9 +124,9 @@ Exports `colors`, `typography`, `shadows`, `spacing`, `radius`, and `animation` 
 | `Button` | `Button.tsx` | Primary (`#536253`) and secondary (`#dae4e9`) variants, full border radius, `activeOpacity: 0.9` (no darkening on press) |
 | `Card` | `Card.tsx` | `lg` (24pt) or `xl` (32pt) radius; `elevated` variant applies ambient shadow (`4% opacity, 32px blur`); no border lines |
 | `TextInput` | `TextInput.tsx` | `surfaceContainerHigh` background, ghost border focus ring (`primary` at 20% opacity), no bottom line |
-| `Tag` | `Tag.tsx` | Pill-shaped tag for AI-assigned and manual thought tags |
+| `Topic` | `Topic.tsx` | Pill-shaped chip for the thought’s primary topic |
 
-**Barrel export**: `src/components/index.ts` — import any component with `import { Button, Card, TextInput, Tag } from '@/components'`.
+**Barrel export**: `src/components/index.ts` — import any component with `import { Button, Card, TextInput, Topic } from '@/components'`.
 
 **Fonts**: Manrope (400/600/700) and Plus Jakarta Sans (400/600) loaded via `@expo-google-fonts/manrope` and `@expo-google-fonts/plus-jakarta-sans`. Font loading and splash screen management live in `src/app/_layout.tsx`.
 
@@ -180,13 +191,13 @@ All edge functions are deployed to Supabase and live under `supabase/functions/`
 
 | Function | Method | Description | Status |
 |----------|--------|-------------|--------|
-| `transcribe` | POST | Receives audio file (multipart/form-data), sends to OpenRouter (Whisper/Groq), writes transcript to `thoughts.body`, sets `transcription_status: 'complete'` | Planned — task #007 |
-| `tag-thought` | POST | Receives thought text, sends to OpenRouter (Claude/GPT), writes tag array to `thoughts.tags`, sets `tagging_status: 'complete'` | Planned — task #008 |
+| `transcribe` | POST | Multipart audio → OpenRouter transcription → `thoughts.body`, then shared topic assignment (`_shared/assign-topics.ts`) | Implemented |
+| `assign-topics` | POST | JSON `thought_id` + `text` → same shared topic assignment (typed capture) | Implemented |
 | `reflection-prompt` | POST | Receives thought text, returns an AI-generated reflection question — does not persist to DB | Planned — task #010 |
 
 All edge functions:
-- Require a valid Supabase session token (enforced by Supabase's built-in JWT verification)
-- Use the Supabase service role key internally to write back to the database (bypasses RLS for trusted server-side writes)
+- Require a valid Supabase session token on `POST` (`getUser()` with anon client + user JWT)
+- Perform database writes with the user-scoped Supabase client so **RLS** applies (no service role in current topic/transcribe paths)
 - Access `OPENROUTER_API_KEY` via Supabase project secrets — this key is never present in the mobile app bundle
 
 **Adding a new edge function**: create `supabase/functions/<name>/index.ts`, deploy with `supabase functions deploy <name>`, and set any required secrets with `supabase secrets set KEY=value`.
@@ -254,10 +265,11 @@ User taps "Capture" -> TextInput or VoiceRecorder
      -> Audio file sent directly to Edge function `transcribe` (multipart/form-data)
      -> OpenRouter transcribes audio -> returns transcript text
      -> `thoughts.body` updated, transcription_status: 'complete'
+     -> Shared `assign-topics` runs: user_topics + thought_topics + thoughts.topics, tagging_status: 'complete' or 'failed'
      -> Audio file discarded (never stored server-side)
   -> [Text path] Thought row inserted with body text
-  -> Edge function `tag-thought` called with thought text
-  -> OpenRouter returns tag array
-  -> `thoughts.tags` updated, tagging_status: 'complete'
-  -> Inbox refreshes to show new thought with tags
+  -> Edge function `assign-topics` called with thought text
+  -> OpenRouter returns structured topic JSON (threshold 0.2 for reuse vs new topic)
+  -> `thoughts.topics` updated (one-element array), tagging_status: 'complete' or 'failed'
+  -> Inbox refreshes to show new thought with topic chip
 ```

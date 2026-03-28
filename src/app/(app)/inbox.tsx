@@ -1,4 +1,4 @@
-import { Card, Tag } from "@/components";
+import { Card, Topic } from "@/components";
 import { supabase } from "@/lib/supabase";
 import { colors, spacing, typography } from "@/lib/theme";
 import type { Thought } from "@/types/thought";
@@ -16,7 +16,12 @@ const PAGE_SIZE = 50;
 
 type InboxThought = Pick<
   Thought,
-  "id" | "body" | "tags" | "transcription_status" | "created_at"
+  | "id"
+  | "body"
+  | "topics"
+  | "transcription_status"
+  | "tagging_status"
+  | "created_at"
 >;
 
 function formatRelativeTime(dateStr: string): string {
@@ -46,7 +51,9 @@ function formatRelativeTime(dateStr: string): string {
 async function fetchThoughtsPage(offset: number): Promise<InboxThought[]> {
   const { data, error } = await supabase
     .from("thoughts")
-    .select("id, body, tags, transcription_status, created_at")
+    .select(
+      "id, body, topics, transcription_status, tagging_status, created_at",
+    )
     .order("created_at", { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1);
 
@@ -67,6 +74,7 @@ function SkeletonRow() {
 function ThoughtRow({ item }: { item: InboxThought }) {
   const isPending =
     item.transcription_status === "pending" || item.body.trim() === "";
+  const topicPending = item.tagging_status === "pending";
 
   return (
     <Card style={styles.card} testID={`thought-row-${item.id}`}>
@@ -78,10 +86,15 @@ function ThoughtRow({ item }: { item: InboxThought }) {
         {isPending ? "Transcribing\u2026" : item.body}
       </Text>
 
-      {item.tags.length > 0 && (
-        <View style={styles.tagsRow} accessibilityRole="list">
-          {item.tags.map((tag) => (
-            <Tag key={tag} label={tag} testID={`tag-${tag}`} />
+      {topicPending && (
+        <View style={styles.topicsRow} accessibilityLabel="Assigning topic">
+          <ActivityIndicator size="small" color={colors.secondary} />
+        </View>
+      )}
+      {!topicPending && item.topics.length > 0 && (
+        <View style={styles.topicsRow} accessibilityRole="list">
+          {item.topics.map((topic) => (
+            <Topic key={topic} label={topic} testID={`topic-${topic}`} />
           ))}
         </View>
       )}
@@ -220,7 +233,7 @@ const styles = StyleSheet.create({
     color: colors.outlineVariant,
     fontStyle: "italic",
   },
-  tagsRow: {
+  topicsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.s2,

@@ -21,7 +21,7 @@ Sanctuary does not have a traditional REST API server. The mobile app interacts 
 - **Auth**: Sign up, sign in, sign out, password reset
 - **Database**: Direct table queries (filtered by RLS — users only see their own rows)
 - **Storage**: Upload/download voice recordings
-- **Edge Functions**: AI-powered endpoints (transcription, tagging) that call OpenRouter server-side
+- **Edge Functions**: AI-powered endpoints (transcription + topic assignment, text-only topic assignment) that call OpenRouter server-side
 
 This document tracks the Edge Function endpoints. Standard Supabase client patterns are documented in the Supabase docs.
 
@@ -59,13 +59,16 @@ Sessions are automatically injected into all database queries by the Supabase cl
 ```json
 {
   "transcript": "string — transcribed text",
-  "thought_id": "string — UUID of the updated thought"
+  "thought_id": "string — UUID of the updated thought",
+  "topics": ["string — primary topic name when assignment succeeds"]
 }
 ```
 
+The `topics` field is present when topic assignment completes successfully inside the same request; if assignment fails, `transcription_status` is still `complete` but `tagging_status` is `failed` and `topics` may be omitted.
+
 **Error codes**: `400` (missing params), `401` (unauthenticated), `500` (OpenRouter error)
 
-**Notes**: Audio is sent directly as a file upload — it is NOT stored in Supabase Storage. Only the transcript text is persisted (to `thoughts.body`). Sets `transcription_status: 'complete'` on success. To be implemented in task #007.
+**Notes**: Audio is sent directly as a file upload — it is NOT stored in Supabase Storage. The transcript is written to `thoughts.body` and `transcription_status` is set to `'complete'`. The function then runs **topic assignment** (shared module with `/assign-topics`): OpenRouter returns structured JSON; the server reuses an existing `user_topics` row when `best_match_score` > 0.2, otherwise creates a new topic. Updates `thought_topics`, denormalized `thoughts.topics`, and `tagging_status`.
 
 **Browser / CORS**: The Edge Function must answer `OPTIONS` preflight and attach CORS headers on all responses. Use `corsHeaders` from `@supabase/supabase-js/cors` (see [Supabase CORS guide](https://supabase.com/docs/guides/functions/cors)) so Expo Web and other browser clients can call `/transcribe` cross-origin. On web, append a real `File`/`Blob` to `FormData` (not the React Native `{ uri, name, type }` object), or the part body becomes the string `[object Object]` and the function returns 400.
 
@@ -73,16 +76,16 @@ Sessions are automatically injected into all database queries by the Supabase cl
 
 ---
 
-### POST /tag-thought
+### POST /assign-topics
 
-**Description**: Auto-tag a thought using an OpenRouter-routed language model.
+**Description**: Assign **one primary topic** to a thought from typed capture using an OpenRouter-routed model. Uses the same logic as the post-transcription step inside `/transcribe` (`supabase/functions/_shared/assign-topics.ts`).
 
 **Auth required**: Yes (Supabase session token)
 
 **Request body**:
 ```json
 {
-  "thought_id": "string — UUID of the thought to tag",
+  "thought_id": "string — UUID of the thought",
   "text": "string — the full thought text to analyze"
 }
 ```
@@ -91,15 +94,15 @@ Sessions are automatically injected into all database queries by the Supabase cl
 ```json
 {
   "thought_id": "string",
-  "tags": ["string", "..."]
+  "topics": ["string — single topic display name"]
 }
 ```
 
-**Error codes**: `400` (missing params or empty strings), `401` (unauthenticated), `404` (thought not found or not owned by caller), `502` (OpenRouter error or unparseable response), `500` (server configuration error or DB write failure)
+**Error codes**: `400` (missing params or empty strings), `401` (unauthenticated), `404` (thought not found or not owned by caller), `502` (OpenRouter error, unparseable response, or assignment failure), `500` (server configuration or DB write failure)
 
-**Notes**: Updates the `thoughts.tags` column and sets `tagging_status: 'complete'` on success, `'failed'` on any OpenRouter or parse error. Tags are normalized: lowercase, whitespace-trimmed, deduplicated, capped at 4. Model is configurable via the `OPENROUTER_TAGGING_MODEL` Supabase secret (default: `google/gemini-2.0-flash-001`). Implemented in task #008.
+**Notes**: Loads the caller’s `user_topics`, prompts the model for structured JSON (`best_existing_normalized_name`, `best_match_score` 0–1, `new_topic`). Reuses an existing topic when `best_match_score` > **0.2** and the name matches the catalog; otherwise inserts into `user_topics` and links via `thought_topics`. Syncs `thoughts.topics` (one-element array) and `tagging_status`. Model: `OPENROUTER_TOPIC_MODEL` if set, else `OPENROUTER_TAGGING_MODEL`, default `google/gemini-2.0-flash-001`.
 
-**JWT at gateway**: Set `[functions.tag-thought] verify_jwt = false` in `supabase/config.toml` so `OPTIONS` preflight requests (which carry no `Authorization` header) are not rejected at the gateway. `POST` remains protected by validating the Bearer token inside the function via `getUser()`.
+**JWT at gateway**: `[functions.assign-topics] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
 ---
 
@@ -135,3 +138,4 @@ Sessions are automatically injected into all database queries by the Supabase cl
 |------|--------|
 | 2026-03-28 | Initial stub — edge function signatures defined |
 | 2026-03-28 | Implemented tag-thought edge function (task #008) |
+| 2026-03-28 | Replaced tag-thought with assign-topics; user_topics + thought_topics; transcribe runs topic assignment; thoughts.tags renamed to topics |

@@ -3,13 +3,13 @@
  * Use esm.sh + inline CORS — npm:/jsr: imports caused BOOT_ERROR (503) on hosted runtime.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { assignTopicsToThought } from "../_shared/assign-topics.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods":
-    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 };
 
 function encodeBase64(bytes: Uint8Array): string {
@@ -19,7 +19,8 @@ function encodeBase64(bytes: Uint8Array): string {
     let part = "";
     const end = Math.min(i + chunk, bytes.length);
     for (let j = i; j < end; j++) {
-      part += String.fromCharCode(bytes[j]!);
+      const b = bytes[j];
+      if (b !== undefined) part += String.fromCharCode(b);
     }
     binary += part;
   }
@@ -208,5 +209,27 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Failed to save transcript" }, 500);
   }
 
-  return jsonResponse({ transcript, thought_id: thoughtId });
+  const topicModel =
+    Deno.env.get("OPENROUTER_TOPIC_MODEL") ??
+    Deno.env.get("OPENROUTER_TAGGING_MODEL") ??
+    "google/gemini-2.0-flash-001";
+  const topicReferer = Deno.env.get("OPENROUTER_HTTP_REFERER");
+
+  const topicResult = await assignTopicsToThought({
+    supabase,
+    userId: user.id,
+    thoughtId,
+    text: transcript,
+    openrouterKey,
+    model: topicModel,
+    httpReferer: topicReferer ?? undefined,
+  });
+
+  const topics = "topics" in topicResult ? topicResult.topics : undefined;
+
+  return jsonResponse({
+    transcript,
+    thought_id: thoughtId,
+    ...(topics !== undefined ? { topics } : {}),
+  });
 });

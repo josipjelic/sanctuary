@@ -54,8 +54,8 @@ describe("buildThoughtPayload", () => {
     expect(payload.tagging_status).toBe("none");
   });
 
-  it("sets tags to empty array", () => {
-    expect(payload.tags).toEqual([]);
+  it("sets topics to empty array", () => {
+    expect(payload.topics).toEqual([]);
   });
 
   it("sets body_extended to null", () => {

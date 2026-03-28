@@ -43,3 +43,4 @@ Build the Supabase Edge Function `tag-thought` that receives a thought ID and it
 |------|--------------|-------|
 | 2026-03-28 | human | Task created during onboarding |
 | 2026-03-28 | @backend-developer | Implemented tag-thought edge function |
+| 2026-03-28 | @backend-developer | Superseded: `tag-thought` removed; user-scoped topics via `assign-topics` + `_shared/assign-topics.ts`; `transcribe` runs topic assignment after transcript (ADR-002) |

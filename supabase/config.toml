@@ -120,7 +120,7 @@ inactivity_timeout = 0
 [functions.transcribe]
 verify_jwt = false
 
-[functions.tag-thought]
+[functions.assign-topics]
 verify_jwt = false
 
 [edge_runtime]

@@ -6,7 +6,7 @@ export interface Thought {
   user_id: string;
   body: string;
   body_extended: string | null;
-  tags: string[];
+  topics: string[];
   has_audio: boolean;
   transcription_status: TranscriptionStatus;
   tagging_status: TaggingStatus;

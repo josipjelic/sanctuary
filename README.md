@@ -1,6 +1,6 @@
 # Sanctuary
 
-A calm, mindful mobile app for capturing thoughts, journaling, and daily reflection — powered by AI transcription and auto-tagging.
+A calm, mindful mobile app for capturing thoughts, journaling, and daily reflection — powered by AI transcription and topic assignment.
 
 ---
 
@@ -10,7 +10,7 @@ Sanctuary is your personal digital sanctuary — a friction-free space to offloa
 
 Most productivity apps are built for "hustle culture": dense interfaces, endless notifications, gamified streaks. Sanctuary is the opposite. It's quiet, spacious, and serene — designed around the idea that your thoughts deserve a calm home.
 
-Capture anything: an idea, a feeling, a grocery list, a voice memo. Sanctuary transcribes it, tags it with AI, and files it away. Come back when you're ready to reflect.
+Capture anything: an idea, a feeling, a grocery list, a voice memo. Sanctuary transcribes it, assigns a topic with AI, and files it away. Come back when you're ready to reflect.
 
 **Who it's for:** Individuals seeking calm and clarity — people who want a mindful, low-friction place to capture what's on their mind and reflect on it.
 
@@ -24,7 +24,7 @@ Capture anything: an idea, a feeling, a grocery list, a voice memo. Sanctuary tr
 | Language | TypeScript (strict mode) |
 | Auth + Database | Supabase (PostgreSQL + RLS) |
 | File storage | Supabase Storage |
-| AI (transcription + tagging) | OpenRouter (model-flexible) |
+| AI (transcription + topics) | OpenRouter (model-flexible) |
 | Package manager | pnpm |
 | Formatter + Linter | Biome |
 | Unit tests | Jest |

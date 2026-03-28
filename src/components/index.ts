@@ -1,4 +1,4 @@
 export { Button } from "./Button";
 export { Card } from "./Card";
 export { TextInput } from "./TextInput";
-export { Tag } from "./Tag";
+export { Topic } from "./Topic";

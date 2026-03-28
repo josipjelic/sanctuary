@@ -1,16 +1,15 @@
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import { StyleSheet, Text, View } from "react-native";
 
-interface TagProps {
+interface TopicProps {
   label: string;
   testID?: string;
 }
 
 /**
- * Tag — displays an AI-assigned or manually edited thought tag.
- * Uses surfaceContainerLow background with secondary text color.
+ * Topic — displays the AI-assigned primary topic for a thought.
  */
-export function Tag({ label, testID }: TagProps) {
+export function Topic({ label, testID }: TopicProps) {
   return (
     <View style={styles.container} testID={testID}>
       <Text style={styles.label}>{label}</Text>

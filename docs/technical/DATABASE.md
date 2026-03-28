@@ -11,7 +11,7 @@ Read by: All agents. Always read before writing queries or designing schema chan
 > **Engine**: PostgreSQL 15 (managed by Supabase)
 > **Access layer**: `@supabase/supabase-js` client (direct table queries with RLS)
 > **Connection**: Via `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` (client) and service role key (edge functions only)
-> **Last updated**: 2026-03-28 (migrations applied to linked hosted project via `supabase db push`)
+> **Last updated**: 2026-03-28 (migration `003_user_topics_rename_tags`)
 
 ---
 
@@ -29,28 +29,31 @@ This runs `supabase db push` and records migration history on the host. New sche
 
 ## Schema Overview
 
-All user data is isolated via Row Level Security (RLS). Every table that stores user data has a `user_id` column referencing `auth.users.id`. RLS policies enforce `user_id = auth.uid()` for all reads and writes.
+All user data is isolated via Row Level Security (RLS). Every table that stores user data has a `user_id` column referencing `auth.users.id` (directly or via FK to `thoughts`). RLS policies enforce access per user.
 
 ```
 auth.users (managed by Supabase Auth)
   |
+  +--< user_topics
+  |
   +--< thoughts
   |      |
-  |      +-- tags (array column on thoughts)
+  |      +--< thought_topics >-- user_topics
   |
   +--< daily_checkins
 ```
 
 **Key relationships**:
-- `auth.users` -> `thoughts`: one user can have many thoughts
-- `auth.users` -> `daily_checkins`: one user can have many check-ins (one per calendar day)
-- Tags are stored as a `text[]` array on the `thoughts` table (no separate tags table needed for v1)
+- `auth.users` → `thoughts`: one user, many thoughts
+- `auth.users` → `user_topics`: one user, many topic labels (catalog)
+- `thoughts` ↔ `user_topics`: many-to-many via `thought_topics` (v1 assigns **one** primary topic per thought; legacy rows may have multiple links from backfill)
+- `thoughts.topics` (`text[]`): denormalized display names, kept in sync when AI assigns a topic (typically a one-element array)
 
 ---
 
 ## Tables
 
-> Schema designed and migration files written by @database-expert in task #001. See `supabase/migrations/` for the authoritative DDL.
+> Authoritative DDL: `supabase/migrations/`.
 
 ---
 
@@ -64,23 +67,55 @@ auth.users (managed by Supabase Auth)
 | user_id | uuid | NOT NULL, FK -> auth.users.id ON DELETE CASCADE | Owner |
 | body | text | NOT NULL | The thought text (typed or transcribed) |
 | body_extended | text | NULL | Expanded journal entry (set by user in detail view) |
-| tags | text[] | NOT NULL, DEFAULT '{}' | AI-assigned and/or manually edited tags |
+| topics | text[] | NOT NULL, DEFAULT '{}' | Denormalized topic **names** for the thought (synced from `thought_topics`) |
 | has_audio | boolean | NOT NULL, DEFAULT false | Whether this thought originated from a voice recording (audio stored locally on device only) |
 | transcription_status | text | NOT NULL, DEFAULT 'none' | 'none', 'pending', 'complete', 'failed' |
-| tagging_status | text | NOT NULL, DEFAULT 'none' | 'none', 'pending', 'complete', 'failed' |
+| tagging_status | text | NOT NULL, DEFAULT 'none' | Topic-assignment lifecycle: 'none', 'pending', 'complete', 'failed' |
 | created_at | timestamptz | NOT NULL, DEFAULT now() | Capture time |
 | updated_at | timestamptz | NOT NULL, DEFAULT now() | Last edit time |
 
 **Indexes**:
-- `idx_thoughts_user_id` on `(user_id)` — inbox queries filter by user
-- `idx_thoughts_created_at` on `(user_id, created_at DESC)` — chronological inbox sort
-- GIN index on `tags` — tag filter queries
+- `idx_thoughts_user_id` on `(user_id)`
+- `idx_thoughts_created_at` on `(user_id, created_at DESC)`
+- GIN `idx_thoughts_topics` on `topics` — containment filters (`@>`)
 
-**RLS policies**:
-- SELECT: `user_id = auth.uid()`
-- INSERT: `user_id = auth.uid()`
-- UPDATE: `user_id = auth.uid()`
-- DELETE: `user_id = auth.uid()`
+**RLS policies**: SELECT / INSERT / UPDATE / DELETE where `user_id = auth.uid()`.
+
+---
+
+### user_topics
+
+**Purpose**: Per-user topic catalog. AI prefers reusing these when the model-reported match score is above the configured threshold (see ADR-002); otherwise a new row is created.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | uuid | PK, DEFAULT gen_random_uuid() | |
+| user_id | uuid | NOT NULL, FK -> auth.users ON DELETE CASCADE | Owner |
+| name | text | NOT NULL | Display label (typically normalized lowercase) |
+| normalized_name | text | NOT NULL, UNIQUE per user | Lowercase, trimmed, for matching |
+| created_at | timestamptz | NOT NULL, DEFAULT now() | |
+| updated_at | timestamptz | NOT NULL, DEFAULT now() | |
+
+**Constraints**: `UNIQUE (user_id, normalized_name)`
+
+**Indexes**: `idx_user_topics_user_id` on `(user_id)`
+
+**RLS policies**: CRUD where `user_id = auth.uid()`.
+
+---
+
+### thought_topics
+
+**Purpose**: Links a thought to one or more `user_topics` rows (junction).
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| thought_id | uuid | PK (composite), FK -> thoughts ON DELETE CASCADE | |
+| topic_id | uuid | PK (composite), FK -> user_topics ON DELETE CASCADE | |
+
+**Indexes**: `thought_id`, `topic_id`
+
+**RLS policies**: SELECT / INSERT / DELETE allowed when the thought is owned by `auth.uid()` (EXISTS join to `thoughts`).
 
 ---
 
@@ -118,6 +153,7 @@ auth.users (managed by Supabase Auth)
 |----------------|------|-------------|------------|-----------------|
 | `001_create_thoughts.sql` | 2026-03-28 | Create thoughts table with RLS | Yes | None |
 | `002_create_daily_checkins.sql` | 2026-03-28 | Create daily_checkins table with RLS | Yes | None |
+| `003_user_topics_rename_tags.sql` | 2026-03-28 | user_topics, thought_topics, rename `tags` → `topics`, backfill | Yes | Low — additive + column rename |
 
 ---
 
@@ -127,25 +163,33 @@ auth.users (managed by Supabase Auth)
 
 **Fetch user's inbox (newest first)**:
 ```sql
-SELECT id, body, tags, transcription_status, tagging_status, created_at
+SELECT id, body, topics, transcription_status, tagging_status, created_at
 FROM thoughts
 WHERE user_id = auth.uid()
 ORDER BY created_at DESC
 LIMIT 50;
 ```
 
-**Filter by tag**:
+**Filter by topic name (denormalized array)**:
 ```sql
-SELECT id, body, tags, created_at
+SELECT id, body, topics, created_at
 FROM thoughts
 WHERE user_id = auth.uid()
-  AND tags @> ARRAY['grocery']
+  AND topics @> ARRAY['grocery']
 ORDER BY created_at DESC;
+```
+
+**List a user's topic catalog**:
+```sql
+SELECT id, name, normalized_name, created_at
+FROM user_topics
+WHERE user_id = auth.uid()
+ORDER BY normalized_name;
 ```
 
 **Full-text search**:
 ```sql
-SELECT id, body, tags, created_at
+SELECT id, body, topics, created_at
 FROM thoughts
 WHERE user_id = auth.uid()
   AND body ILIKE '%' || $1 || '%'
@@ -165,5 +209,5 @@ WHERE user_id = auth.uid()
 
 | Issue | Impact | Plan |
 |-------|--------|------|
-| Tags stored as text[] | No tag normalization (duplicates like "grocery" vs "groceries") | Consider a tags lookup table in v2 |
 | No full-text search index | `ILIKE` searches will be slow at scale | Add `tsvector` column and GIN index in v2 |
+| Model-reported match scores | Topic reuse threshold depends on LLM calibration | Tune prompts; optional analytics on score distribution |

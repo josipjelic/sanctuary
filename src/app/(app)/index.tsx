@@ -142,9 +142,8 @@ export default function QuickCaptureScreen() {
         setSubmitError("Failed to save. Please try again.");
         return;
       }
-      // fire-and-forget tagging
       supabase.functions
-        .invoke("tag-thought", {
+        .invoke("assign-topics", {
           body: { thought_id: inserted.id, text: text.trim() },
         })
         .catch(() => {});
@@ -254,18 +253,10 @@ export default function QuickCaptureScreen() {
       } as unknown as Blob);
     }
     formData.append("thought_id", thoughtId);
-    const { data, error } = await supabase.functions.invoke("transcribe", {
+    const { error } = await supabase.functions.invoke("transcribe", {
       body: formData,
     });
     if (error) throw error;
-    // fire-and-forget tagging after transcription
-    if (data?.transcript) {
-      supabase.functions
-        .invoke("tag-thought", {
-          body: { thought_id: thoughtId, text: data.transcript },
-        })
-        .catch(() => {});
-    }
   }
 
   const isRecording = recordingState === "recording";
