@@ -1,14 +1,14 @@
 ---
 id: "002"
 title: "Initialize Expo project with navigation and Supabase client"
-status: "todo"
+status: "completed"
 area: "mobile"
 agent: "@react-native-developer"
 priority: "high"
 created_at: "2026-03-28"
 due_date: null
-started_at: null
-completed_at: null
+started_at: "2026-03-28"
+completed_at: "2026-03-28"
 prd_refs: ["FR-001", "FR-002", "FR-004", "FR-005"]
 blocks: ["004", "005", "006", "015"]
 blocked_by: []
@@ -43,3 +43,4 @@ Bootstrap the Expo React Native project with the correct folder structure, navig
 | Date | Agent / Human | Event |
 |------|--------------|-------|
 | 2026-03-28 | human | Task created during onboarding |
+| 2026-03-28 | @react-native-developer | Task completed — Expo project scaffolded with Router, Supabase client, Biome, Jest; ARCHITECTURE.md Mobile Architecture section filled in |
