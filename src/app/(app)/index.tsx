@@ -7,7 +7,16 @@ import {
 } from "@/lib/capture";
 import { supabase } from "@/lib/supabase";
 import { colors, spacing, typography } from "@/lib/theme";
-import { Audio } from "expo-av";
+import {
+  AudioModule,
+  AudioQuality,
+  IOSOutputFormat,
+  RecordingPresets,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from "expo-audio";
+import type { RecordingOptions } from "expo-audio";
 import { Redirect } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -28,22 +37,25 @@ type RecordingState =
   | "recording"
   | "processing";
 
-const RECORDING_OPTIONS: Audio.RecordingOptions = {
+/** Voice-optimized options (16 kHz mono) for transcription; matches prior expo-av setup. */
+const VOICE_RECORDING_OPTIONS: RecordingOptions = {
+  ...RecordingPresets.HIGH_QUALITY,
+  extension: ".m4a",
+  sampleRate: 16000,
+  numberOfChannels: 1,
+  bitRate: 128000,
   android: {
     extension: ".webm",
-    outputFormat: Audio.AndroidOutputFormat.WEBM,
-    audioEncoder: Audio.AndroidAudioEncoder.DEFAULT,
+    outputFormat: "webm",
+    audioEncoder: "default",
     sampleRate: 16000,
-    numberOfChannels: 1,
-    bitRate: 128000,
   },
   ios: {
+    ...RecordingPresets.HIGH_QUALITY.ios,
     extension: ".m4a",
-    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-    audioQuality: Audio.IOSAudioQuality.HIGH,
     sampleRate: 16000,
-    numberOfChannels: 1,
-    bitRate: 128000,
+    outputFormat: IOSOutputFormat.MPEG4AAC,
+    audioQuality: AudioQuality.HIGH,
     linearPCMBitDepth: 16,
     linearPCMIsBigEndian: false,
     linearPCMIsFloat: false,
@@ -56,6 +68,9 @@ const RECORDING_OPTIONS: Audio.RecordingOptions = {
 
 export default function QuickCaptureScreen() {
   const { session } = useAuth();
+  const audioRecorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
+  const recorderState = useAudioRecorderState(audioRecorder, 250);
+
   if (!session) {
     return <Redirect href="/(auth)/sign-in" />;
   }
@@ -68,9 +83,6 @@ export default function QuickCaptureScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
-  const [recordingDuration, setRecordingDuration] = useState(0);
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const successOpacity = useRef(new Animated.Value(0)).current;
   const [successVisible, setSuccessVisible] = useState(false);
@@ -79,10 +91,17 @@ export default function QuickCaptureScreen() {
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      recordingRef.current?.stopAndUnloadAsync().catch(() => {});
+      void (async () => {
+        try {
+          if (audioRecorder.getStatus().isRecording) {
+            await audioRecorder.stop();
+          }
+        } catch {
+          /* recorder may already be stopped */
+        }
+      })();
     };
-  }, []);
+  }, [audioRecorder.id]);
 
   useEffect(() => {
     if (recordingState === "recording") {
@@ -165,7 +184,7 @@ export default function QuickCaptureScreen() {
   async function requestPermissionAndRecord() {
     setPermissionError(null);
     setRecordingState("requesting-permission");
-    const { granted } = await Audio.requestPermissionsAsync();
+    const { granted } = await AudioModule.requestRecordingPermissionsAsync();
     if (!granted) {
       setPermissionError("Microphone access is required for voice capture.");
       setRecordingState("idle");
@@ -175,31 +194,44 @@ export default function QuickCaptureScreen() {
   }
 
   async function startRecording() {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    });
-    const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
-    recordingRef.current = recording;
-    setRecordingDuration(0);
-    setRecordingState("recording");
-    timerRef.current = setInterval(() => {
-      setRecordingDuration((d) => d + 1);
-    }, 1000);
+    try {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: true,
+        interruptionMode: "doNotMix",
+      });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      setRecordingState("recording");
+    } catch {
+      setPermissionError("Could not start recording. Please try again.");
+      setRecordingState("idle");
+    }
   }
 
   async function stopRecordingAndSubmit() {
-    if (!recordingRef.current) return;
+    if (recordingState !== "recording") return;
     setRecordingState("processing");
 
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+    try {
+      await audioRecorder.stop();
+    } catch {
+      setSubmitError("Recording failed. Please try again.");
+      setRecordingState("idle");
+      return;
     }
 
-    await recordingRef.current.stopAndUnloadAsync();
-    const uri = recordingRef.current.getURI();
-    recordingRef.current = null;
+    const uri = audioRecorder.uri;
+
+    try {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: false,
+        interruptionMode: "mixWithOthers",
+      });
+    } catch {
+      /* non-fatal */
+    }
 
     if (!uri) {
       setRecordingState("idle");
@@ -260,6 +292,7 @@ export default function QuickCaptureScreen() {
   }
 
   const isRecording = recordingState === "recording";
+  const recordingDurationSec = Math.floor(recorderState.durationMillis / 1000);
   const isProcessing =
     recordingState === "processing" ||
     recordingState === "requesting-permission";
@@ -317,7 +350,7 @@ export default function QuickCaptureScreen() {
                 <Text style={styles.micIcon}>…</Text>
               ) : isRecording ? (
                 <Text style={styles.micDuration}>
-                  {formatDuration(recordingDuration)}
+                  {formatDuration(recordingDurationSec)}
                 </Text>
               ) : (
                 <Text style={styles.micIcon}>●</Text>
