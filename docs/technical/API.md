@@ -95,9 +95,11 @@ Sessions are automatically injected into all database queries by the Supabase cl
 }
 ```
 
-**Error codes**: `400` (missing params), `401` (unauthenticated), `500` (OpenRouter error)
+**Error codes**: `400` (missing params or empty strings), `401` (unauthenticated), `404` (thought not found or not owned by caller), `502` (OpenRouter error or unparseable response), `500` (server configuration error or DB write failure)
 
-**Notes**: Updates the `thoughts.tags` column and sets `tagging_status: 'complete'`. Tags are lowercase, single words or short phrases (e.g., `"idea"`, `"grocery"`, `"feeling"`, `"task"`). To be implemented in task #008.
+**Notes**: Updates the `thoughts.tags` column and sets `tagging_status: 'complete'` on success, `'failed'` on any OpenRouter or parse error. Tags are normalized: lowercase, whitespace-trimmed, deduplicated, capped at 4. Model is configurable via the `OPENROUTER_TAGGING_MODEL` Supabase secret (default: `google/gemini-2.0-flash-001`). Implemented in task #008.
+
+**JWT at gateway**: Set `[functions.tag-thought] verify_jwt = false` in `supabase/config.toml` so `OPTIONS` preflight requests (which carry no `Authorization` header) are not rejected at the gateway. `POST` remains protected by validating the Bearer token inside the function via `getUser()`.
 
 ---
 
@@ -132,3 +134,4 @@ Sessions are automatically injected into all database queries by the Supabase cl
 | Date | Change |
 |------|--------|
 | 2026-03-28 | Initial stub — edge function signatures defined |
+| 2026-03-28 | Implemented tag-thought edge function (task #008) |

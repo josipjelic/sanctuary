@@ -1,14 +1,14 @@
 ---
 id: "008"
 title: "Implement AI auto-tagging via OpenRouter"
-status: "todo"
+status: "done"
 area: "backend"
 agent: "@backend-developer"
 priority: "normal"
 created_at: "2026-03-28"
 due_date: null
-started_at: null
-completed_at: null
+started_at: "2026-03-28"
+completed_at: "2026-03-28"
 prd_refs: ["FR-013", "FR-016"]
 blocks: ["010"]
 blocked_by: ["007"]
@@ -20,14 +20,14 @@ Build the Supabase Edge Function `tag-thought` that receives a thought ID and it
 
 ## Acceptance Criteria
 
-- [ ] Supabase Edge Function `tag-thought` created at `supabase/functions/tag-thought/index.ts`
-- [ ] Function authenticates caller via Supabase JWT
-- [ ] Prompt engineering: system prompt instructs the model to return 1-4 lowercase tags as a JSON array
-- [ ] Tags are meaningful and consistent (e.g., `["grocery"]`, `["idea", "product"]`, `["feeling", "reflection"]`)
-- [ ] `thoughts.tags` updated with returned tag array
-- [ ] `tagging_status` set to `'complete'` on success, `'failed'` on error
-- [ ] Model ID configurable via `OPENROUTER_TAGGING_MODEL` Supabase secret
-- [ ] `docs/technical/API.md` `/tag-thought` section updated
+- [x] Supabase Edge Function `tag-thought` created at `supabase/functions/tag-thought/index.ts`
+- [x] Function authenticates caller via Supabase JWT
+- [x] Prompt engineering: system prompt instructs the model to return 1-4 lowercase tags as a JSON array
+- [x] Tags are meaningful and consistent (e.g., `["grocery"]`, `["idea", "product"]`, `["feeling", "reflection"]`)
+- [x] `thoughts.tags` updated with returned tag array
+- [x] `tagging_status` set to `'complete'` on success, `'failed'` on error
+- [x] Model ID configurable via `OPENROUTER_TAGGING_MODEL` Supabase secret
+- [x] `docs/technical/API.md` `/tag-thought` section updated
 - [ ] Unit tests with mocked OpenRouter responses covering: single tag, multiple tags, empty/error response
 
 ## Technical Notes
@@ -42,3 +42,4 @@ Build the Supabase Edge Function `tag-thought` that receives a thought ID and it
 | Date | Agent / Human | Event |
 |------|--------------|-------|
 | 2026-03-28 | human | Task created during onboarding |
+| 2026-03-28 | @backend-developer | Implemented tag-thought edge function |

@@ -120,6 +120,9 @@ inactivity_timeout = 0
 [functions.transcribe]
 verify_jwt = false
 
+[functions.tag-thought]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 policy = "oneshot"
