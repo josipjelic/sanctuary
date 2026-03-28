@@ -13,7 +13,10 @@
       "backgroundColor": "#f9f9f8"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -26,7 +29,8 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
-      "package": "com.context.hr.sanctuary"
+      "package": "com.context.hr.sanctuary",
+      "runtimeVersion": "1.0.0"
     },
     "web": {
       "bundler": "metro",
@@ -53,6 +57,9 @@
         "projectId": "cd70b552-8a0a-4d7e-9587-e43e30776839"
       }
     },
-    "owner": "context.hr"
+    "owner": "context.hr",
+    "updates": {
+      "url": "https://u.expo.dev/cd70b552-8a0a-4d7e-9587-e43e30776839"
+    }
   }
 }
