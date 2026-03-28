@@ -100,6 +100,7 @@ Scan the QR code with Expo Go to run on your physical device.
 | `pnpm test` | Run unit tests (Jest) |
 | `pnpm run lint` | Run Biome linter |
 | `pnpm run typecheck` | TypeScript type check |
+| `pnpm run db:push` | Push `supabase/migrations/` to the linked remote database (requires [Supabase CLI](https://supabase.com/docs/guides/cli) `login` + `link`) |
 
 ---
 

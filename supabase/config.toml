@@ -108,7 +108,7 @@ verify_enabled = false
 enroll_enabled = false
 verify_enabled = false
 otp_length = 6
-otp_expiry = 600
+template = "Your code is {{ .Code }}"
 max_frequency = "5s"
 
 [auth.sessions]

@@ -11,7 +11,19 @@ Read by: All agents. Always read before writing queries or designing schema chan
 > **Engine**: PostgreSQL 15 (managed by Supabase)
 > **Access layer**: `@supabase/supabase-js` client (direct table queries with RLS)
 > **Connection**: Via `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` (client) and service role key (edge functions only)
-> **Last updated**: 2026-03-28 (task #001 — schema migrations written)
+> **Last updated**: 2026-03-28 (migrations applied to linked hosted project via `supabase db push`)
+
+---
+
+## Hosted project & migrations
+
+After [Supabase CLI](https://supabase.com/docs/guides/cli) login and `supabase link --project-ref <ref>`, apply the SQL in `supabase/migrations/` to the linked remote database:
+
+```bash
+pnpm run db:push
+```
+
+This runs `supabase db push` and records migration history on the host. New schema work: add a dated file under `supabase/migrations/`, then run `db:push` again (or use `supabase db pull` / local diff workflows per Supabase docs when iterating from the dashboard).
 
 ---
 
