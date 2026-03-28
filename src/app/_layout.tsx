@@ -1,6 +1,7 @@
 import "react-native-url-polyfill/auto";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useAuth } from "@/hooks/useAuth";
+import { colors } from "@/lib/theme";
 import {
   Manrope_400Regular,
   Manrope_600SemiBold,
@@ -14,6 +15,8 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
+import { ActivityIndicator, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -27,9 +30,11 @@ export default function RootLayout() {
   });
 
   return (
-    <AuthProvider>
-      <RootLayoutInner fontsReady={fontsLoaded || !!error} />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <RootLayoutInner fontsReady={fontsLoaded || !!error} />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 
@@ -43,7 +48,18 @@ function RootLayoutInner({ fontsReady }: { fontsReady: boolean }) {
   }, [fontsReady, authIsLoading]);
 
   if (!fontsReady || authIsLoading) {
-    return null;
+    return (
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: colors.surface,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
   }
 
   return <Stack screenOptions={{ headerShown: false }} />;

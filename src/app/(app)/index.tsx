@@ -8,7 +8,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { colors, spacing, typography } from "@/lib/theme";
 import { Audio } from "expo-av";
-import { Stack } from "expo-router";
+import { Redirect, Stack } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -56,8 +56,9 @@ const RECORDING_OPTIONS: Audio.RecordingOptions = {
 
 export default function QuickCaptureScreen() {
   const { session, signOut } = useAuth();
-  // (app)/_layout.tsx guarantees session is non-null at this route level
-  if (!session) return null;
+  if (!session) {
+    return <Redirect href="/(auth)/sign-in" />;
+  }
   const userId = session.user.id;
 
   const [text, setText] = useState("");
