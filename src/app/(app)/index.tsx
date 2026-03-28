@@ -8,7 +8,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { colors, spacing, typography } from "@/lib/theme";
 import { Audio } from "expo-av";
-import { Redirect, Stack } from "expo-router";
+import { Redirect } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -55,7 +55,7 @@ const RECORDING_OPTIONS: Audio.RecordingOptions = {
 };
 
 export default function QuickCaptureScreen() {
-  const { session, signOut } = useAuth();
+  const { session } = useAuth();
   if (!session) {
     return <Redirect href="/(auth)/sign-in" />;
   }
@@ -133,13 +133,21 @@ export default function QuickCaptureScreen() {
     setSubmitError(null);
     setIsSubmitting(true);
     try {
-      const { error } = await supabase
+      const { data: inserted, error } = await supabase
         .from("thoughts")
-        .insert(buildThoughtPayload(userId, text));
-      if (error) {
+        .insert(buildThoughtPayload(userId, text))
+        .select("id")
+        .single();
+      if (error || !inserted) {
         setSubmitError("Failed to save. Please try again.");
         return;
       }
+      // fire-and-forget tagging
+      supabase.functions
+        .invoke("tag-thought", {
+          body: { thought_id: inserted.id, text: text.trim() },
+        })
+        .catch(() => {});
       setText("");
       triggerSuccessAnimation();
     } finally {
@@ -246,10 +254,18 @@ export default function QuickCaptureScreen() {
       } as unknown as Blob);
     }
     formData.append("thought_id", thoughtId);
-    const { error } = await supabase.functions.invoke("transcribe", {
+    const { data, error } = await supabase.functions.invoke("transcribe", {
       body: formData,
     });
     if (error) throw error;
+    // fire-and-forget tagging after transcription
+    if (data?.transcript) {
+      supabase.functions
+        .invoke("tag-thought", {
+          body: { thought_id: thoughtId, text: data.transcript },
+        })
+        .catch(() => {});
+    }
   }
 
   const isRecording = recordingState === "recording";
@@ -261,25 +277,6 @@ export default function QuickCaptureScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          headerTransparent: true,
-          headerTitle: "",
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={signOut}
-              style={styles.signOutBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Sign out"
-              testID="sign-out-btn"
-            >
-              <Text style={styles.signOutLabel}>Sign out</Text>
-            </TouchableOpacity>
-          ),
-        }}
-      />
-
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -449,13 +446,6 @@ const styles = StyleSheet.create({
     color: colors.onPrimary,
   },
   captureLabelDisabled: {
-    color: colors.onSurfaceVariant,
-  },
-  signOutBtn: {
-    marginRight: spacing.s4,
-  },
-  signOutLabel: {
-    ...typography.labelMd,
     color: colors.onSurfaceVariant,
   },
   successToast: {

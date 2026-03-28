@@ -1,14 +1,14 @@
 ---
 id: "009"
 title: "Build thought inbox screen"
-status: "todo"
+status: "done"
 area: "mobile"
 agent: "@react-native-developer"
 priority: "normal"
 created_at: "2026-03-28"
 due_date: null
-started_at: null
-completed_at: null
+started_at: "2026-03-28"
+completed_at: "2026-03-28"
 prd_refs: ["FR-020", "FR-021", "FR-022"]
 blocks: ["010", "011"]
 blocked_by: ["005", "006"]
@@ -43,3 +43,4 @@ Build the Thought Inbox screen that displays all of the user's captured thoughts
 | Date | Agent / Human | Event |
 |------|--------------|-------|
 | 2026-03-28 | human | Task created during onboarding |
+| 2026-03-28 | @react-native-developer | Implemented inbox screen, tab navigation, and tag-thought wiring |

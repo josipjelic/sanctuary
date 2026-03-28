@@ -19,7 +19,6 @@
 
 ## Backlog
 
-- [ ] #009 — Build thought inbox screen [area: mobile] → [.tasks/009-thought-inbox-screen.md](.tasks/009-thought-inbox-screen.md)
 - [ ] #010 — Build thought detail / journaling screen [area: mobile] → [.tasks/010-thought-detail-screen.md](.tasks/010-thought-detail-screen.md)
 - [ ] #011 — Build library / tag-filtered browse view [area: mobile] → [.tasks/011-library-browse-screen.md](.tasks/011-library-browse-screen.md)
 - [ ] #012 — Build daily check-in screen [area: mobile] → [.tasks/012-daily-checkin-screen.md](.tasks/012-daily-checkin-screen.md)
@@ -39,6 +38,7 @@
 - [x] #005 — Build user authentication screens (sign up, sign in, password reset) [area: mobile] → [.tasks/005-auth-screens.md](.tasks/005-auth-screens.md)
 - [x] #006 — Build quick capture screen (text input + voice recording UI) [area: mobile] → [.tasks/006-quick-capture-screen.md](.tasks/006-quick-capture-screen.md)
 - [x] #008 — Implement AI auto-tagging via OpenRouter [area: backend] → [.tasks/008-ai-auto-tagging.md](.tasks/008-ai-auto-tagging.md)
+- [x] #009 — Build thought inbox screen [area: mobile] → [.tasks/009-thought-inbox-screen.md](.tasks/009-thought-inbox-screen.md)
 
 ---
 

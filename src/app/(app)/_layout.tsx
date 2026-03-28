@@ -1,5 +1,6 @@
 import { useAuth } from "@/hooks/useAuth";
-import { Redirect, Stack } from "expo-router";
+import { colors, typography } from "@/lib/theme";
+import { Redirect, Tabs } from "expo-router";
 
 export default function AppLayout() {
   const { session } = useAuth();
@@ -8,5 +9,25 @@ export default function AppLayout() {
     return <Redirect href="/(auth)/sign-in" />;
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopWidth: 0,
+          elevation: 0,
+        },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.outline,
+        tabBarLabelStyle: {
+          ...typography.labelMd,
+          marginBottom: 4,
+        },
+      }}
+    >
+      <Tabs.Screen name="index" options={{ title: "Capture" }} />
+      <Tabs.Screen name="inbox" options={{ title: "Thoughts" }} />
+    </Tabs>
+  );
 }
