@@ -1,4 +1,6 @@
 import "react-native-url-polyfill/auto";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Manrope_400Regular,
   Manrope_600SemiBold,
@@ -24,15 +26,25 @@ export default function RootLayout() {
     PlusJakartaSans_600SemiBold,
   });
 
+  return (
+    <AuthProvider>
+      <RootLayoutInner fontsReady={fontsLoaded || !!error} />
+    </AuthProvider>
+  );
+}
+
+function RootLayoutInner({ fontsReady }: { fontsReady: boolean }) {
+  const { isLoading: authIsLoading } = useAuth();
+
   useEffect(() => {
-    if (fontsLoaded || error) {
+    if (fontsReady && !authIsLoading) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, error]);
+  }, [fontsReady, authIsLoading]);
 
-  if (!fontsLoaded && !error) {
+  if (!fontsReady || authIsLoading) {
     return null;
   }
 
-  return <Stack />;
+  return <Stack screenOptions={{ headerShown: false }} />;
 }
