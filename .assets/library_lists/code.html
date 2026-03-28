@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sanctuary - Library</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary": "#52616a",
+              "surface-variant": "#dce4e3",
+              "on-primary-fixed": "#354335",
+              "secondary-dim": "#4b5559",
+              "surface-bright": "#f9f9f8",
+              "primary-fixed": "#d7e7d3",
+              "on-tertiary-fixed": "#394851",
+              "tertiary-dim": "#46555e",
+              "on-tertiary-fixed-variant": "#55656d",
+              "on-tertiary": "#f3faff",
+              "outline-variant": "#abb4b3",
+              "on-primary-container": "#475546",
+              "on-background": "#2c3433",
+              "surface-container-low": "#f1f4f3",
+              "error-dim": "#5c1202",
+              "inverse-surface": "#0c0f0e",
+              "surface-tint": "#536253",
+              "on-surface": "#2c3433",
+              "primary-dim": "#485647",
+              "primary": "#536253",
+              "on-secondary-container": "#495358",
+              "inverse-on-surface": "#9b9d9d",
+              "surface-container": "#eaefee",
+              "on-secondary": "#f2faff",
+              "secondary-container": "#dae4e9",
+              "surface-container-highest": "#dce4e3",
+              "surface-dim": "#d2dcdb",
+              "surface-container-high": "#e3e9e8",
+              "on-error": "#fff7f6",
+              "primary-fixed-dim": "#c9d9c5",
+              "primary-container": "#d7e7d3",
+              "error-container": "#fe8b70",
+              "on-primary-fixed-variant": "#515f50",
+              "outline": "#747c7c",
+              "surface-container-lowest": "#ffffff",
+              "tertiary-fixed-dim": "#d2e2ec",
+              "tertiary-container": "#e0f0fb",
+              "surface": "#f9f9f8",
+              "tertiary-fixed": "#e0f0fb",
+              "error": "#9e422c",
+              "inverse-primary": "#edfeea",
+              "secondary": "#576165",
+              "secondary-fixed-dim": "#ccd6db",
+              "on-surface-variant": "#586160",
+              "secondary-fixed": "#dae4e9",
+              "on-secondary-fixed-variant": "#535d62",
+              "on-tertiary-container": "#4b5b63",
+              "on-primary": "#ecfce8",
+              "background": "#f9f9f8",
+              "on-secondary-fixed": "#374145",
+              "on-error-container": "#742410"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      body {
+        background-color: #f9f9f8;
+        color: #2c3433;
+      }
+      .folder-card::before {
+        content: '';
+        position: absolute;
+        top: -12px;
+        left: 0;
+        width: 40%;
+        height: 12px;
+        background: inherit;
+        border-radius: 12px 12px 0 0;
+      }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 right-0 z-50 flex justify-between items-center w-full px-8 py-4 bg-[#f9f9f8]/70 backdrop-blur-xl">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-container overflow-hidden">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="User profile portrait reflecting calm serene expression" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD98-W3jT3OQlK5M99h7Yi7FKwKYLLJKZncwDjY6YmHAXYOQZFWv7R_jBcWbnFsM6Uaq8UniCZiH2S7g8C0f0iDvYNNoClSSwDgNLdlwHKH7On2-hwRN8CCqsns7iDVFSt-WtD8St35jTCX5AtqTAjngtwI2vTG_fH0Uik2htpccxx8UiM3W8-quJ8UNN714hTB8c2-1zWCUqkPUm6JNi_xz9YdPWtvDyrlETEiHBxTcjsiCnDMjEtb-Wgfuq47JlptmDmUaHlb-7w"/>
+</div>
+<span class="text-2xl font-bold font-headline text-[#536253] tracking-tighter">Sanctuary</span>
+</div>
+<button class="p-2 rounded-full hover:bg-[#f1f4f3] transition-all duration-500 scale-95 duration-500 ease-[cubic-bezier(0.05,0.7,0.1,1)]">
+<span class="material-symbols-outlined text-[#536253]">settings</span>
+</button>
+</header>
+<main class="pt-28 pb-32 px-8 max-w-7xl mx-auto">
+<!-- Editorial Header Section -->
+<section class="mb-20 flex flex-col md:flex-row md:items-end justify-between gap-8">
+<div class="max-w-2xl">
+<h1 class="font-headline text-5xl md:text-7xl font-extrabold text-on-surface tracking-tighter mb-4 leading-none">
+                    Library
+                </h1>
+<p class="text-secondary font-body text-lg leading-relaxed max-w-md">
+                    Your thoughts, curated and organized by the sanctuary's intelligence.
+                </p>
+</div>
+<button class="flex items-center gap-2 px-8 py-4 bg-primary text-on-primary rounded-full font-semibold hover:opacity-90 transition-all duration-500">
+<span class="material-symbols-outlined">tune</span>
+<span>Manage Lists</span>
+</button>
+</section>
+<!-- Bento Grid Layout for Lists -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
+<!-- Business Ideas Card -->
+<div class="group relative mt-4">
+<div class="folder-card bg-surface-container-low rounded-xl rounded-tl-none p-10 h-full flex flex-col justify-between transition-all duration-500 hover:bg-surface-container transition-all hover:-translate-y-2">
+<div>
+<div class="w-14 h-14 bg-surface-container-lowest rounded-full flex items-center justify-center mb-8 shadow-sm">
+<span class="material-symbols-outlined text-primary text-3xl">lightbulb</span>
+</div>
+<h3 class="font-headline text-2xl font-bold text-on-surface mb-2">Business Ideas</h3>
+<p class="text-secondary text-sm font-medium tracking-wide">12 items</p>
+</div>
+<div class="mt-12 flex justify-end">
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">arrow_forward_ios</span>
+</div>
+</div>
+</div>
+<!-- Personal Reflections Card -->
+<div class="group relative mt-4">
+<div class="folder-card bg-surface-container-low rounded-xl rounded-tl-none p-10 h-full flex flex-col justify-between transition-all duration-500 hover:bg-surface-container transition-all hover:-translate-y-2">
+<div>
+<div class="w-14 h-14 bg-surface-container-lowest rounded-full flex items-center justify-center mb-8 shadow-sm">
+<span class="material-symbols-outlined text-primary text-3xl">psychology</span>
+</div>
+<h3 class="font-headline text-2xl font-bold text-on-surface mb-2">Personal Reflections</h3>
+<p class="text-secondary text-sm font-medium tracking-wide">8 items</p>
+</div>
+<div class="mt-12 flex justify-end">
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">arrow_forward_ios</span>
+</div>
+</div>
+</div>
+<!-- To-Do Card -->
+<div class="group relative mt-4">
+<div class="folder-card bg-surface-container-low rounded-xl rounded-tl-none p-10 h-full flex flex-col justify-between transition-all duration-500 hover:bg-surface-container transition-all hover:-translate-y-2">
+<div>
+<div class="w-14 h-14 bg-surface-container-lowest rounded-full flex items-center justify-center mb-8 shadow-sm">
+<span class="material-symbols-outlined text-primary text-3xl">task_alt</span>
+</div>
+<h3 class="font-headline text-2xl font-bold text-on-surface mb-2">To-Do</h3>
+<p class="text-secondary text-sm font-medium tracking-wide">5 items</p>
+</div>
+<div class="mt-12 flex justify-end">
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">arrow_forward_ios</span>
+</div>
+</div>
+</div>
+<!-- Creative Spark Card -->
+<div class="group relative mt-4">
+<div class="folder-card bg-surface-container-low rounded-xl rounded-tl-none p-10 h-full flex flex-col justify-between transition-all duration-500 hover:bg-surface-container transition-all hover:-translate-y-2">
+<div>
+<div class="w-14 h-14 bg-surface-container-lowest rounded-full flex items-center justify-center mb-8 shadow-sm">
+<span class="material-symbols-outlined text-primary text-3xl">auto_awesome</span>
+</div>
+<h3 class="font-headline text-2xl font-bold text-on-surface mb-2">Creative Spark</h3>
+<p class="text-secondary text-sm font-medium tracking-wide">24 items</p>
+</div>
+<div class="mt-12 flex justify-end">
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">arrow_forward_ios</span>
+</div>
+</div>
+</div>
+<!-- Book Notes Card -->
+<div class="group relative mt-4">
+<div class="folder-card bg-surface-container-low rounded-xl rounded-tl-none p-10 h-full flex flex-col justify-between transition-all duration-500 hover:bg-surface-container transition-all hover:-translate-y-2">
+<div>
+<div class="w-14 h-14 bg-surface-container-lowest rounded-full flex items-center justify-center mb-8 shadow-sm">
+<span class="material-symbols-outlined text-primary text-3xl">menu_book</span>
+</div>
+<h3 class="font-headline text-2xl font-bold text-on-surface mb-2">Book Notes</h3>
+<p class="text-secondary text-sm font-medium tracking-wide">15 items</p>
+</div>
+<div class="mt-12 flex justify-end">
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">arrow_forward_ios</span>
+</div>
+</div>
+</div>
+<!-- Archive Card (Subtle/Secondary) -->
+<div class="group relative mt-4">
+<div class="folder-card bg-surface-container-low/50 rounded-xl rounded-tl-none p-10 h-full flex flex-col justify-between transition-all duration-500 hover:bg-surface-container transition-all hover:-translate-y-2 opacity-80 hover:opacity-100">
+<div>
+<div class="w-14 h-14 bg-surface-container-lowest/50 rounded-full flex items-center justify-center mb-8 shadow-sm">
+<span class="material-symbols-outlined text-secondary text-3xl">inventory_2</span>
+</div>
+<h3 class="font-headline text-2xl font-bold text-on-surface mb-2">Archive</h3>
+<p class="text-secondary text-sm font-medium tracking-wide">102 items</p>
+</div>
+<div class="mt-12 flex justify-end">
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">arrow_forward_ios</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Empty State / Reflection Space -->
+<section class="mt-32">
+<div class="bg-surface-container-lowest rounded-xl p-16 flex flex-col items-center text-center shadow-[0_8px_32px_rgba(0,0,0,0.02)]">
+<span class="material-symbols-outlined text-primary-container text-6xl mb-6">spa</span>
+<h2 class="font-headline text-3xl font-bold text-on-surface mb-4">Mindful Organization</h2>
+<p class="text-secondary max-w-lg leading-relaxed mb-8">
+                    Organizing your thoughts shouldn't feel like a chore. The Sanctuary automatically groups similar concepts, leaving you free to simply express yourself.
+                </p>
+<div class="h-px w-24 bg-surface-variant mb-8"></div>
+<p class="text-xs font-bold text-primary tracking-widest uppercase">Everything in its right place</p>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 right-0 z-50 flex justify-around items-center bg-[#f9f9f8]/80 backdrop-blur-2xl py-4 pb-8 pt-4 px-4 rounded-t-[3rem] shadow-[0_-8px_32px_rgba(0,0,0,0.04)]">
+<a class="flex flex-col items-center justify-center text-[#576165] px-6 py-2 hover:bg-[#e3e9e8] rounded-full transition-all duration-500" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label text-[11px] font-medium tracking-wide uppercase mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#576165] px-6 py-2 hover:bg-[#e3e9e8] rounded-full transition-all duration-500" href="#">
+<span class="material-symbols-outlined">all_inbox</span>
+<span class="font-label text-[11px] font-medium tracking-wide uppercase mt-1">Inbox</span>
+</a>
+<!-- ACTIVE TAB: Library -->
+<a class="flex flex-col items-center justify-center bg-[#536253] text-[#f9f9f8] rounded-full px-6 py-2 transition-all duration-600" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">subscriptions</span>
+<span class="font-label text-[11px] font-medium tracking-wide uppercase mt-1">Library</span>
+</a>
+<a class="flex flex-col items-center justify-center text-[#576165] px-6 py-2 hover:bg-[#e3e9e8] rounded-full transition-all duration-500" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label text-[11px] font-medium tracking-wide uppercase mt-1">Profile</span>
+</a>
+</nav>
+</body></html>

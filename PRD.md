@@ -1,7 +1,6 @@
 # Product Requirements Document
 
-> [!WARNING]
-> **READ-ONLY FOR ALL AGENTS**
+> [!IMPORTANT]
 > This document is the source of truth for what we are building.
 > Claude agents must READ this document to understand requirements.
 > **Do not edit, rewrite, or "update to reflect current state" without explicit human instruction.**
@@ -11,14 +10,14 @@
 
 **Version**: 1.0
 **Status**: Draft
-**Last updated by human**: [YYYY-MM-DD]
-**Product owner**: [Name]
+**Last updated by human**: 2026-03-28
+**Product owner**: Josip
 
 ---
 
 ## 1. Executive Summary
 
-[3–5 sentences. What is this product? What core problem does it solve? Who are the primary users? What is the intended outcome after using it?]
+Sanctuary is a mobile app (React Native/Expo) that gives individuals a calm, friction-free space to capture and reflect on their thoughts. Users record anything — an idea, a feeling, a grocery list, a voice memo — and AI (via OpenRouter) transcribes and auto-tags it. The app supports journaling (expanding captured thoughts), daily check-ins for mood tracking, and an organized inbox and library for browsing past captures. Sanctuary is designed as the antithesis of "hustle-culture" productivity apps: serene, spacious, and intentional. The target audience is individuals seeking calm and clarity who want to stop losing fleeting thoughts and start building a personal reflection practice.
 
 ---
 
@@ -26,15 +25,15 @@
 
 ### 2.1 Current Situation
 
-[Describe the world as it is today — what are users doing now without this product? What tools, workarounds, or manual processes do they rely on?]
+People with active minds constantly lose valuable thoughts. They use a fragmented mix of tools — voice memos, notes apps, messaging themselves, paper notebooks — each with its own friction, none connected, and none designed for reflection. Check-ins and journaling happen in separate apps (if at all), disconnected from the raw captures that prompted them.
 
 ### 2.2 The Problem
 
-[Precisely define the problem. What friction, inefficiency, or unmet need exists? Be specific.]
+The moment a thought arrives and the moment you have time to act on it are rarely the same. Existing capture tools require too much setup (titling, categorizing, opening the right app). Existing journaling apps require too much intent upfront. The result: thoughts are lost, or captured but never revisited, because no tool bridges the gap between quick capture and meaningful reflection.
 
 ### 2.3 Why Now
 
-[Why is this the right time to build this? Market conditions, user demand, technology availability, business opportunity.]
+Voice transcription has become fast and affordable via APIs. AI tagging and summarization are mature enough to be genuinely useful without being invasive. Mindfulness and digital wellness are mainstream concerns — there is clear user demand for intentional, calm alternatives to engagement-optimized apps. The tooling (Expo, Supabase, OpenRouter) now makes a high-quality mobile app achievable by a small team without backend infrastructure overhead.
 
 ---
 
@@ -42,37 +41,38 @@
 
 ### 3.1 Business Goals
 
-- [Goal 1: e.g., "Reduce customer support tickets related to onboarding by 40%"]
-- [Goal 2]
-- [Goal 3]
+- Deliver a working, polished friends-and-family beta that validates the core capture + reflection loop
+- Establish the design system and architecture foundation for future features (notifications, AI reflection prompts, sharing)
+- Gather qualitative feedback from beta users to inform v2 prioritization
 
 ### 3.2 Success Metrics
 
 | Metric | Baseline | Target | How Measured |
 |--------|----------|--------|--------------|
-| [e.g., Onboarding completion rate] | [0%] | [80%] | [Analytics event] |
-| [e.g., Time to first value] | [N/A] | [< 5 min] | [Session recording] |
-| [e.g., Weekly active users] | [0] | [500 in 3 months] | [Analytics] |
+| Daily active users (beta) | 0 | 5+ consistent daily users | Supabase analytics |
+| Thoughts captured per user per week | 0 | 10+ | Database query |
+| Onboarding completion rate | 0% | 80% (sign up → first capture) | Event tracking |
+| Voice capture usage | 0% | 30%+ of captures are voice | Database query |
 
 ---
 
 ## 4. User Personas
 
-### Persona: [Name, e.g., "Alex the Admin"]
+### Persona: The Quiet Thinker
 
-- **Role**: [Job title or user type]
-- **Goals**: [What they want to accomplish]
-- **Pain points**: [Current frustrations this product addresses]
-- **Technical level**: [Non-technical / Moderate / Developer]
-- **Usage frequency**: [Daily / Weekly / Occasional]
+- **Role**: Individual with an active mind — could be any profession
+- **Goals**: Offload thoughts quickly before they disappear; reduce mental clutter; feel calmer knowing ideas are safely stored
+- **Pain points**: Loses thoughts constantly because capture is too slow; hates titling and categorizing before saving; existing apps feel overwhelming
+- **Technical level**: Non-technical
+- **Usage frequency**: Multiple times daily (quick captures), weekly (browsing/reflection)
 
-### Persona: [Name, e.g., "Sam the End User"]
+### Persona: The Reflective Journaler
 
-- **Role**: [Job title or user type]
-- **Goals**: [What they want to accomplish]
-- **Pain points**: [Current frustrations]
-- **Technical level**: [Non-technical / Moderate / Developer]
-- **Usage frequency**: [Daily / Weekly / Occasional]
+- **Role**: Someone with an existing journaling practice looking for a digital-first, AI-assisted upgrade
+- **Goals**: Capture + revisit thoughts in one place; use AI prompts to go deeper; build a searchable personal knowledge base over time
+- **Pain points**: Journaling apps require intent upfront; notes apps don't support reflection; voice memos are unsearchable
+- **Technical level**: Moderate
+- **Usage frequency**: Daily (morning check-in + captures), weekly (deep journaling sessions)
 
 ---
 
@@ -80,58 +80,88 @@
 
 > Requirements are numbered FR-XXX for unambiguous cross-referencing by agents and in tests.
 
-### 5.1 [Feature Area: e.g., Authentication]
+### 5.1 Authentication
 
-- **FR-001**: [Users must be able to register with email and password]
-- **FR-002**: [Users must be able to log in with existing credentials]
-- **FR-003**: [Users must be able to reset their password via email]
-- **FR-004**: [Sessions must expire after 30 days of inactivity]
+- **FR-001**: Users must be able to register with an email address and password
+- **FR-002**: Users must be able to log in with existing email and password credentials
+- **FR-003**: Users must be able to request a password reset via email
+- **FR-004**: Authenticated sessions must persist across app restarts (no re-login required until session expires)
+- **FR-005**: Users must be able to log out, which terminates the local session
 
-### 5.2 [Feature Area: e.g., Dashboard]
+### 5.2 Thought Capture
 
-- **FR-010**: [...]
-- **FR-011**: [...]
+- **FR-010**: Users must be able to capture a thought as free-form text from a persistent quick-access screen
+- **FR-011**: Users must be able to record a voice message as an alternative to typing
+- **FR-012**: Voice recordings must be automatically transcribed to text using an OpenRouter-routed AI model
+- **FR-013**: Each captured thought must be automatically tagged by AI with one or more descriptive tags (e.g., "idea", "grocery", "feeling", "task")
+- **FR-014**: Capture must not restrict content type — any text or voice input is accepted without categorization required from the user
+- **FR-015**: Every captured thought must be associated with the authenticated user's account
+- **FR-016**: Capture must succeed and persist the raw text/audio immediately; AI transcription and tagging may complete asynchronously after capture
 
-### 5.3 [Feature Area: e.g., Settings]
+### 5.3 Thought Inbox & Library
 
-- **FR-020**: [...]
+- **FR-020**: Users must be able to view all their captured thoughts in a chronological inbox view, newest first
+- **FR-021**: Users must be able to filter the inbox/library by tag (AI-assigned or manually added)
+- **FR-022**: Users must be able to search thoughts by keyword across the full text content
+- **FR-023**: Users must be able to browse thoughts organized by tag in a library view
+
+### 5.4 Thought Detail & Journaling
+
+- **FR-030**: Users must be able to open any captured thought and expand it into a longer, free-form text entry (journaling)
+- **FR-031**: Users must be able to edit the text of any captured thought
+- **FR-032**: Users must be able to delete a thought (with confirmation)
+- **FR-033**: The thought detail view must display auto-assigned tags and allow the user to add or remove tags manually
+- **FR-034**: Users must be able to request an AI-generated reflection prompt for any thought, displayed inline in the detail view
+
+### 5.5 Daily Check-in
+
+- **FR-040**: Users must be able to complete a daily check-in that captures their current mood or emotional state
+- **FR-041**: Users must be able to set a daily intention or theme as part of the check-in
+- **FR-042**: Daily check-in history must be accessible and browsable in the library view
+- **FR-043**: Only one check-in per calendar day is permitted; opening the check-in screen on an existing day loads the existing entry for editing
 
 ---
 
 ## 6. Non-Functional Requirements
 
 ### Performance
-- [e.g., API response time < 200ms at p95 under normal load]
-- [e.g., Page initial load < 3s on 4G connection]
+- App startup (cold launch) must complete within 3 seconds on mid-range devices
+- UI transitions must maintain 60fps
+- Thought capture (text submission) must complete in < 500ms from user action to confirmation
 
 ### Security
-- [e.g., Authentication required for all non-public endpoints]
-- [e.g., All user data encrypted at rest]
-- [e.g., OWASP Top 10 mitigations in place]
-
-### Scalability
-- [e.g., System must support up to 10,000 concurrent users without degradation]
+- Authentication required for all data access — no unauthenticated reads or writes
+- Supabase Row Level Security (RLS) must be enabled on all tables so users can only access their own data
+- `OPENROUTER_API_KEY` must never be exposed client-side — only used in Supabase Edge Functions
+- No user data stored in device logs or analytics payloads
 
 ### Accessibility
-- [e.g., WCAG 2.1 AA compliance for all user-facing interfaces]
+- WCAG 2.1 AA compliance for all screens
+- Minimum tap target size: 44×44pt
+- All interactive elements must have accessible labels
 
-### Browser / Platform Support
-- [e.g., Modern browsers: Chrome 110+, Firefox 110+, Safari 16+, Edge 110+]
-- [e.g., Mobile-responsive down to 375px width]
+### Platform Support
+- iOS 16+ and Android 10+ (API level 29+)
+- Tested on both physical devices and simulators
+- Expo Go compatible during development
 
 ### Reliability
-- [e.g., 99.5% uptime SLA]
-- [e.g., Automated backups every 24 hours]
+- Supabase-managed uptime SLA applies
+- Failed AI tagging must not block capture — thoughts are saved regardless of AI availability
 
 ---
 
 ## 7. Out of Scope (v1.0)
 
-The following will **not** be built in the initial version. This list prevents scope creep and helps agents avoid building features that aren't required yet.
+The following will **not** be built in the initial version:
 
-- [Feature A — reason: too complex for v1, planned for v2]
-- [Feature B — reason: requires third-party integration not yet evaluated]
-- [Feature C — reason: low user demand, deprioritized]
+- **Social / sharing features** — no sharing thoughts with others, no community feed
+- **Paid subscription / billing** — no paywall, no in-app purchases
+- **Push notifications / reminders** — no scheduled nudges or streaks
+- **Web app** — mobile only; no browser version
+- **Apple Sign-In / Google Sign-In** — email + password auth only
+- **Team or multi-user spaces** — single-user only
+- **Offline-first sync** — app requires connectivity; offline support deferred to v2
 
 ---
 
@@ -141,8 +171,10 @@ The following will **not** be built in the initial version. This list prevents s
 
 | # | Question | Owner | Status |
 |---|----------|-------|--------|
-| 1 | [e.g., Which payment provider: Stripe or Paddle?] | [Product Owner] | Open |
-| 2 | [e.g., Will we support SSO in v1?] | [CTO] | Open |
+| 1 | Which OpenRouter model for voice transcription? (Whisper, Groq Whisper, etc.) | Josip | Open |
+| 2 | Which OpenRouter model for tagging and reflection prompts? (claude-3-haiku, gpt-4o-mini, etc.) | Josip | Open |
+| 3 | E2E test framework: Detox or Maestro? | Josip | Open |
+| 4 | Should voice audio files be stored in Supabase Storage, or only the transcript? | Josip | **Resolved: transcripts only — audio stored locally on device, never uploaded** |
 
 ---
 
@@ -152,4 +184,4 @@ The following will **not** be built in the initial version. This list prevents s
 
 | Date | Author | Change Description |
 |------|--------|--------------------|
-| [YYYY-MM-DD] | [Name] | Initial draft |
+| 2026-03-28 | Josip | Initial draft — onboarding complete |

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary": "#52616a",
+              "surface-variant": "#dce4e3",
+              "on-primary-fixed": "#354335",
+              "secondary-dim": "#4b5559",
+              "surface-bright": "#f9f9f8",
+              "primary-fixed": "#d7e7d3",
+              "on-tertiary-fixed": "#394851",
+              "tertiary-dim": "#46555e",
+              "on-tertiary-fixed-variant": "#55656d",
+              "on-tertiary": "#f3faff",
+              "outline-variant": "#abb4b3",
+              "on-primary-container": "#475546",
+              "on-background": "#2c3433",
+              "surface-container-low": "#f1f4f3",
+              "error-dim": "#5c1202",
+              "inverse-surface": "#0c0f0e",
+              "surface-tint": "#536253",
+              "on-surface": "#2c3433",
+              "primary-dim": "#485647",
+              "primary": "#536253",
+              "on-secondary-container": "#495358",
+              "inverse-on-surface": "#9b9d9d",
+              "surface-container": "#eaefee",
+              "on-secondary": "#f2faff",
+              "secondary-container": "#dae4e9",
+              "surface-container-highest": "#dce4e3",
+              "surface-dim": "#d2dcdb",
+              "surface-container-high": "#e3e9e8",
+              "on-error": "#fff7f6",
+              "primary-fixed-dim": "#c9d9c5",
+              "primary-container": "#d7e7d3",
+              "error-container": "#fe8b70",
+              "on-primary-fixed-variant": "#515f50",
+              "outline": "#747c7c",
+              "surface-container-lowest": "#ffffff",
+              "tertiary-fixed-dim": "#d2e2ec",
+              "tertiary-container": "#e0f0fb",
+              "surface": "#f9f9f8",
+              "tertiary-fixed": "#e0f0fb",
+              "error": "#9e422c",
+              "inverse-primary": "#edfeea",
+              "secondary": "#576165",
+              "secondary-fixed-dim": "#ccd6db",
+              "on-surface-variant": "#586160",
+              "secondary-fixed": "#dae4e9",
+              "on-secondary-fixed-variant": "#535d62",
+              "on-tertiary-container": "#4b5b63",
+              "on-primary": "#ecfce8",
+              "background": "#f9f9f8",
+              "on-secondary-fixed": "#374145",
+              "on-error-container": "#742410"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Plus Jakarta Sans"],
+              "label": ["Plus Jakarta Sans"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            vertical-align: middle;
+        }
+        body {
+            background-color: #f9f9f8;
+            color: #2c3433;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<nav class="bg-[#f9f9f8]/70 backdrop-blur-xl docked full-width top-0 z-40 sticky">
+<div class="flex justify-between items-center w-full px-8 py-4">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center overflow-hidden">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="Soft photographic portrait of a serene person" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBjTcnkOAJKvPoNnSwUANhYLUPKkcWyoDb_VKVLW9HCLxdco3FVQGW1R8BN1e6oQslqzfPRPUMJKVSGiWjmM1AvN9kkC03NuSRj_IzCwgvsouQdS-BX6pI0dZmb_amwXQyEDGfsu87gWJRDd4TwGIxaWzS4hGUgiQ0sKuhXh7Rfp_ZX3v9X85y6jYm3MlotJiV2YS6iY4Nyglsv2ZqbgN9bLK7kk_g6G7vL-EySW2dX8I4l3xo3jJ1OLhsf0s8KGdMEP1stu-rsg9o"/>
+</div>
+</div>
+<h1 class="text-2xl font-bold font-['Manrope'] text-[#536253] tracking-tighter">Sanctuary</h1>
+<div class="text-[#536253] hover:bg-[#f1f4f3] transition-all duration-500 p-2 rounded-full cursor-pointer">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</div>
+</div>
+</nav>
+<main class="max-w-5xl mx-auto px-8 pt-12 pb-32">
+<!-- Editorial Header -->
+<header class="mb-16">
+<p class="font-label text-secondary uppercase tracking-[0.2em] mb-4 text-[11px] font-semibold">Archives</p>
+<h2 class="font-headline text-5xl md:text-6xl font-extrabold text-on-background tracking-tighter max-w-2xl leading-[1.1]">
+                Thought Inbox
+            </h2>
+</header>
+<!-- Search Bar Section -->
+<section class="mb-12">
+<div class="relative group">
+<div class="absolute inset-y-0 left-6 flex items-center pointer-events-none text-secondary">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</div>
+<input class="w-full bg-surface-container-high border-none rounded-xl py-5 pl-16 pr-6 focus:ring-2 focus:ring-primary/20 text-on-background placeholder:text-outline transition-all duration-500 outline-none" placeholder="Search your reflections..." type="text"/>
+</div>
+</section>
+<!-- Filter Chips (Subtle Tonal Depth) -->
+<div class="flex gap-3 mb-12 overflow-x-auto pb-2 no-scrollbar">
+<button class="px-6 py-2 rounded-full bg-primary text-on-primary font-medium text-sm whitespace-nowrap">All Thoughts</button>
+<button class="px-6 py-2 rounded-full bg-surface-container-low text-secondary hover:bg-surface-container-high transition-colors font-medium text-sm whitespace-nowrap">Voice</button>
+<button class="px-6 py-2 rounded-full bg-surface-container-low text-secondary hover:bg-surface-container-high transition-colors font-medium text-sm whitespace-nowrap">Text</button>
+<button class="px-6 py-2 rounded-full bg-surface-container-low text-secondary hover:bg-surface-container-high transition-colors font-medium text-sm whitespace-nowrap">Favorite</button>
+</div>
+<!-- Thought Cards List -->
+<div class="space-y-8">
+<!-- Recording Card 1 -->
+<div class="group bg-surface-container-lowest p-8 rounded-xl transition-all duration-500 hover:scale-[1.01] flex flex-col md:flex-row gap-8 items-start border border-transparent hover:border-primary/5">
+<div class="flex-1 space-y-4">
+<div class="flex items-center gap-3">
+<span class="px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label text-[10px] font-bold uppercase tracking-wider">Business Idea</span>
+<span class="text-xs text-outline font-medium">Recorded 12:45 PM</span>
+</div>
+<h3 class="text-2xl font-headline font-bold text-on-background tracking-tight">Eco-friendly packaging logistics</h3>
+<p class="text-secondary leading-relaxed line-clamp-2 max-w-2xl">
+                        I was thinking about the gap in the market for sustainable cold-chain shipping. What if we used mycelium-based insulation modules that are fully compostable within 30 days...
+                    </p>
+</div>
+<div class="flex items-center gap-6 self-end md:self-center">
+<div class="flex flex-col items-center">
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter mb-1">Length</span>
+<span class="font-headline font-bold text-primary">2:45</span>
+</div>
+<button class="w-14 h-14 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center hover:scale-105 transition-transform duration-500">
+<span class="material-symbols-outlined" data-icon="play_arrow" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+</div>
+</div>
+<!-- Recording Card 2 -->
+<div class="group bg-surface-container-lowest p-8 rounded-xl transition-all duration-500 hover:scale-[1.01] flex flex-col md:flex-row gap-8 items-start border border-transparent hover:border-primary/5">
+<div class="flex-1 space-y-4">
+<div class="flex items-center gap-3">
+<span class="px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label text-[10px] font-bold uppercase tracking-wider">Personal Reflection</span>
+<span class="text-xs text-outline font-medium">Recorded 08:20 AM</span>
+</div>
+<h3 class="text-2xl font-headline font-bold text-on-background tracking-tight">Morning clarity on focus</h3>
+<p class="text-secondary leading-relaxed line-clamp-2 max-w-2xl">
+                        Today's meditation brought up an interesting tension between ambition and presence. I need to schedule deep work blocks but leave room for the 'void' to exist without guilt...
+                    </p>
+</div>
+<div class="flex items-center gap-6 self-end md:self-center">
+<div class="flex flex-col items-center">
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter mb-1">Length</span>
+<span class="font-headline font-bold text-primary">5:12</span>
+</div>
+<button class="w-14 h-14 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center hover:scale-105 transition-transform duration-500">
+<span class="material-symbols-outlined" data-icon="play_arrow" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+</div>
+</div>
+<!-- Recording Card 3 -->
+<div class="group bg-surface-container-lowest p-8 rounded-xl transition-all duration-500 hover:scale-[1.01] flex flex-col md:flex-row gap-8 items-start border border-transparent hover:border-primary/5">
+<div class="flex-1 space-y-4">
+<div class="flex items-center gap-3">
+<span class="px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label text-[10px] font-bold uppercase tracking-wider">Reminder</span>
+<span class="text-xs text-outline font-medium">Yesterday</span>
+</div>
+<h3 class="text-2xl font-headline font-bold text-on-background tracking-tight">Gift ideas for Sarah's garden</h3>
+<p class="text-secondary leading-relaxed line-clamp-2 max-w-2xl">
+                        Check that boutique nursery on 5th street for the heirloom tomato starters. Also maybe a high-quality hand-forged trowel with an ergonomic handle. She mentioned it last week...
+                    </p>
+</div>
+<div class="flex items-center gap-6 self-end md:self-center">
+<div class="flex flex-col items-center">
+<span class="text-[10px] font-bold text-outline uppercase tracking-tighter mb-1">Length</span>
+<span class="font-headline font-bold text-primary">0:58</span>
+</div>
+<button class="w-14 h-14 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center hover:scale-105 transition-transform duration-500">
+<span class="material-symbols-outlined" data-icon="play_arrow" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Asymmetric Decorative Element -->
+<div class="mt-24 flex justify-end">
+<div class="max-w-xs text-right">
+<p class="font-headline italic text-primary/40 text-3xl leading-tight">"The palest ink is better than the best memory."</p>
+<div class="mt-4 h-px w-24 bg-primary/20 ml-auto"></div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 right-0 rounded-t-[3rem] px-4 pb-8 pt-4 bg-[#f9f9f8]/80 backdrop-blur-2xl shadow-[0_-8px_32px_rgba(0,0,0,0.04)] z-50">
+<div class="flex justify-around items-center">
+<!-- Home -->
+<a class="flex flex-col items-center justify-center text-[#576165] px-6 py-2 hover:bg-[#e3e9e8] rounded-full transition-all duration-500" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="home">home</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide uppercase">Home</span>
+</a>
+<!-- Inbox (ACTIVE) -->
+<a class="flex flex-col items-center justify-center bg-[#536253] text-[#f9f9f8] rounded-full px-6 py-2 transition-all duration-600" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="all_inbox" style="font-variation-settings: 'FILL' 1;">all_inbox</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide uppercase">Inbox</span>
+</a>
+<!-- Library -->
+<a class="flex flex-col items-center justify-center text-[#576165] px-6 py-2 hover:bg-[#e3e9e8] rounded-full transition-all duration-500" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="subscriptions">subscriptions</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide uppercase">Library</span>
+</a>
+<!-- Profile -->
+<a class="flex flex-col items-center justify-center text-[#576165] px-6 py-2 hover:bg-[#e3e9e8] rounded-full transition-all duration-500" href="#">
+<span class="material-symbols-outlined mb-1" data-icon="person">person</span>
+<span class="font-['Plus_Jakarta_Sans'] text-[11px] font-medium tracking-wide uppercase">Profile</span>
+</a>
+</div>
+</nav>
+<!-- Contextual FAB (Record) -->
+<button class="fixed right-8 bottom-32 w-20 h-20 bg-primary text-on-primary rounded-full shadow-2xl flex items-center justify-center group hover:scale-110 active:scale-95 transition-all duration-500 z-40">
+<span class="material-symbols-outlined text-4xl" data-icon="mic" style="font-variation-settings: 'FILL' 1;">mic</span>
+</button>
+</body></html>
