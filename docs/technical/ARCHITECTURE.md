@@ -75,9 +75,9 @@ The architecture prioritizes simplicity and fast iteration: there is no custom A
 
 | Layer | Technology | Version | Rationale |
 |-------|-----------|---------|-----------|
-| Mobile framework | Expo | SDK 52+ | Cross-platform React Native with managed workflow; fast iteration |
+| Mobile framework | Expo | SDK 54 (stable) | Cross-platform React Native with managed workflow; aligns with store Expo Go |
 | Language | TypeScript | 5.x | Type safety across app and shared types |
-| Navigation | Expo Router | 4.x | File-based routing, deep linking support |
+| Navigation | Expo Router | 6.x | File-based routing, deep linking support |
 | Backend-as-a-service | Supabase | Latest | Auth, PostgreSQL, storage, edge functions — no custom server needed |
 | Database | PostgreSQL | 15 (managed by Supabase) | Relational, RLS support, well-understood |
 | AI proxy | OpenRouter | Latest | Model-flexible — swap transcription/tagging models without code changes |
@@ -155,7 +155,7 @@ tests/
 
 ### Navigation
 
-Navigation is handled by **Expo Router v4** using file-based routing. The `src/app/` directory is the route root, following the Expo Router convention for a `src/`-based layout.
+Navigation is handled by **Expo Router v6** using file-based routing. The `src/app/` directory is the route root, following the Expo Router convention for a `src/`-based layout.
 
 - `src/app/_layout.tsx` — Root layout. Renders a `<Stack>` navigator. Also imports the URL polyfill (`react-native-url-polyfill/auto`) required by the Supabase client.
 - `src/app/index.tsx` — Entry screen, maps to the `/` route. Shown immediately after the app loads.
