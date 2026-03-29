@@ -68,6 +68,14 @@ OPENROUTER_API_KEY=your-openrouter-key
 
 > `OPENROUTER_API_KEY` is used only in Supabase Edge Functions — never expose it client-side.
 
+### Supabase auth redirect URLs (email confirm & password reset)
+
+Sign-up confirmation and password-reset emails open the app via deep links built with `expo-linking` (`Linking.createURL`). In the [Supabase Dashboard](https://supabase.com/dashboard) go to **Authentication → URL Configuration** and add:
+
+- **Redirect URLs:** include the exact URLs your build produces for `auth/callback` and `auth/reset-password` (see `getEmailConfirmationRedirectUrl` / `getPasswordResetRedirectUrl` in [`src/lib/auth-redirect.ts`](src/lib/auth-redirect.ts)). For standalone/dev builds this is typically `sanctuary://auth/callback` and `sanctuary://auth/reset-password`. You can add `sanctuary://**` if your project allows that pattern.
+- **Expo Go / dev:** if `createURL` returns an `exp://…` URL, add that literal URL while testing from Expo Go.
+- Optionally set **Site URL** to a non-`localhost` value so dashboard defaults are not a web dev server you do not use.
+
 ### Run
 
 ```bash

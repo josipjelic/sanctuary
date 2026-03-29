@@ -4,6 +4,7 @@ import {
   validatePassword,
   validatePasswordConfirm,
 } from "@/lib/auth";
+import { getEmailConfirmationRedirectUrl } from "@/lib/auth-redirect";
 import { supabase } from "@/lib/supabase";
 import { colors, spacing, typography } from "@/lib/theme";
 import { Link } from "expo-router";
@@ -49,7 +50,13 @@ export default function SignUpScreen() {
     if (eErr || pErr || cErr) return;
 
     setIsLoading(true);
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: getEmailConfirmationRedirectUrl(),
+      },
+    });
     setIsLoading(false);
 
     if (error) {

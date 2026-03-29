@@ -1,5 +1,6 @@
 import { Button, TextInput } from "@/components";
 import { validateEmail } from "@/lib/auth";
+import { getPasswordResetRedirectUrl } from "@/lib/auth-redirect";
 import { supabase } from "@/lib/supabase";
 import { colors, spacing, typography } from "@/lib/theme";
 import { Link, useRouter } from "expo-router";
@@ -32,7 +33,7 @@ export default function ForgotPasswordScreen() {
 
     setIsLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: "sanctuary://reset-password",
+      redirectTo: getPasswordResetRedirectUrl(),
     });
     setIsLoading(false);
 
