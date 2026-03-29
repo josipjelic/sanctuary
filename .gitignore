@@ -18,9 +18,7 @@ out/
 .output/
 *.tsbuildinfo
 
-# Package manager locks (keep only one — remove the ones you don't use)
-# yarn.lock
-# pnpm-lock.yaml
+# Keep pnpm-lock.yaml committed — do not add it here.
 
 # Testing
 coverage/
@@ -63,6 +61,34 @@ Desktop.ini
 
 # Expo (local dev server / cache)
 .expo/
+web-build/
+
+# EAS / signing & push credentials (never commit)
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.cer
+google-services.json
+GoogleService-Info.plist
+
+# iOS (after `expo prebuild` / `expo run:ios`)
+ios/Pods/
+ios/build/
+ios/**/*.xcworkspace/xcuserdata/
+ios/**/*.xcodeproj/project.xcworkspace/xcuserdata/
+ios/**/*.xcodeproj/xcuserdata/
+*.xcuserstate
+
+# Android installable artifacts (local builds)
+*.apk
+*.aab
+*.ap_
+
+# Local env & tooling
+.envrc
 
 # Supabase CLI — linked-project metadata (do not commit)
 supabase/.temp/
@@ -72,8 +98,11 @@ supabase/.temp/
 .vercel
 .turbo
 .cache/
+.parcel-cache/
+.eslintcache
 tmp/
 temp/
+*.orig
 .claude/worktrees/
 
 # @generated expo-cli sync-2b81b286409207a5da26e14c78851eb30d8ccbdb
