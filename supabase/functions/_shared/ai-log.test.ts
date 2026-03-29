@@ -51,8 +51,7 @@ describe("truncateJsonForLog", () => {
 });
 
 describe("finalizeLogLine (Supabase 10k cap)", () => {
-  it("keeps total line under 10000 chars when openrouter JSON is huge", () => {
-    const huge = "x".repeat(50_000);
+  it("keeps total line under 10000 chars when openrouter_request object is huge", () => {
     const line = finalizeLogLine({
       event: "ai.request.start",
       function: "assign-topics",
@@ -60,11 +59,25 @@ describe("finalizeLogLine (Supabase 10k cap)", () => {
       model: "m",
       thought_id: "t1",
       user_id: "u1",
-      openrouter_request_json: huge,
+      openrouter_request: { blob: "x".repeat(50_000) },
       request_summary: { n: 1 },
     });
     expect(line.length).toBeLessThanOrEqual(10_000);
-    expect(() => JSON.parse(line)).not.toThrow();
+    const parsed = JSON.parse(line) as Record<string, unknown>;
+    expect(parsed.openrouter_request).toBeDefined();
+  });
+
+  it("embeds openrouter_request as nested object (not a string of JSON)", () => {
+    const inner = { model: "m", messages: [{ role: "user", content: "hi" }] };
+    const line = finalizeLogLine({
+      event: "ai.request.start",
+      function: "assign-topics",
+      phase: "topics",
+      openrouter_request: inner,
+    });
+    const parsed = JSON.parse(line) as Record<string, unknown>;
+    expect(parsed.openrouter_request).toEqual(inner);
+    expect(typeof parsed.openrouter_request).toBe("object");
   });
 });
 
@@ -123,8 +136,8 @@ describe("logAiInfo / logAiError", () => {
     jest.restoreAllMocks();
   });
 
-  it("logAiInfo writes one JSON-parseable object per line to console.log", () => {
-    const spy = jest.spyOn(console, "log").mockImplementation(() => {});
+  it("logAiInfo writes one JSON-parseable object per line to console.debug", () => {
+    const spy = jest.spyOn(console, "debug").mockImplementation(() => {});
 
     logAiInfo({
       ...basePayload,
@@ -136,7 +149,10 @@ describe("logAiInfo / logAiError", () => {
     const line = spy.mock.calls[0][0] as string;
     expect(line).not.toMatch(/\n/);
     const parsed = JSON.parse(line) as Record<string, unknown>;
-    expect(parsed).toEqual({
+    expect(parsed.log_level).toBe("debug");
+    expect(typeof parsed.log_summary).toBe("string");
+    expect(parsed.log_summary).toContain("[sanctuary-ai]");
+    expect(parsed).toMatchObject({
       event: "ai.request.start",
       function: "transcribe",
       phase: "transcribe",
@@ -146,8 +162,8 @@ describe("logAiInfo / logAiError", () => {
     });
   });
 
-  it("logAiError writes one JSON-parseable object to console.error", () => {
-    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+  it("logAiError writes one JSON-parseable object to console.debug", () => {
+    const spy = jest.spyOn(console, "debug").mockImplementation(() => {});
 
     logAiError({
       ...basePayload,
@@ -159,6 +175,7 @@ describe("logAiInfo / logAiError", () => {
     const line = spy.mock.calls[0][0] as string;
     expect(line).not.toMatch(/\n/);
     const parsed = JSON.parse(line) as Record<string, unknown>;
+    expect(parsed.log_level).toBe("debug");
     expect(parsed).toMatchObject({
       event: "ai.error",
       function: "transcribe",
@@ -172,7 +189,7 @@ describe("logAiInfo / logAiError", () => {
   });
 
   it("omits optional keys when undefined", () => {
-    const spy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const spy = jest.spyOn(console, "debug").mockImplementation(() => {});
 
     logAiInfo({
       event: "ai.response.complete",
@@ -183,13 +200,13 @@ describe("logAiInfo / logAiError", () => {
     const line = spy.mock.calls[0][0] as string;
     const parsed = JSON.parse(line) as Record<string, unknown>;
     expect(Object.keys(parsed).sort()).toEqual(
-      ["event", "function", "phase"].sort(),
+      ["event", "function", "log_level", "log_summary", "phase"].sort(),
     );
     expect(parsed).not.toHaveProperty("model");
   });
 
   it("does not log full huge request_summary when caller uses truncateForLog", () => {
-    const spy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const spy = jest.spyOn(console, "debug").mockImplementation(() => {});
     const huge = "h".repeat(10_000);
     const summary = truncateForLog(huge, 240);
 
@@ -207,7 +224,7 @@ describe("logAiInfo / logAiError", () => {
   });
 
   it("does not log full huge response_summary when caller uses truncateForLog", () => {
-    const spy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const spy = jest.spyOn(console, "debug").mockImplementation(() => {});
     const huge = "r".repeat(8_000);
     const summary = truncateForLog(huge, 100);
 

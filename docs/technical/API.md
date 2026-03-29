@@ -134,7 +134,7 @@ The `topics` field is present when topic assignment completes successfully insid
 
 ## Observability (AI edge functions)
 
-For operators debugging `transcribe` and `assign-topics` (shared topic pipeline): structured AI events are written as **single-line JSON** via Deno `console` and appear in the Supabase project.
+For operators debugging `transcribe` and `assign-topics` (shared topic pipeline): structured AI events are written as **single-line JSON** via **`console.debug`** (DEBUG level in the dashboard) and include `"log_level":"debug"` in the payload. Filter logs by **DEBUG** to see OpenRouter request/response detail; `console.error` elsewhere in edge code remains for non-AI infrastructure failures.
 
 **Where to look**
 
@@ -144,16 +144,20 @@ For operators debugging `transcribe` and `assign-topics` (shared topic pipeline)
 
 There is **no** separate HTTP API or Postgres table for these events in v1. Retention and search are **platform-managed** — do not rely on logs as a long-term audit archive; see ADR-003.
 
-**Hosted Supabase limit:** each `console.log` / `console.error` line is capped at **10,000 characters** ([Functions logging](https://supabase.com/docs/guides/functions/logging)). The app’s `ai-log` helper clamps each emitted JSON line to stay under that cap (large `openrouter_*_json` fields are truncated further if needed). If you see no custom lines, confirm the function was invoked on this project and check the **Logs** tab (not only **Invocations**).
+**Hosted Supabase limit:** each custom console line (including **`console.debug`**) is capped at **10,000 characters** ([Functions logging](https://supabase.com/docs/guides/functions/logging)). The `ai-log` helper clamps each emitted JSON line to stay under that cap (large `openrouter_*` objects are replaced with `_truncated` previews if needed). If you see no AI lines, enable **DEBUG** in the log level filter, confirm the function was invoked on this project, and check the **Logs** tab (not only **Invocations**).
+
+**Reading `event_message`:** the dashboard often shows your payload as a **JSON-encoded string** inside `event_message`. Parse **twice** (or `JSON.parse(JSON.parse(row.event_message))` if the outer row is already an object) to get a single object. That object includes **`log_summary`** (a short human-readable line) and **`openrouter_request` / `openrouter_response` as nested objects** — not escaped JSON strings — so prompts and model output are readable after parsing.
 
 **Example log line shape**
 
-Each event is one **single-line JSON** object (what Deno prints from `console.log` / `console.error`). Pretty-printed examples below are for reading only; in the dashboard you will see one line per event.
+Each event is one **single-line JSON** object emitted with **`console.debug`**. Pretty-printed examples below are for reading only; in the dashboard you will see one line per event (level **DEBUG**).
 
 Successful transcription step start:
 
 ```json
 {
+  "log_summary": "[sanctuary-ai] ai.request.start | fn=transcribe | phase=transcribe | thought=… | model=…",
+  "log_level": "debug",
   "event": "ai.request.start",
   "function": "transcribe",
   "phase": "transcribe",
@@ -170,10 +174,12 @@ Successful transcription step start:
 }
 ```
 
-Topic phase error (same JSON shape; emitted on `console.error`):
+Topic phase failure (same transport: **`console.debug`**; distinguish failures via `event` and `error`):
 
 ```json
 {
+  "log_summary": "[sanctuary-ai] ai.error | fn=assign-topics | phase=topics | thought=… | model=…",
+  "log_level": "debug",
   "event": "ai.error",
   "function": "assign-topics",
   "phase": "topics",
@@ -199,12 +205,14 @@ Optional fields (`model`, `thought_id`, `user_id`, summaries, `error`) are omitt
 |---------|---------|
 | `ai.request.start` | An OpenRouter-bound step is starting (transcription or topic assignment). |
 | `ai.response.complete` | That step finished successfully from the model’s perspective (HTTP OK and a usable body). |
-| `ai.error` | Failure: OpenRouter HTTP error, empty transcript, unparseable topic JSON, etc. Emitted on `console.error` with the same JSON shape. |
+| `ai.error` | Failure: OpenRouter HTTP error, empty transcript, unparseable topic JSON, etc. Still emitted at **DEBUG** via `console.debug` (payload includes `error`). |
 
 **Common fields** (optional fields are omitted when not applicable)
 
 | Field | Meaning |
 |-------|---------|
+| `log_level` | Always `"debug"` for lines emitted by `ai-log.ts`. |
+| `log_summary` | Short human-readable line (same info as the headline) for skimming raw `event_message`. |
 | `function` | `transcribe` or `assign-topics` (or the caller name passed into shared topic code). |
 | `phase` | `transcribe` — speech-to-text OpenRouter call inside `/transcribe` only. `topics` — topic-assignment OpenRouter call: runs **after** a successful transcribe in the same `/transcribe` request, or alone inside `/assign-topics` for typed capture. A single voice capture therefore produces **both** phases in order in the logs when both steps run. |
 | `model` | OpenRouter model id used for that call. |
@@ -212,8 +220,8 @@ Optional fields (`model`, `thought_id`, `user_id`, summaries, `error`) are omitt
 | `user_id` | Authenticated user UUID for correlation. |
 | `request_summary` | Non-secret metadata only — e.g. for voice: MIME type, byte length, format, truncated prompt preview (not raw audio). For topics: catalog size, thought text length, **truncated** thought preview, prompt length. |
 | `response_summary` | Aggregates or **truncated** previews — e.g. transcript character count and preview, latency ms, OpenRouter error body preview, topic JSON preview on parse errors. |
-| `openrouter_request_json` | Single string: JSON of the OpenRouter request **body** actually sent (`model` + `messages`). Voice: `input_audio.data` is **not** logged; it is replaced with `[omitted base64, length=N chars]`. **Supabase ≤10k chars per log line** — long topic prompts are truncated so the line is accepted. Optional `OPENROUTER_LOG_JSON_MAX_CHARS` lowers the per-field budget. |
-| `openrouter_response_json` | Single string: JSON of OpenRouter’s **response** body on success, or a small wrapper `{ http_status, body }` / `{ assistant_message_text }` on errors — same line-length limits as above. |
+| `openrouter_request` | Nested object: OpenRouter request **body** (`model` + `messages`). Voice: `input_audio.data` is **not** logged; replaced with a length placeholder. Subject to **≤10k** line cap (may become `_truncated` preview). |
+| `openrouter_response` | Nested object: OpenRouter **response** JSON, or `{ http_status, body }` / `{ assistant_message_text }` on errors — same line cap. |
 | `error` | `{ message, http_status?, kind? }` — human-readable message, optional HTTP status from OpenRouter, optional machine-readable `kind` (e.g. `openrouter_http`, `empty_transcript`, `topic_json_parse`). |
 
 **PRD (Security NFR) — device vs server**
@@ -222,9 +230,9 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 
 **Privacy (operator expectations)**
 
-- **No raw audio** in logs: no buffers, base64-encoded audio, file bytes, or multipart bodies — only metadata such as MIME type and byte length (as in `request_summary` for the transcribe phase). The `openrouter_request_json` field for transcription still includes the **text** prompt and a **placeholder** where base64 would have been.
+- **No raw audio** in logs: no buffers, base64-encoded audio, file bytes, or multipart bodies — only metadata such as MIME type and byte length (as in `request_summary` for the transcribe phase). The `openrouter_request` object for transcription still includes the **text** prompt and a **placeholder** where base64 would have been.
 - **No secrets**: API keys and service role material must never appear in log lines (the key is only in HTTP headers, not in logged JSON bodies).
-- **`request_summary` / `response_summary`** use short previews for quick reading. **Full** request/response payloads for OpenRouter (within size limits) live in **`openrouter_request_json`** / **`openrouter_response_json`**. Tune **`OPENROUTER_LOG_JSON_MAX_CHARS`** (Edge secret) if large topic catalogs truncate the topic prompt JSON. Full contract: `docs/technical/ARCHITECTURE.md` — *Observability and AI I/O logging*.
+- **`request_summary` / `response_summary`** use short previews for quick reading. **Full** request/response payloads for OpenRouter (within size limits) live in **`openrouter_request`** / **`openrouter_response`** as nested objects. Tune **`OPENROUTER_LOG_JSON_MAX_CHARS`** (Edge secret) if large topic catalogs truncate the topic prompt JSON. Full contract: `docs/technical/ARCHITECTURE.md` — *Observability and AI I/O logging*.
 
 **Decision record**: [ADR-003 — AI I/O observability via Supabase Edge Function logs](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs).
 
@@ -240,4 +248,4 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 | 2026-03-30 | Overview: voice path uses multipart to `transcribe` only — no Storage for recordings in v1 |
 | 2026-03-30 | Observability: AI edge logging for operators (`event` types, fields, privacy); link ADR-003 |
 | 2026-03-30 | Observability: example log JSON, PRD Security NFR vs server-side logs, clarify `phase` ordering for `/transcribe` |
-| 2026-03-30 | Observability: `openrouter_request_json` / `openrouter_response_json`, `OPENROUTER_LOG_JSON_MAX_CHARS`, sanitized audio in request JSON |
+| 2026-03-30 | Observability: nested `openrouter_request` / `openrouter_response`, `OPENROUTER_LOG_JSON_MAX_CHARS`, sanitized audio; **DEBUG** via `console.debug` |

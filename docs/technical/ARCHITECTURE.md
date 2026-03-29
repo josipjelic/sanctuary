@@ -294,7 +294,7 @@ AI-related edge work (`transcribe`, `assign-topics`, shared OpenRouter/topic mod
 
 **Structured logging contract**
 
-- Emit **JSON-serializable** objects; prefer **one log line per event** as **single-line JSON** (e.g. `console.log(JSON.stringify({ ... }))`) so dashboard filters and copy/paste stay usable.
+- Emit **JSON-serializable** objects; prefer **one log line per event** as **single-line JSON** via **`console.debug`** (DEBUG level) with `"log_level":"debug"` in the payload so operators can filter AI/OpenRouter noise separately from `console.error` infrastructure failures.
 - Recommended fields (use when applicable; omit nullable fields rather than sending `null` noise):
   - `event` — stable event name (e.g. `ai.request.start`, `ai.response.complete`, `ai.error`)
   - `function` — edge function name (`transcribe`, `assign-topics`)
@@ -303,7 +303,8 @@ AI-related edge work (`transcribe`, `assign-topics`, shared OpenRouter/topic mod
   - `model` — OpenRouter/model id used for the call
   - `phase` — `"transcribe"` | `"topics"` (and future phases if the pipeline splits further)
   - `request_summary` / `response_summary` — non-secret metadata and **short previews** (e.g. byte length, topic count, latency, truncated text for quick scanning)
-  - `openrouter_request_json` / `openrouter_response_json` — stringified JSON of the OpenRouter `chat/completions` **request body** (sanitized: no API key in body; voice `input_audio.data` replaced with a **base64 length placeholder**) and **response JSON** from OpenRouter. **Hosted Supabase allows ≤10,000 characters per log line**; the logger defaults to ~6.5k chars per `openrouter_*` field and **re-trims the whole line** so messages are not dropped. Optional env **`OPENROUTER_LOG_JSON_MAX_CHARS`** lowers the per-field budget (capped ~9k). Use this to audit payloads within platform limits.
+  - `log_summary` / `log_level` — human skimming line and always `"debug"` for these events (transport is **`console.debug`**).
+  - `openrouter_request` / `openrouter_response` — **nested objects** for the OpenRouter `chat/completions` request (sanitized: no API key in body; voice `input_audio.data` → **base64 length placeholder**) and response JSON. **Hosted Supabase allows ≤10,000 characters per log line**; the logger **re-trims** oversized nested blobs (`_truncated` preview). Optional env **`OPENROUTER_LOG_JSON_MAX_CHARS`** lowers the per-field budget (capped ~9k).
 
 **Prohibited in logs**
 

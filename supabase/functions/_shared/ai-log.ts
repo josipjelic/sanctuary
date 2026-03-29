@@ -1,6 +1,7 @@
 /**
  * Structured AI I/O logging for Supabase Edge Functions (ADR-003).
- * Single-line JSON only; never log secrets, raw audio, or full multipart bodies.
+ * All lines use `console.debug` (DEBUG) so dashboards can filter separately from `console.error`.
+ * OpenRouter payloads are nested objects (not JSON strings) for readable parsing after `event_message` decode.
  */
 
 export type AiLogPhase = "transcribe" | "topics";
@@ -21,14 +22,14 @@ export type AiLogPayload = {
   request_summary?: Record<string, unknown> | string;
   response_summary?: Record<string, unknown> | string;
   /**
-   * Sanitized JSON of the OpenRouter `chat/completions` request body (no API key in body;
-   * `input_audio.data` replaced with a length placeholder). Truncated per `OPENROUTER_LOG_JSON_MAX_CHARS`.
+   * OpenRouter `chat/completions` request body as a **nested object** (sanitized: no API key;
+   * voice `input_audio.data` → length placeholder). Avoid stringifying — prevents unreadable escaping in logs.
    */
-  openrouter_request_json?: string;
+  openrouter_request?: unknown;
   /**
-   * JSON of the OpenRouter response body (or error body / wrapper). Truncated per env.
+   * OpenRouter response JSON as a **nested object** (or `{ http_status, body }` on HTTP errors).
    */
-  openrouter_response_json?: string;
+  openrouter_response?: unknown;
   error?: {
     message: string;
     http_status?: number;
@@ -38,16 +39,11 @@ export type AiLogPayload = {
 
 const DEFAULT_MAX = 240;
 /**
- * Default max chars per `openrouter_*_json` string *before* the final line clamp.
- * Hosted Supabase allows **≤10,000 characters per console message** (see Supabase Functions logging docs);
- * the full JSON envelope (event, summaries, ids) must share that budget.
+ * Default max serialized length for trimming nested `openrouter_*` before whole-line clamp.
+ * Hosted Supabase: **≤10,000 characters per console message**.
  */
 const DEFAULT_JSON_LOG_MAX = 6_500;
-/** Never exceed this for a single field; whole line is clamped again in `finalizeLogLine`. */
 const ABS_JSON_LOG_MAX = 9_000;
-/** Supabase-hosted hard limit per `console.log` / `console.error` message. */
-const SUPABASE_LOG_LINE_MAX = 10_000;
-/** Target max serialized line (leave margin for encoding quirks). */
 const LOG_LINE_TARGET = 9_850;
 
 function denoEnvGet(key: string): string | undefined {
@@ -64,9 +60,7 @@ function denoEnvGet(key: string): string | undefined {
 }
 
 /**
- * Max characters for each `openrouter_*_json` string (before final whole-line clamp).
- * On **hosted Supabase**, log lines cannot exceed ~10k chars total; values above ~9k are clamped.
- * Set `OPENROUTER_LOG_JSON_MAX_CHARS` to lower this if you need shorter lines.
+ * Budget for serializing one nested `openrouter_request` / `openrouter_response` blob.
  */
 export function getOpenRouterLogJsonMaxChars(): number {
   const raw = denoEnvGet("OPENROUTER_LOG_JSON_MAX_CHARS");
@@ -77,7 +71,7 @@ export function getOpenRouterLogJsonMaxChars(): number {
   return Math.min(n, ABS_JSON_LOG_MAX);
 }
 
-/** Stringify + truncate for one log field. */
+/** Stringify + truncate a string (e.g. legacy previews). */
 export function truncateJsonForLog(jsonStr: string): string {
   const max = getOpenRouterLogJsonMaxChars();
   if (jsonStr.length <= max) return jsonStr;
@@ -134,6 +128,7 @@ export function sanitizeOpenRouterRequestForLog(body: unknown): unknown {
 
 function buildRecord(payload: AiLogPayload): Record<string, unknown> {
   const o: Record<string, unknown> = {
+    log_level: "debug",
     event: payload.event,
     function: payload.function,
     phase: payload.phase,
@@ -149,11 +144,11 @@ function buildRecord(payload: AiLogPayload): Record<string, unknown> {
   if (payload.response_summary !== undefined) {
     o.response_summary = payload.response_summary;
   }
-  if (payload.openrouter_request_json !== undefined) {
-    o.openrouter_request_json = payload.openrouter_request_json;
+  if (payload.openrouter_request !== undefined) {
+    o.openrouter_request = payload.openrouter_request;
   }
-  if (payload.openrouter_response_json !== undefined) {
-    o.openrouter_response_json = payload.openrouter_response_json;
+  if (payload.openrouter_response !== undefined) {
+    o.openrouter_response = payload.openrouter_response;
   }
   if (payload.error) {
     const err: Record<string, unknown> = { message: payload.error.message };
@@ -166,48 +161,77 @@ function buildRecord(payload: AiLogPayload): Record<string, unknown> {
   return o;
 }
 
-/** Truncate user-derived strings for logs (no full transcripts/prompts per ARCHITECTURE). */
+/** One-line human prefix for raw log streams (parse the following line as JSON). */
+export function formatAiLogHeadline(payload: AiLogPayload): string {
+  const tid = payload.thought_id ?? "-";
+  const mid = payload.model ?? "-";
+  return `[sanctuary-ai] ${payload.event} | fn=${payload.function} | phase=${payload.phase} | thought=${tid} | model=${mid}`;
+}
+
+/** Truncate user-derived strings for summaries. */
 export function truncateForLog(text: string, maxChars = DEFAULT_MAX): string {
   const t = text.trim();
   if (t.length <= maxChars) return t;
   return `${t.slice(0, maxChars)}…[len=${t.length}]`;
 }
 
+function shrinkNestedOpenRouterField(
+  rec: Record<string, unknown>,
+  key: "openrouter_request" | "openrouter_response",
+): void {
+  const val = rec[key];
+  if (val === undefined) return;
+
+  const sans: Record<string, unknown> = { ...rec };
+  sans[key] = undefined;
+  const baseLen = JSON.stringify(sans).length;
+  const budget = LOG_LINE_TARGET - baseLen - 100;
+  if (budget < 200) {
+    rec[key] = {
+      _omitted: true,
+      reason: "envelope_too_large",
+    };
+    return;
+  }
+
+  const inner = JSON.stringify(val);
+  if (inner.length <= budget) return;
+
+  rec[key] = {
+    _truncated: true,
+    original_json_chars: inner.length,
+    preview: `${inner.slice(0, Math.max(0, budget - 140))}…`,
+  };
+}
+
 /**
- * Ensures one `console.*` message stays under Supabase's per-line cap while keeping valid JSON.
+ * One JSON line under Supabase’s ~10k cap, with nested OpenRouter objects (no string-in-string JSON).
+ * Includes `log_summary` first for readable raw `event_message` before parsing.
  */
 export function finalizeLogLine(payload: AiLogPayload): string {
-  const rec = buildRecord(payload);
+  const rec: Record<string, unknown> = {
+    log_summary: formatAiLogHeadline(payload),
+    ...buildRecord(payload),
+  };
   let line = JSON.stringify(rec);
   if (line.length <= LOG_LINE_TARGET) return line;
 
-  const trimField = (
-    key: "openrouter_request_json" | "openrouter_response_json",
-  ) => {
-    const v = rec[key];
-    if (typeof v !== "string") return;
-    const clone = { ...rec };
-    delete clone[key];
-    const baseLen = JSON.stringify(clone).length;
-    const room = Math.max(120, LOG_LINE_TARGET - baseLen - 96);
-    rec[key] =
-      v.length <= room
-        ? v
-        : `${v.slice(0, room)}…[truncated json len=${v.length}]`;
-    line = JSON.stringify(rec);
-  };
-
-  trimField("openrouter_request_json");
-  if (line.length <= LOG_LINE_TARGET) return line;
-  trimField("openrouter_response_json");
+  shrinkNestedOpenRouterField(rec, "openrouter_request");
+  line = JSON.stringify(rec);
   if (line.length <= LOG_LINE_TARGET) return line;
 
-  rec.openrouter_request_json = undefined;
-  rec.openrouter_response_json = undefined;
+  shrinkNestedOpenRouterField(rec, "openrouter_response");
+  line = JSON.stringify(rec);
+  if (line.length <= LOG_LINE_TARGET) return line;
+
+  rec.openrouter_request = undefined;
+  rec.openrouter_response = undefined;
   line = JSON.stringify(rec);
   if (line.length <= LOG_LINE_TARGET) return line;
 
   return JSON.stringify({
+    log_summary: formatAiLogHeadline(payload),
+    log_level: "debug",
     event: payload.event,
     function: payload.function,
     phase: payload.phase,
@@ -216,16 +240,18 @@ export function finalizeLogLine(payload: AiLogPayload): string {
     user_id: payload.user_id,
     error: {
       message:
-        "Log line still exceeded platform cap after trimming openrouter_*_json; summaries omitted",
+        "Log line exceeded platform cap after trimming openrouter_*; see log_summary for correlation",
       kind: "log_cap",
     },
   });
 }
 
+/** Structured AI / OpenRouter logs — use DEBUG so dashboards can filter separately from errors. */
 export function logAiInfo(payload: AiLogPayload): void {
-  console.log(finalizeLogLine(payload));
+  console.debug(finalizeLogLine(payload));
 }
 
+/** Same as {@link logAiInfo}: failures are still DEBUG (payload includes `error` + optional `event: ai.error`). */
 export function logAiError(payload: AiLogPayload): void {
-  console.error(finalizeLogLine(payload));
+  console.debug(finalizeLogLine(payload));
 }
