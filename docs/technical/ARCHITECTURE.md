@@ -302,7 +302,8 @@ AI-related edge work (`transcribe`, `assign-topics`, shared OpenRouter/topic mod
   - `user_id` — UUID string (`auth` subject) for correlation; still subject to redaction policy if product stance tightens
   - `model` — OpenRouter/model id used for the call
   - `phase` — `"transcribe"` | `"topics"` (and future phases if the pipeline splits further)
-  - `request_summary` / `response_summary` — non-secret, truncated or aggregate descriptions (e.g. byte length, topic count, status codes, error class) — **not** full prompts/responses unless explicitly approved in a future ADR
+  - `request_summary` / `response_summary` — non-secret metadata and **short previews** (e.g. byte length, topic count, latency, truncated text for quick scanning)
+  - `openrouter_request_json` / `openrouter_response_json` — stringified JSON of the OpenRouter `chat/completions` **request body** (sanitized: no API key in body; voice `input_audio.data` replaced with a **base64 length placeholder**) and **response JSON** from OpenRouter. Length-capped per Edge secret/env **`OPENROUTER_LOG_JSON_MAX_CHARS`** (default 65536; `0` uses an internal upper bound ~512 KiB). Use this to audit exactly what was sent and returned (minus redactions above).
 
 **Prohibited in logs**
 

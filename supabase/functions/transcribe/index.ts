@@ -3,7 +3,13 @@
  * Use esm.sh + inline CORS — npm:/jsr: imports caused BOOT_ERROR (503) on hosted runtime.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { logAiError, logAiInfo, truncateForLog } from "../_shared/ai-log.ts";
+import {
+  logAiError,
+  logAiInfo,
+  sanitizeOpenRouterRequestForLog,
+  truncateForLog,
+  truncateJsonForLog,
+} from "../_shared/ai-log.ts";
 import { assignTopicsToThought } from "../_shared/assign-topics.ts";
 
 const corsHeaders: Record<string, string> = {
@@ -206,6 +212,30 @@ Deno.serve(async (req) => {
   }
 
   const transcribePrompt = transcriptionUserPrompt(transcriptionLanguage);
+  const transcribeOpenRouterBody = {
+    model,
+    messages: [
+      {
+        role: "user" as const,
+        content: [
+          {
+            type: "text",
+            text: transcribePrompt,
+          },
+          {
+            type: "input_audio",
+            input_audio: {
+              data: base64,
+              format,
+            },
+          },
+        ],
+      },
+    ],
+  };
+  const transcribeRequestForLog = sanitizeOpenRouterRequestForLog(
+    transcribeOpenRouterBody,
+  );
   logAiInfo({
     event: "ai.request.start",
     function: "transcribe",
@@ -220,33 +250,16 @@ Deno.serve(async (req) => {
       transcription_language: transcriptionLanguage ?? "auto",
       prompt_preview: truncateForLog(transcribePrompt),
     },
+    openrouter_request_json: truncateJsonForLog(
+      JSON.stringify(transcribeRequestForLog),
+    ),
   });
 
   const transcribeStarted = Date.now();
   const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: orHeaders,
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: transcribePrompt,
-            },
-            {
-              type: "input_audio",
-              input_audio: {
-                data: base64,
-                format,
-              },
-            },
-          ],
-        },
-      ],
-    }),
+    body: JSON.stringify(transcribeOpenRouterBody),
   });
 
   if (!orRes.ok) {
@@ -266,6 +279,9 @@ Deno.serve(async (req) => {
       response_summary: {
         body_preview: truncateForLog(errText, 400),
       },
+      openrouter_response_json: truncateJsonForLog(
+        JSON.stringify({ http_status: orRes.status, body: errText }),
+      ),
     });
     await supabase
       .from("thoughts")
@@ -294,6 +310,7 @@ Deno.serve(async (req) => {
       response_summary: {
         latency_ms: Date.now() - transcribeStarted,
       },
+      openrouter_response_json: truncateJsonForLog(JSON.stringify(orData)),
     });
     await supabase
       .from("thoughts")
@@ -314,6 +331,7 @@ Deno.serve(async (req) => {
       transcript_preview: truncateForLog(transcript),
       latency_ms: Date.now() - transcribeStarted,
     },
+    openrouter_response_json: truncateJsonForLog(JSON.stringify(orData)),
   });
 
   const { error: updateError } = await supabase

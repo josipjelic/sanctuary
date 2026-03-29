@@ -1,4 +1,53 @@
-import { logAiError, logAiInfo, truncateForLog } from "./ai-log";
+import {
+  logAiError,
+  logAiInfo,
+  sanitizeOpenRouterRequestForLog,
+  truncateForLog,
+  truncateJsonForLog,
+} from "./ai-log";
+
+describe("sanitizeOpenRouterRequestForLog", () => {
+  it("replaces input_audio base64 with a length placeholder", () => {
+    const body = {
+      model: "x/y",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "hello" },
+            {
+              type: "input_audio",
+              input_audio: { data: "QUJDRDEyMzQ=", format: "aac" },
+            },
+          ],
+        },
+      ],
+    };
+    const out = sanitizeOpenRouterRequestForLog(body) as {
+      messages: Array<{ content: Array<{ input_audio?: { data: string } }> }>;
+    };
+    const audioPart = out.messages[0].content[1];
+    expect(audioPart.input_audio?.data).toBe(
+      "[omitted base64, length=12 chars]",
+    );
+    expect(JSON.stringify(out)).not.toContain("QUJDRDEyMzQ=");
+  });
+});
+
+describe("truncateJsonForLog", () => {
+  it("returns short JSON unchanged when under default max", () => {
+    const s = JSON.stringify({ a: 1 });
+    expect(truncateJsonForLog(s)).toBe(s);
+  });
+
+  it("truncates very long JSON with marker", () => {
+    const inner = "z".repeat(70_000);
+    const s = JSON.stringify({ blob: inner });
+    const out = truncateJsonForLog(s);
+    expect(out.length).toBeLessThan(s.length);
+    expect(out).toMatch(/truncated json len=/);
+  });
+});
 
 describe("truncateForLog", () => {
   it("trims surrounding whitespace", () => {

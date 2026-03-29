@@ -2,7 +2,12 @@
  * Shared topic assignment: OpenRouter + user_topics / thought_topics + thoughts.topics sync.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { logAiError, logAiInfo, truncateForLog } from "./ai-log.ts";
+import {
+  logAiError,
+  logAiInfo,
+  truncateForLog,
+  truncateJsonForLog,
+} from "./ai-log.ts";
 
 /** Reuse scores above this threshold to pick an existing user topic (model-reported 0–1). */
 export const TOPIC_MATCH_THRESHOLD = 0.2;
@@ -67,10 +72,14 @@ function parseTopicJson(raw: string): TopicModelJson {
   };
 }
 
+type OpenRouterChatRequestBody = {
+  model: string;
+  messages: Array<{ role: "user"; content: string }>;
+};
+
 async function callOpenRouter(
   openrouterKey: string,
-  model: string,
-  prompt: string,
+  requestBody: OpenRouterChatRequestBody,
   httpReferer: string | undefined,
   log: {
     edgeFunction: "transcribe" | "assign-topics";
@@ -90,10 +99,7 @@ async function callOpenRouter(
   const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: orHeaders,
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "user", content: prompt }],
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!orRes.ok) {
@@ -102,7 +108,7 @@ async function callOpenRouter(
       event: "ai.error",
       function: log.edgeFunction,
       phase: "topics",
-      model,
+      model: requestBody.model,
       thought_id: log.thoughtId,
       user_id: log.userId,
       error: {
@@ -113,6 +119,9 @@ async function callOpenRouter(
       response_summary: {
         body_preview: truncateForLog(errText, 400),
       },
+      openrouter_response_json: truncateJsonForLog(
+        JSON.stringify({ http_status: orRes.status, body: errText }),
+      ),
     });
     throw new Error("OpenRouter request failed");
   }
@@ -126,13 +135,14 @@ async function callOpenRouter(
     event: "ai.response.complete",
     function: log.edgeFunction,
     phase: "topics",
-    model,
+    model: requestBody.model,
     thought_id: log.thoughtId,
     user_id: log.userId,
     response_summary: {
       content_chars: content.length,
       content_preview: truncateForLog(content),
     },
+    openrouter_response_json: truncateJsonForLog(JSON.stringify(orData)),
   });
 
   return content;
@@ -209,6 +219,11 @@ Rules:
 - Otherwise (weak or no fit, score <= ${TOPIC_MATCH_THRESHOLD}), set best_existing_normalized_name to null, set best_match_score to the best weak score (<= ${TOPIC_MATCH_THRESHOLD}), and set new_topic to a short new lowercase label.
 - Never invent a normalized_name that is not in the existing list unless you are using the new_topic path.`;
 
+  const topicOpenRouterBody: OpenRouterChatRequestBody = {
+    model,
+    messages: [{ role: "user", content: prompt }],
+  };
+
   logAiInfo({
     event: "ai.request.start",
     function: callerFunction,
@@ -222,14 +237,16 @@ Rules:
       thought_text_preview: truncateForLog(text),
       prompt_chars: prompt.length,
     },
+    openrouter_request_json: truncateJsonForLog(
+      JSON.stringify(topicOpenRouterBody),
+    ),
   });
 
   let rawContent: string;
   try {
     rawContent = await callOpenRouter(
       openrouterKey,
-      model,
-      prompt,
+      topicOpenRouterBody,
       httpReferer,
       {
         edgeFunction: callerFunction,
@@ -260,6 +277,9 @@ Rules:
         message: err instanceof Error ? err.message : "Topic JSON parse failed",
         kind: "topic_json_parse",
       },
+      openrouter_response_json: truncateJsonForLog(
+        JSON.stringify({ assistant_message_text: rawContent }),
+      ),
       response_summary: {
         raw_preview: truncateForLog(rawContent),
         raw_chars: rawContent.length,

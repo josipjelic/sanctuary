@@ -210,6 +210,8 @@ Optional fields (`model`, `thought_id`, `user_id`, summaries, `error`) are omitt
 | `user_id` | Authenticated user UUID for correlation. |
 | `request_summary` | Non-secret metadata only — e.g. for voice: MIME type, byte length, format, truncated prompt preview (not raw audio). For topics: catalog size, thought text length, **truncated** thought preview, prompt length. |
 | `response_summary` | Aggregates or **truncated** previews — e.g. transcript character count and preview, latency ms, OpenRouter error body preview, topic JSON preview on parse errors. |
+| `openrouter_request_json` | Single string: JSON of the OpenRouter request **body** actually sent (`model` + `messages`). Voice: `input_audio.data` is **not** logged; it is replaced with `[omitted base64, length=N chars]`. Text/topics: the user message includes the **full** topic prompt (catalog + thought) unless the whole JSON exceeds `OPENROUTER_LOG_JSON_MAX_CHARS` (then truncated with a suffix marker). |
+| `openrouter_response_json` | Single string: JSON of OpenRouter’s **response** body on success, or a small wrapper `{ http_status, body }` / `{ assistant_message_text }` on errors — capped by the same max length env. |
 | `error` | `{ message, http_status?, kind? }` — human-readable message, optional HTTP status from OpenRouter, optional machine-readable `kind` (e.g. `openrouter_http`, `empty_transcript`, `topic_json_parse`). |
 
 **PRD (Security NFR) — device vs server**
@@ -218,9 +220,9 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 
 **Privacy (operator expectations)**
 
-- **No raw audio** in logs: no buffers, base64-encoded audio, file bytes, or multipart bodies — only metadata such as MIME type and byte length (as in `request_summary` for the transcribe phase).
-- **No secrets**: API keys and service role material must never appear in log lines.
-- Text fields in summaries use **truncation** (short previews plus lengths where relevant), not full prompts or full user transcripts in routine lines. Full operational contract and prohibited fields: `docs/technical/ARCHITECTURE.md` — *Observability and AI I/O logging*.
+- **No raw audio** in logs: no buffers, base64-encoded audio, file bytes, or multipart bodies — only metadata such as MIME type and byte length (as in `request_summary` for the transcribe phase). The `openrouter_request_json` field for transcription still includes the **text** prompt and a **placeholder** where base64 would have been.
+- **No secrets**: API keys and service role material must never appear in log lines (the key is only in HTTP headers, not in logged JSON bodies).
+- **`request_summary` / `response_summary`** use short previews for quick reading. **Full** request/response payloads for OpenRouter (within size limits) live in **`openrouter_request_json`** / **`openrouter_response_json`**. Tune **`OPENROUTER_LOG_JSON_MAX_CHARS`** (Edge secret) if large topic catalogs truncate the topic prompt JSON. Full contract: `docs/technical/ARCHITECTURE.md` — *Observability and AI I/O logging*.
 
 **Decision record**: [ADR-003 — AI I/O observability via Supabase Edge Function logs](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs).
 
@@ -236,3 +238,4 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 | 2026-03-30 | Overview: voice path uses multipart to `transcribe` only — no Storage for recordings in v1 |
 | 2026-03-30 | Observability: AI edge logging for operators (`event` types, fields, privacy); link ADR-003 |
 | 2026-03-30 | Observability: example log JSON, PRD Security NFR vs server-side logs, clarify `phase` ordering for `/transcribe` |
+| 2026-03-30 | Observability: `openrouter_request_json` / `openrouter_response_json`, `OPENROUTER_LOG_JSON_MAX_CHARS`, sanitized audio in request JSON |
