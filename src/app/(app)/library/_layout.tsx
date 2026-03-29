@@ -18,6 +18,8 @@ export default function LibraryStackLayout() {
           headerTintColor: colors.primary,
           headerStyle: { backgroundColor: colors.surface },
           headerShadowVisible: false,
+          animation: "slide_from_right",
+          animationDuration: 300,
         }}
       />
     </Stack>

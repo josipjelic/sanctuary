@@ -18,6 +18,9 @@ export default function InboxStackLayout() {
           headerTintColor: colors.primary,
           headerStyle: { backgroundColor: colors.surface },
           headerShadowVisible: false,
+          presentation: "modal",
+          animation: "slide_from_bottom",
+          animationDuration: 350,
         }}
       />
     </Stack>
