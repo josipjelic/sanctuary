@@ -4,7 +4,7 @@ import { Topic } from "./Topic";
 describe("Topic", () => {
   it("renders the label text", () => {
     const { getByText } = render(<Topic label="work" />);
-    expect(getByText("work")).toBeTruthy();
+    expect(getByText("Work")).toBeTruthy();
   });
 
   it("exposes testID for E2E selectors", () => {

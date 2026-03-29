@@ -6,6 +6,7 @@ import {
   formatDuration,
   validateCaptureText,
 } from "@/lib/capture";
+import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import {
@@ -64,15 +65,11 @@ const VOICE_RECORDING_OPTIONS: RecordingOptions = {
     audioEncoder: "aac",
     sampleRate: 16000,
   },
+  // AAC/m4a only: omit linear PCM fields from HIGH_QUALITY.ios — mixing them into MPEG4AAC
+  // settings can make AVAudioRecorder.prepareToRecord() fail on iOS.
   ios: {
-    ...RecordingPresets.HIGH_QUALITY.ios,
-    extension: ".m4a",
-    sampleRate: 16000,
     outputFormat: IOSOutputFormat.MPEG4AAC,
     audioQuality: AudioQuality.HIGH,
-    linearPCMBitDepth: 16,
-    linearPCMIsBigEndian: false,
-    linearPCMIsFloat: false,
   },
   web: {
     mimeType: "audio/webm",
@@ -285,7 +282,8 @@ export default function QuickCaptureScreen() {
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
       setRecordingState("recording");
-    } catch {
+    } catch (error) {
+      logger.error("Quick capture: failed to start recording", error);
       setPermissionError("Could not start recording. Please try again.");
       setRecordingState("idle");
     }

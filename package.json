@@ -41,6 +41,11 @@
     "react-native-url-polyfill": "^2.0.0",
     "react-native-web": "~0.21.2"
   },
+  "pnpm": {
+    "patchedDependencies": {
+      "expo-audio@1.1.1": "patches/expo-audio@1.1.1.patch"
+    }
+  },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@biomejs/cli-darwin-arm64": "1.9.4",

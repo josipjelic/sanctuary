@@ -1,0 +1,33 @@
+diff --git a/ios/AudioModule.swift b/ios/AudioModule.swift
+--- a/ios/AudioModule.swift
++++ b/ios/AudioModule.swift
+@@ -604,20 +604,15 @@
+ 
+   private func checkPermissions() throws {
+     #if os(iOS)
+-    if #available(iOS 17.0, *) {
+-      switch AVAudioApplication.shared.recordPermission {
+-      case .denied, .undetermined:
+-        throw AudioPermissionsException()
+-      default:
+-        break
+-      }
+-    } else {
+-      switch AVAudioSession.sharedInstance().recordPermission {
+-      case .denied, .undetermined:
+-        throw AudioPermissionsException()
+-      default:
+-        break
+-      }
++    // Use AVAudioSession only so this matches AudioRecordingRequester (Expo permissions),
++    // which reads AVAudioSession.recordPermission. AVAudioApplication.recordPermission can
++    // disagree on some iOS versions right after requestRecordPermission, causing record()
++    // to throw even when the JS layer already received granted.
++    switch AVAudioSession.sharedInstance().recordPermission {
++    case .denied, .undetermined:
++      throw AudioPermissionsException()
++    default:
++      break
+     }
+     #endif
+   }
