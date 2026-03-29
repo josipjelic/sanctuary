@@ -9,7 +9,7 @@ export interface TopicFolderCardProps {
   normalizedName: string;
   thoughtCount: number;
   onPress: () => void;
-  onLongPress?: () => void;
+  onEdit?: () => void;
   muted?: boolean;
 }
 
@@ -19,7 +19,7 @@ export function TopicFolderCard({
   normalizedName,
   thoughtCount,
   onPress,
-  onLongPress,
+  onEdit,
   muted = false,
 }: TopicFolderCardProps) {
   const iconName = topicFolderIconName(normalizedName);
@@ -30,7 +30,6 @@ export function TopicFolderCard({
       <View style={styles.tabStrip} />
       <Pressable
         onPress={onPress}
-        onLongPress={onLongPress}
         accessibilityRole="button"
         accessibilityLabel={`${name}, ${countLabel}`}
         style={({ pressed }) => [
@@ -50,6 +49,27 @@ export function TopicFolderCard({
             color={muted ? colors.secondary : colors.primary}
           />
         </View>
+        {onEdit ? (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            style={({ pressed }) => [
+              styles.editBtn,
+              pressed && styles.editBtnPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Rename ${name}`}
+            hitSlop={8}
+          >
+            <MaterialCommunityIcons
+              name="pencil-outline"
+              size={18}
+              color={colors.secondary}
+            />
+          </Pressable>
+        ) : null}
         <Text style={styles.title} numberOfLines={2}>
           {name.charAt(0).toUpperCase() + name.slice(1)}
         </Text>
@@ -130,5 +150,14 @@ const styles = StyleSheet.create({
   chevronRow: {
     marginTop: spacing.s12,
     alignItems: "flex-end",
+  },
+  editBtn: {
+    position: "absolute",
+    top: spacing.s8,
+    right: spacing.s8,
+    padding: spacing.s2,
+  },
+  editBtnPressed: {
+    opacity: 0.5,
   },
 });

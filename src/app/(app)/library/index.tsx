@@ -304,7 +304,7 @@ export default function LibraryIndexScreen() {
                 params: { topicId: item.id },
               })
             }
-            onLongPress={() => {
+            onEdit={() => {
               setRenameTopic(item);
               setRenameRaw(item.name);
               setRenameError(null);
