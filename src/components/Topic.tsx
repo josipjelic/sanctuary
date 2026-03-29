@@ -12,7 +12,9 @@ interface TopicProps {
 export function Topic({ label, testID }: TopicProps) {
   return (
     <View style={styles.container} testID={testID}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label}>
+        {label.charAt(0).toUpperCase() + label.slice(1)}
+      </Text>
     </View>
   );
 }

@@ -50,6 +50,13 @@ export default function LibraryIndexScreen() {
   const [newTopicRaw, setNewTopicRaw] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [addSubmitting, setAddSubmitting] = useState(false);
+  const [renameVisible, setRenameVisible] = useState(false);
+  const [renameTopic, setRenameTopic] = useState<UserTopicWithCount | null>(
+    null,
+  );
+  const [renameRaw, setRenameRaw] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameSubmitting, setRenameSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     const { data: topicRows, error: topicErr } = await supabase
@@ -139,6 +146,61 @@ export default function LibraryIndexScreen() {
       await load();
     } finally {
       setAddSubmitting(false);
+    }
+  }
+
+  async function handleRenameTopic() {
+    setRenameError(null);
+    const normalized = normalizeTopicLabel(renameRaw);
+    if (!normalized || !renameTopic) {
+      setRenameError("Enter a topic name.");
+      return;
+    }
+    if (normalized === renameTopic.normalized_name) {
+      setRenameVisible(false);
+      return;
+    }
+    setRenameSubmitting(true);
+    try {
+      const { error: topicErr } = await supabase
+        .from("user_topics")
+        .update({
+          name: normalized,
+          normalized_name: normalized,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", renameTopic.id);
+      if (topicErr) {
+        setRenameError("Could not rename topic. Try again.");
+        return;
+      }
+
+      const { data: affected } = await supabase
+        .from("thoughts")
+        .select("id, topics")
+        .contains("topics", [renameTopic.normalized_name]);
+
+      if (affected && affected.length > 0) {
+        await Promise.all(
+          affected.map((t) =>
+            supabase
+              .from("thoughts")
+              .update({
+                topics: t.topics.map((tp: string) =>
+                  tp === renameTopic.normalized_name ? normalized : tp,
+                ),
+              })
+              .eq("id", t.id),
+          ),
+        );
+      }
+
+      setRenameRaw("");
+      setRenameVisible(false);
+      setRenameTopic(null);
+      await load();
+    } finally {
+      setRenameSubmitting(false);
     }
   }
 
@@ -242,6 +304,12 @@ export default function LibraryIndexScreen() {
                 params: { topicId: item.id },
               })
             }
+            onLongPress={() => {
+              setRenameTopic(item);
+              setRenameRaw(item.name);
+              setRenameError(null);
+              setRenameVisible(true);
+            }}
           />
         )}
         ListEmptyComponent={
@@ -301,6 +369,64 @@ export default function LibraryIndexScreen() {
                 onPress={handleAddTopic}
                 disabled={addSubmitting}
                 testID="library-add-topic-submit"
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={renameVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setRenameVisible(false)}
+      >
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setRenameVisible(false)}
+          accessibilityLabel="Close dialog"
+        >
+          <Pressable
+            style={styles.modalSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.modalTitle}>Rename topic</Text>
+            <Text style={styles.modalHint}>
+              Choose a new name for this topic.
+            </Text>
+            <TextInput
+              placeholder="Topic name"
+              value={renameRaw}
+              onChangeText={(t) => {
+                setRenameRaw(t);
+                setRenameError(null);
+              }}
+              autoCapitalize="sentences"
+              autoCorrect
+              editable={!renameSubmitting}
+              testID="library-rename-topic-input"
+            />
+            {renameError ? (
+              <Text
+                style={styles.modalError}
+                testID="library-rename-topic-error"
+              >
+                {renameError}
+              </Text>
+            ) : null}
+            <View style={styles.modalActions}>
+              <Button
+                label="Cancel"
+                variant="secondary"
+                onPress={() => setRenameVisible(false)}
+                disabled={renameSubmitting}
+                testID="library-rename-topic-cancel"
+              />
+              <Button
+                label="Save"
+                onPress={handleRenameTopic}
+                disabled={renameSubmitting}
+                testID="library-rename-topic-submit"
               />
             </View>
           </Pressable>

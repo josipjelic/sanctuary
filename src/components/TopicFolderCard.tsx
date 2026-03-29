@@ -9,6 +9,7 @@ export interface TopicFolderCardProps {
   normalizedName: string;
   thoughtCount: number;
   onPress: () => void;
+  onLongPress?: () => void;
   muted?: boolean;
 }
 
@@ -18,6 +19,7 @@ export function TopicFolderCard({
   normalizedName,
   thoughtCount,
   onPress,
+  onLongPress,
   muted = false,
 }: TopicFolderCardProps) {
   const iconName = topicFolderIconName(normalizedName);
@@ -28,6 +30,7 @@ export function TopicFolderCard({
       <View style={styles.tabStrip} />
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
         accessibilityRole="button"
         accessibilityLabel={`${name}, ${countLabel}`}
         style={({ pressed }) => [
@@ -48,7 +51,7 @@ export function TopicFolderCard({
           />
         </View>
         <Text style={styles.title} numberOfLines={2}>
-          {name}
+          {name.charAt(0).toUpperCase() + name.slice(1)}
         </Text>
         <Text style={styles.count}>{countLabel}</Text>
         <View style={styles.chevronRow}>
