@@ -11,7 +11,7 @@ Read by: All agents building or integrating with backend functionality.
 > **Backend**: Supabase (PostgreSQL + Auth + Storage + Edge Functions)
 > **Client**: `@supabase/supabase-js` — used directly in the mobile app and in edge functions
 > **Authentication**: Supabase JWT (managed by Supabase Auth). Pass the session token via the Supabase client — it is sent automatically as a Bearer token.
-> **Last updated**: 2026-03-30
+> **Last updated**: 2026-03-30 (AI observability ops notes)
 
 ---
 
@@ -20,7 +20,7 @@ Read by: All agents building or integrating with backend functionality.
 Sanctuary does not have a traditional REST API server. The mobile app interacts with Supabase directly using the Supabase JS client for:
 - **Auth**: Sign up, sign in, sign out, password reset
 - **Database**: Direct table queries (filtered by RLS — users only see their own rows)
-- **Edge Functions**: AI-powered endpoints — `transcribe` (multipart audio → transcript + topic assignment) and `assign-topics` (typed capture path). Both call OpenRouter server-side. **Voice audio is not stored in Supabase Storage** in v1; it is posted to `transcribe` and discarded after processing.
+- **Edge Functions**: AI-powered endpoints — `transcribe` (multipart audio → transcript + topic assignment) and `assign-topics` (typed capture path). Both call OpenRouter server-side. **Voice audio is not stored in Supabase Storage** in v1; it is posted to `transcribe` and discarded after processing. **Observability**: AI-related steps emit structured lines to Edge Function logs — see [Observability (AI edge functions)](#observability-ai-edge-functions) below; policy and full contract: [ADR-003](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs) and `docs/technical/ARCHITECTURE.md` (Observability and AI I/O logging).
 - **Storage**: Available from Supabase for future features; not used for voice capture in v1.
 
 This document tracks the Edge Function endpoints. Standard Supabase client patterns are documented in the Supabase docs.
@@ -132,6 +132,100 @@ The `topics` field is present when topic assignment completes successfully insid
 
 ---
 
+## Observability (AI edge functions)
+
+For operators debugging `transcribe` and `assign-topics` (shared topic pipeline): structured AI events are written as **single-line JSON** via Deno `console` and appear in the Supabase project.
+
+**Where to look**
+
+1. Open the [Supabase Dashboard](https://supabase.com/dashboard) for your project.
+2. Go to **Edge Functions**.
+3. Open the function (`transcribe` or `assign-topics`) and use **Logs** (or the project **Logs** view filtered to that function, depending on dashboard layout).
+
+There is **no** separate HTTP API or Postgres table for these events in v1. Retention and search are **platform-managed** — do not rely on logs as a long-term audit archive; see ADR-003.
+
+**Example log line shape**
+
+Each event is one **single-line JSON** object (what Deno prints from `console.log` / `console.error`). Pretty-printed examples below are for reading only; in the dashboard you will see one line per event.
+
+Successful transcription step start:
+
+```json
+{
+  "event": "ai.request.start",
+  "function": "transcribe",
+  "phase": "transcribe",
+  "model": "google/gemini-2.0-flash-001",
+  "thought_id": "550e8400-e29b-41d4-a716-446655440000",
+  "user_id": "660e8400-e29b-41d4-a716-446655440001",
+  "request_summary": {
+    "audio_mime": "audio/mp4",
+    "audio_bytes": 48210,
+    "audio_format": "m4a",
+    "transcription_language": "auto",
+    "prompt_preview": "Transcribe the following audio…"
+  }
+}
+```
+
+Topic phase error (same JSON shape; emitted on `console.error`):
+
+```json
+{
+  "event": "ai.error",
+  "function": "assign-topics",
+  "phase": "topics",
+  "model": "google/gemini-2.0-flash-001",
+  "thought_id": "550e8400-e29b-41d4-a716-446655440000",
+  "user_id": "660e8400-e29b-41d4-a716-446655440001",
+  "error": {
+    "message": "Topic JSON parse failed",
+    "kind": "topic_json_parse"
+  },
+  "response_summary": {
+    "raw_preview": "{\"broken\": …",
+    "raw_chars": 42
+  }
+}
+```
+
+Optional fields (`model`, `thought_id`, `user_id`, summaries, `error`) are omitted when not set — see `supabase/functions/_shared/ai-log.ts`.
+
+**`event` values**
+
+| `event` | Meaning |
+|---------|---------|
+| `ai.request.start` | An OpenRouter-bound step is starting (transcription or topic assignment). |
+| `ai.response.complete` | That step finished successfully from the model’s perspective (HTTP OK and a usable body). |
+| `ai.error` | Failure: OpenRouter HTTP error, empty transcript, unparseable topic JSON, etc. Emitted on `console.error` with the same JSON shape. |
+
+**Common fields** (optional fields are omitted when not applicable)
+
+| Field | Meaning |
+|-------|---------|
+| `function` | `transcribe` or `assign-topics` (or the caller name passed into shared topic code). |
+| `phase` | `transcribe` — speech-to-text OpenRouter call inside `/transcribe` only. `topics` — topic-assignment OpenRouter call: runs **after** a successful transcribe in the same `/transcribe` request, or alone inside `/assign-topics` for typed capture. A single voice capture therefore produces **both** phases in order in the logs when both steps run. |
+| `model` | OpenRouter model id used for that call. |
+| `thought_id` | Thought UUID when known. |
+| `user_id` | Authenticated user UUID for correlation. |
+| `request_summary` | Non-secret metadata only — e.g. for voice: MIME type, byte length, format, truncated prompt preview (not raw audio). For topics: catalog size, thought text length, **truncated** thought preview, prompt length. |
+| `response_summary` | Aggregates or **truncated** previews — e.g. transcript character count and preview, latency ms, OpenRouter error body preview, topic JSON preview on parse errors. |
+| `error` | `{ message, http_status?, kind? }` — human-readable message, optional HTTP status from OpenRouter, optional machine-readable `kind` (e.g. `openrouter_http`, `empty_transcript`, `topic_json_parse`). |
+
+**PRD (Security NFR) — device vs server**
+
+The PRD Security NFR requires **no user data in device logs or in analytics SDK payloads** (the mobile app must not log thought bodies, transcripts, tokens, or similar client-side). That rule does **not** forbid **server-side** Edge Function logs used to operate the AI pipeline. Those server logs are allowed when they follow the redaction rules here and in `docs/technical/ARCHITECTURE.md` (*Observability and AI I/O logging*). Full rationale: [ADR-003](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs).
+
+**Privacy (operator expectations)**
+
+- **No raw audio** in logs: no buffers, base64-encoded audio, file bytes, or multipart bodies — only metadata such as MIME type and byte length (as in `request_summary` for the transcribe phase).
+- **No secrets**: API keys and service role material must never appear in log lines.
+- Text fields in summaries use **truncation** (short previews plus lengths where relevant), not full prompts or full user transcripts in routine lines. Full operational contract and prohibited fields: `docs/technical/ARCHITECTURE.md` — *Observability and AI I/O logging*.
+
+**Decision record**: [ADR-003 — AI I/O observability via Supabase Edge Function logs](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs).
+
+---
+
 ## Changelog
 
 | Date | Change |
@@ -140,3 +234,5 @@ The `topics` field is present when topic assignment completes successfully insid
 | 2026-03-28 | Implemented tag-thought edge function (task #008) |
 | 2026-03-28 | Replaced tag-thought with assign-topics; user_topics + thought_topics; transcribe runs topic assignment; thoughts.tags renamed to topics |
 | 2026-03-30 | Overview: voice path uses multipart to `transcribe` only — no Storage for recordings in v1 |
+| 2026-03-30 | Observability: AI edge logging for operators (`event` types, fields, privacy); link ADR-003 |
+| 2026-03-30 | Observability: example log JSON, PRD Security NFR vs server-side logs, clarify `phase` ordering for `/transcribe` |

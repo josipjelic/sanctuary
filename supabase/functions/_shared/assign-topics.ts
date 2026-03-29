@@ -2,6 +2,7 @@
  * Shared topic assignment: OpenRouter + user_topics / thought_topics + thoughts.topics sync.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { logAiError, logAiInfo, truncateForLog } from "./ai-log.ts";
 
 /** Reuse scores above this threshold to pick an existing user topic (model-reported 0–1). */
 export const TOPIC_MATCH_THRESHOLD = 0.2;
@@ -14,6 +15,8 @@ export interface AssignTopicsParams {
   openrouterKey: string;
   model: string;
   httpReferer?: string;
+  /** Edge function name for structured logs (default assign-topics). */
+  callerFunction?: "transcribe" | "assign-topics";
 }
 
 export interface AssignTopicsSuccess {
@@ -68,7 +71,12 @@ async function callOpenRouter(
   openrouterKey: string,
   model: string,
   prompt: string,
-  httpReferer?: string,
+  httpReferer: string | undefined,
+  log: {
+    edgeFunction: "transcribe" | "assign-topics";
+    thoughtId: string;
+    userId: string;
+  },
 ): Promise<string> {
   const orHeaders: Record<string, string> = {
     Authorization: `Bearer ${openrouterKey}`,
@@ -90,14 +98,44 @@ async function callOpenRouter(
 
   if (!orRes.ok) {
     const errText = await orRes.text();
-    console.error("OpenRouter topic error", orRes.status, errText);
+    logAiError({
+      event: "ai.error",
+      function: log.edgeFunction,
+      phase: "topics",
+      model,
+      thought_id: log.thoughtId,
+      user_id: log.userId,
+      error: {
+        message: "OpenRouter request failed",
+        http_status: orRes.status,
+        kind: "openrouter_http",
+      },
+      response_summary: {
+        body_preview: truncateForLog(errText, 400),
+      },
+    });
     throw new Error("OpenRouter request failed");
   }
 
   const orData = (await orRes.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
-  return orData.choices?.[0]?.message?.content?.trim() ?? "";
+  const content = orData.choices?.[0]?.message?.content?.trim() ?? "";
+
+  logAiInfo({
+    event: "ai.response.complete",
+    function: log.edgeFunction,
+    phase: "topics",
+    model,
+    thought_id: log.thoughtId,
+    user_id: log.userId,
+    response_summary: {
+      content_chars: content.length,
+      content_preview: truncateForLog(content),
+    },
+  });
+
+  return content;
 }
 
 /**
@@ -115,6 +153,7 @@ export async function assignTopicsToThought(
     openrouterKey,
     model,
     httpReferer,
+    callerFunction = "assign-topics",
   } = params;
 
   await supabase
@@ -170,6 +209,21 @@ Rules:
 - Otherwise (weak or no fit, score <= ${TOPIC_MATCH_THRESHOLD}), set best_existing_normalized_name to null, set best_match_score to the best weak score (<= ${TOPIC_MATCH_THRESHOLD}), and set new_topic to a short new lowercase label.
 - Never invent a normalized_name that is not in the existing list unless you are using the new_topic path.`;
 
+  logAiInfo({
+    event: "ai.request.start",
+    function: callerFunction,
+    phase: "topics",
+    model,
+    thought_id: thoughtId,
+    user_id: userId,
+    request_summary: {
+      catalog_topic_count: existing.length,
+      thought_text_chars: text.trim().length,
+      thought_text_preview: truncateForLog(text),
+      prompt_chars: prompt.length,
+    },
+  });
+
   let rawContent: string;
   try {
     rawContent = await callOpenRouter(
@@ -177,6 +231,11 @@ Rules:
       model,
       prompt,
       httpReferer,
+      {
+        edgeFunction: callerFunction,
+        thoughtId,
+        userId,
+      },
     );
   } catch {
     await supabase
@@ -190,7 +249,22 @@ Rules:
   try {
     parsed = parseTopicJson(rawContent);
   } catch (err) {
-    console.error("Topic JSON parse error", err, rawContent);
+    logAiError({
+      event: "ai.error",
+      function: callerFunction,
+      phase: "topics",
+      model,
+      thought_id: thoughtId,
+      user_id: userId,
+      error: {
+        message: err instanceof Error ? err.message : "Topic JSON parse failed",
+        kind: "topic_json_parse",
+      },
+      response_summary: {
+        raw_preview: truncateForLog(rawContent),
+        raw_chars: rawContent.length,
+      },
+    });
     await supabase
       .from("thoughts")
       .update({ tagging_status: "failed" })

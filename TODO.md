@@ -42,6 +42,10 @@
 - [x] #011 — Build library / topic browse view (folder grid + add topic) [area: mobile] → [.tasks/011-library-browse-screen.md](.tasks/011-library-browse-screen.md)
 - [x] #016 — User-scoped topics schema (user_topics, thought_topics, tags→topics) [area: database] → [.tasks/016-user-topics-schema.md](.tasks/016-user-topics-schema.md)
 - [x] #017 — assign-topics edge function + transcribe pipeline + mobile wiring [area: backend] → [.tasks/017-assign-topics-pipeline.md](.tasks/017-assign-topics-pipeline.md)
+- [x] #018 — AI I/O observability via Supabase logging: architecture + ADR/DECISIONS + ARCHITECTURE [area: infra] → [.tasks/018-ai-io-observability-architecture.md](.tasks/018-ai-io-observability-architecture.md)
+- [x] #019 — Instrument transcribe, assign-topics, shared OpenRouter code with structured logging; never log audio bodies [area: backend] → [.tasks/019-edge-function-logging-instrumentation.md](.tasks/019-edge-function-logging-instrumentation.md)
+- [x] #020 — Update API.md (and brief ops note if appropriate) for logging visibility and privacy [area: docs] → [.tasks/020-api-docs-logging-privacy.md](.tasks/020-api-docs-logging-privacy.md)
+- [x] #021 — Tests asserting logging omits audio and matches expected structure where testable [area: qa] → [.tasks/021-logging-privacy-tests.md](.tasks/021-logging-privacy-tests.md)
 
 ---
 

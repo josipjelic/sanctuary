@@ -3,6 +3,7 @@
  * Use esm.sh + inline CORS — npm:/jsr: imports caused BOOT_ERROR (503) on hosted runtime.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { logAiError, logAiInfo, truncateForLog } from "../_shared/ai-log.ts";
 import { assignTopicsToThought } from "../_shared/assign-topics.ts";
 
 const corsHeaders: Record<string, string> = {
@@ -204,6 +205,24 @@ Deno.serve(async (req) => {
     orHeaders["HTTP-Referer"] = referer;
   }
 
+  const transcribePrompt = transcriptionUserPrompt(transcriptionLanguage);
+  logAiInfo({
+    event: "ai.request.start",
+    function: "transcribe",
+    phase: "transcribe",
+    model,
+    thought_id: thoughtId,
+    user_id: user.id,
+    request_summary: {
+      audio_mime: audio.type || "unknown",
+      audio_bytes: bytes.length,
+      audio_format: format,
+      transcription_language: transcriptionLanguage ?? "auto",
+      prompt_preview: truncateForLog(transcribePrompt),
+    },
+  });
+
+  const transcribeStarted = Date.now();
   const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: orHeaders,
@@ -215,7 +234,7 @@ Deno.serve(async (req) => {
           content: [
             {
               type: "text",
-              text: transcriptionUserPrompt(transcriptionLanguage),
+              text: transcribePrompt,
             },
             {
               type: "input_audio",
@@ -232,7 +251,22 @@ Deno.serve(async (req) => {
 
   if (!orRes.ok) {
     const errText = await orRes.text();
-    console.error("OpenRouter error", orRes.status, errText);
+    logAiError({
+      event: "ai.error",
+      function: "transcribe",
+      phase: "transcribe",
+      model,
+      thought_id: thoughtId,
+      user_id: user.id,
+      error: {
+        message: "OpenRouter transcription request failed",
+        http_status: orRes.status,
+        kind: "openrouter_http",
+      },
+      response_summary: {
+        body_preview: truncateForLog(errText, 400),
+      },
+    });
     await supabase
       .from("thoughts")
       .update({ transcription_status: "failed" })
@@ -246,12 +280,41 @@ Deno.serve(async (req) => {
   const transcript = orData.choices?.[0]?.message?.content?.trim() ?? "";
 
   if (!transcript) {
+    logAiError({
+      event: "ai.error",
+      function: "transcribe",
+      phase: "transcribe",
+      model,
+      thought_id: thoughtId,
+      user_id: user.id,
+      error: {
+        message: "Empty transcript from model",
+        kind: "empty_transcript",
+      },
+      response_summary: {
+        latency_ms: Date.now() - transcribeStarted,
+      },
+    });
     await supabase
       .from("thoughts")
       .update({ transcription_status: "failed" })
       .eq("id", thoughtId);
     return jsonResponse({ error: "Empty transcript" }, 502);
   }
+
+  logAiInfo({
+    event: "ai.response.complete",
+    function: "transcribe",
+    phase: "transcribe",
+    model,
+    thought_id: thoughtId,
+    user_id: user.id,
+    response_summary: {
+      transcript_chars: transcript.length,
+      transcript_preview: truncateForLog(transcript),
+      latency_ms: Date.now() - transcribeStarted,
+    },
+  });
 
   const { error: updateError } = await supabase
     .from("thoughts")
@@ -281,6 +344,7 @@ Deno.serve(async (req) => {
     openrouterKey,
     model: topicModel,
     httpReferer: topicReferer ?? undefined,
+    callerFunction: "transcribe",
   });
 
   const topics = "topics" in topicResult ? topicResult.topics : undefined;
