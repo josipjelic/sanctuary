@@ -1,7 +1,13 @@
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
 import { colors, spacing, typography } from "@/lib/theme";
 import type { ThoughtListPreview } from "@/types/thoughtList";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 import { Card } from "./Card";
 import { Topic } from "./Topic";
@@ -9,14 +15,19 @@ import { Topic } from "./Topic";
 interface ThoughtListCardProps {
   item: ThoughtListPreview;
   style?: StyleProp<ViewStyle>;
+  onPress?: () => void;
 }
 
-export function ThoughtListCard({ item, style }: ThoughtListCardProps) {
+export function ThoughtListCard({
+  item,
+  style,
+  onPress,
+}: ThoughtListCardProps) {
   const isPending =
     item.transcription_status === "pending" || item.body.trim() === "";
   const topicPending = item.tagging_status === "pending";
 
-  return (
+  const card = (
     <Card style={[styles.card, style]} testID={`thought-row-${item.id}`}>
       <Text
         style={[styles.bodyText, isPending && styles.bodyTextPending]}
@@ -44,6 +55,20 @@ export function ThoughtListCard({ item, style }: ThoughtListCardProps) {
       </Text>
     </Card>
   );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => pressed && styles.pressed}
+        accessibilityRole="button"
+      >
+        {card}
+      </Pressable>
+    );
+  }
+
+  return card;
 }
 
 const styles = StyleSheet.create({
@@ -69,5 +94,8 @@ const styles = StyleSheet.create({
     ...typography.labelMd,
     color: colors.outlineVariant,
     marginTop: spacing.s2,
+  },
+  pressed: {
+    opacity: 0.7,
   },
 });

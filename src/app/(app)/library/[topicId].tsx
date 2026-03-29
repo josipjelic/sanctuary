@@ -3,7 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { colors, spacing, typography } from "@/lib/theme";
 import type { ThoughtListPreview } from "@/types/thoughtList";
 import { useNavigation } from "@react-navigation/native";
-import { useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   useCallback,
   useEffect,
@@ -45,6 +45,7 @@ export default function LibraryTopicDetailScreen() {
   }>().topicId;
   const topicId = typeof rawTopicId === "string" ? rawTopicId : rawTopicId?.[0];
   const navigation = useNavigation();
+  const router = useRouter();
   const [topicStatus, setTopicStatus] = useState<
     "pending" | "found" | "missing"
   >("pending");
@@ -111,6 +112,14 @@ export default function LibraryTopicDetailScreen() {
     }
   }, [topicName, loadThoughtsInitial]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (topicName) {
+        loadThoughtsInitial();
+      }
+    }, [topicName, loadThoughtsInitial]),
+  );
+
   async function handleLoadMore() {
     if (!topicName || loadingMore || !hasMore) return;
     setLoadingMore(true);
@@ -152,7 +161,12 @@ export default function LibraryTopicDetailScreen() {
       <FlatList
         data={thoughts}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <ThoughtListCard item={item} />}
+        renderItem={({ item }) => (
+          <ThoughtListCard
+            item={item}
+            onPress={() => router.push(`/inbox/${item.id}`)}
+          />
+        )}
         contentContainerStyle={
           thoughts.length === 0 ? styles.emptyContainer : styles.listContent
         }

@@ -2,7 +2,8 @@ import { Card, ThoughtListCard } from "@/components";
 import { supabase } from "@/lib/supabase";
 import { colors, spacing, typography } from "@/lib/theme";
 import type { ThoughtListPreview } from "@/types/thoughtList";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -40,6 +41,7 @@ function SkeletonRow() {
 }
 
 export default function InboxScreen() {
+  const router = useRouter();
   const [thoughts, setThoughts] = useState<InboxThought[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -59,9 +61,11 @@ export default function InboxScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    loadInitial();
-  }, [loadInitial]);
+  useFocusEffect(
+    useCallback(() => {
+      loadInitial();
+    }, [loadInitial]),
+  );
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -105,7 +109,12 @@ export default function InboxScreen() {
       <FlatList
         data={thoughts}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <ThoughtListCard item={item} />}
+        renderItem={({ item }) => (
+          <ThoughtListCard
+            item={item}
+            onPress={() => router.push(`/inbox/${item.id}`)}
+          />
+        )}
         contentContainerStyle={
           thoughts.length === 0 ? styles.emptyContainer : styles.listContent
         }
