@@ -1,14 +1,14 @@
 ---
 id: "020"
 title: "Document AI logging visibility and privacy in API / ops notes"
-status: "todo"
+status: "completed"
 area: "docs"
 agent: "@documentation-writer"
 priority: "normal"
 created_at: "2026-03-30"
 due_date: null
-started_at: null
-completed_at: null
+started_at: "2026-03-30"
+completed_at: "2026-03-30"
 prd_refs: ["FR-012", "FR-013", "FR-016"]
 blocks: []
 blocked_by: ["019"]
@@ -22,8 +22,8 @@ Primary file: `docs/technical/API.md`. Add a **brief ops note** elsewhere only i
 
 ## Acceptance Criteria
 
-- [ ] `docs/technical/API.md` describes logging for transcribe / assign-topics (or points to DECISIONS/ARCHITECTURE for full spec) including privacy constraints
-- [ ] Any short ops pointer is consistent with #018/#019 and does not duplicate PRD.md
+- [x] `docs/technical/API.md` describes logging for transcribe / assign-topics (or points to DECISIONS/ARCHITECTURE for full spec) including privacy constraints
+- [x] Any short ops pointer is consistent with #018/#019 and does not duplicate PRD.md
 - [ ] PR reviewed with #019 implementation
 
 ## Technical Notes
@@ -35,3 +35,4 @@ Primary file: `docs/technical/API.md`. Add a **brief ops note** elsewhere only i
 | Date | Agent / Human | Event |
 |------|--------------|-------|
 | 2026-03-30 | @project-manager | Task created |
+| 2026-03-30 | @documentation-writer | API.md observability section; task marked completed |
