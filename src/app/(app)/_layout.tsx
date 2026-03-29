@@ -14,7 +14,7 @@ export default function AppLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        animation: "fade",
+        animation: "shift",
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopWidth: 0,
