@@ -1,3 +1,4 @@
+import { Button } from "@/components";
 import { useAuth } from "@/hooks/useAuth";
 import {
   buildThoughtPayload,
@@ -25,6 +26,7 @@ import {
   ActivityIndicator,
   Animated,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -78,7 +80,7 @@ function startOfLocalDay(): Date {
 }
 
 export default function QuickCaptureScreen() {
-  const { session } = useAuth();
+  const { session, signOut } = useAuth();
   const { width } = useWindowDimensions();
   const audioRecorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(audioRecorder, 250);
@@ -100,6 +102,8 @@ export default function QuickCaptureScreen() {
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
 
   const [todayCount, setTodayCount] = useState<number | null>(null);
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const successOpacity = useRef(new Animated.Value(0)).current;
   const [successVisible, setSuccessVisible] = useState(false);
@@ -372,6 +376,16 @@ export default function QuickCaptureScreen() {
 
   const micIconSize = Math.round(micSize * 0.28);
 
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } finally {
+      setSigningOut(false);
+      setSettingsVisible(false);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <KeyboardAvoidingView
@@ -399,17 +413,22 @@ export default function QuickCaptureScreen() {
               </View>
               <Text style={styles.brandMark}>Sanctuary</Text>
             </View>
-            <View
-              style={styles.headerIconSlot}
-              accessibilityElementsHidden
-              importantForAccessibility="no-hide-descendants"
+            <Pressable
+              style={({ pressed }) => [
+                styles.headerIconSlot,
+                pressed && styles.headerIconSlotPressed,
+              ]}
+              onPress={() => setSettingsVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Open settings"
+              testID="settings-button"
             >
               <Ionicons
                 name="settings-outline"
                 size={22}
                 color={colors.primary}
               />
-            </View>
+            </Pressable>
           </View>
 
           <View style={styles.heroBlock}>
@@ -580,6 +599,58 @@ export default function QuickCaptureScreen() {
           <Text style={styles.successText}>Captured.</Text>
         </Animated.View>
       )}
+
+      <Modal
+        visible={settingsVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSettingsVisible(false)}
+      >
+        <Pressable
+          style={styles.settingsModalBackdrop}
+          onPress={() => setSettingsVisible(false)}
+          accessibilityLabel="Close settings"
+        >
+          <Pressable
+            style={styles.settingsModalSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.settingsModalTitle}>Settings</Text>
+            <Text style={styles.settingsModalHint}>
+              Sign out on this device. Your captures stay in your account until
+              you delete them.
+            </Text>
+            <View style={styles.settingsModalActions}>
+              <Button
+                label="Cancel"
+                variant="secondary"
+                onPress={() => setSettingsVisible(false)}
+                disabled={signingOut}
+                testID="settings-cancel"
+              />
+              <TouchableOpacity
+                onPress={() => void handleSignOut()}
+                disabled={signingOut}
+                style={[
+                  styles.signOutButton,
+                  signingOut && styles.signOutButtonDisabled,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Sign out"
+                accessibilityState={{ disabled: signingOut }}
+                testID="settings-sign-out"
+                activeOpacity={0.9}
+              >
+                {signingOut ? (
+                  <ActivityIndicator color={colors.onError} />
+                ) : (
+                  <Text style={styles.signOutLabel}>Sign out</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -613,6 +684,55 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+  },
+  headerIconSlotPressed: {
+    backgroundColor: colors.surfaceContainerHigh,
+  },
+  settingsModalBackdrop: {
+    flex: 1,
+    backgroundColor: `${colors.onSurface}66`,
+    justifyContent: "flex-end",
+  },
+  settingsModalSheet: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    padding: spacing.s8,
+    paddingBottom: spacing.s12,
+    gap: spacing.s4,
+  },
+  settingsModalTitle: {
+    ...typography.headlineMd,
+    color: colors.onSurface,
+  },
+  settingsModalHint: {
+    ...typography.bodyLg,
+    color: colors.secondary,
+    marginBottom: spacing.s2,
+  },
+  settingsModalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: spacing.s4,
+    marginTop: spacing.s6,
+  },
+  signOutButton: {
+    paddingVertical: spacing.s4,
+    paddingHorizontal: spacing.s8,
+    borderRadius: radius.full,
+    backgroundColor: colors.error,
+    minWidth: 120,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  signOutButtonDisabled: {
+    opacity: 0.4,
+  },
+  signOutLabel: {
+    ...typography.bodyLg,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: colors.onError,
   },
   avatarWrap: {
     width: 40,
