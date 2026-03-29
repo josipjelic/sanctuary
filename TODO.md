@@ -13,7 +13,10 @@
 
 ## Up Next (prioritized)
 
-*(nothing queued — pull next item from Backlog)*
+- [ ] #018 — AI I/O observability via Supabase logging: architecture + ADR/DECISIONS + ARCHITECTURE [area: infra] → [.tasks/018-ai-io-observability-architecture.md](.tasks/018-ai-io-observability-architecture.md)
+- [ ] #019 — Instrument transcribe, assign-topics, shared OpenRouter code with structured logging; never log audio bodies [area: backend] → [.tasks/019-edge-function-logging-instrumentation.md](.tasks/019-edge-function-logging-instrumentation.md)
+- [ ] #020 — Update API.md (and brief ops note if appropriate) for logging visibility and privacy [area: docs] → [.tasks/020-api-docs-logging-privacy.md](.tasks/020-api-docs-logging-privacy.md)
+- [ ] #021 — Tests asserting logging omits audio and matches expected structure where testable [area: qa] → [.tasks/021-logging-privacy-tests.md](.tasks/021-logging-privacy-tests.md)
 
 ---
 
