@@ -86,7 +86,7 @@ function transcriptionUserPrompt(languageCode: string | null): string {
     return "Transcribe this audio verbatim. Reply with only the spoken words, no commentary.";
   }
   const name = TRANSCRIPTION_LANG_NAMES[languageCode] ?? languageCode;
-  return `The speech is in ${name}. Transcribe this audio verbatim in that language using its normal writing system. Reply with only the spoken words, no commentary.`;
+  return `The speech is in ${name} language. Transcribe this audio verbatim in that language using its normal writing system. Reply with only the spoken words, no commentary.`;
 }
 
 function audioFormatFromMime(mime: string, filename: string): string {
