@@ -2,7 +2,7 @@
   "expo": {
     "name": "Sanctuary",
     "slug": "sanctuary",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "sanctuary",
@@ -30,7 +30,7 @@
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "package": "com.context.hr.sanctuary",
-      "runtimeVersion": "1.0.0"
+      "runtimeVersion": "1.0.1"
     },
     "web": {
       "bundler": "metro",
