@@ -1,14 +1,14 @@
 ---
 id: "019"
 title: "Instrument edge functions with structured AI I/O logging (no audio bodies)"
-status: "todo"
+status: "completed"
 area: "backend"
 agent: "@backend-developer"
 priority: "normal"
 created_at: "2026-03-30"
 due_date: null
 started_at: null
-completed_at: null
+completed_at: "2026-03-30"
 prd_refs: ["FR-012", "FR-013", "FR-016"]
 blocks: ["020", "021"]
 blocked_by: ["018"]
@@ -22,10 +22,10 @@ Scope includes `transcribe`, `assign-topics`, and **shared** OpenRouter / topic-
 
 ## Acceptance Criteria
 
-- [ ] `transcribe` and `assign-topics` (and shared modules they use) emit structured logs matching the #018 spec
-- [ ] No logging of audio bytes, base64 audio, or full multipart bodies containing sound
-- [ ] Text/JSON AI responses logged in a redacted or truncated form per #018 (if full content is excluded by policy)
-- [ ] Relevant tests passing (`pnpm test`, lint, typecheck as required by project conventions)
+- [x] `transcribe` and `assign-topics` (and shared modules they use) emit structured logs matching the #018 spec
+- [x] No logging of audio bytes, base64 audio, or full multipart bodies containing sound
+- [x] Text/JSON AI responses logged in a redacted or truncated form per #018 (if full content is excluded by policy)
+- [x] Relevant tests passing (`pnpm test`, lint, typecheck as required by project conventions)
 - [ ] Implementation merged only after review; documentation tasks #020/#021 can proceed
 
 ## Technical Notes
@@ -38,3 +38,4 @@ Scope includes `transcribe`, `assign-topics`, and **shared** OpenRouter / topic-
 | Date | Agent / Human | Event |
 |------|--------------|-------|
 | 2026-03-30 | @project-manager | Task created |
+| 2026-03-30 | @backend-developer | Implemented `_shared/ai-log.ts`, instrumented `transcribe`, `assign-topics` shared OpenRouter path; API.md pointer; tests/lint/typecheck run |
