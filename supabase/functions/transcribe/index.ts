@@ -34,6 +34,61 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+/** Keep in sync with `TRANSCRIPTION_LANGUAGE_OPTIONS` in `src/lib/transcriptionLanguage.ts` (codes only). */
+const TRANSCRIPTION_LANG_NAMES: Record<string, string> = {
+  auto: "Auto-detect",
+  en: "English",
+  es: "Spanish",
+  fr: "French",
+  de: "German",
+  it: "Italian",
+  pt: "Portuguese",
+  nl: "Dutch",
+  pl: "Polish",
+  ru: "Russian",
+  uk: "Ukrainian",
+  hr: "Croatian",
+  sr: "Serbian",
+  bs: "Bosnian",
+  sl: "Slovenian",
+  cs: "Czech",
+  sk: "Slovak",
+  ro: "Romanian",
+  sv: "Swedish",
+  da: "Danish",
+  nb: "Norwegian",
+  fi: "Finnish",
+  el: "Greek",
+  tr: "Turkish",
+  ar: "Arabic",
+  he: "Hebrew",
+  hi: "Hindi",
+  ja: "Japanese",
+  ko: "Korean",
+  zh: "Chinese",
+  th: "Thai",
+  vi: "Vietnamese",
+  id: "Indonesian",
+  ms: "Malay",
+  tl: "Filipino",
+  sw: "Swahili",
+};
+
+function normalizeTranscriptionLanguage(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const t = raw.trim().toLowerCase();
+  if (t.length === 0 || t.length > 12) return null;
+  return TRANSCRIPTION_LANG_NAMES[t] !== undefined ? t : null;
+}
+
+function transcriptionUserPrompt(languageCode: string | null): string {
+  if (!languageCode || languageCode === "auto") {
+    return "Transcribe this audio verbatim. Reply with only the spoken words, no commentary.";
+  }
+  const name = TRANSCRIPTION_LANG_NAMES[languageCode] ?? languageCode;
+  return `The speech is in ${name}. Transcribe this audio verbatim in that language using its normal writing system. Reply with only the spoken words, no commentary.`;
+}
+
 function audioFormatFromMime(mime: string, filename: string): string {
   const m = mime.toLowerCase();
   if (m.includes("webm")) return "webm";
@@ -91,6 +146,9 @@ Deno.serve(async (req) => {
 
   const thoughtId = formData.get("thought_id");
   const audio = formData.get("audio");
+  const transcriptionLanguage = normalizeTranscriptionLanguage(
+    formData.get("transcription_language"),
+  );
 
   if (!thoughtId || typeof thoughtId !== "string") {
     return jsonResponse({ error: "thought_id required" }, 400);
@@ -157,7 +215,7 @@ Deno.serve(async (req) => {
           content: [
             {
               type: "text",
-              text: "Transcribe this audio verbatim. Reply with only the spoken words, no commentary.",
+              text: transcriptionUserPrompt(transcriptionLanguage),
             },
             {
               type: "input_audio",

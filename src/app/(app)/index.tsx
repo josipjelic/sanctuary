@@ -8,6 +8,13 @@ import {
 } from "@/lib/capture";
 import { supabase } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
+import {
+  TRANSCRIPTION_LANGUAGE_OPTIONS,
+  type TranscriptionLanguageCode,
+  getTranscriptionLanguage,
+  labelForTranscriptionCode,
+  setTranscriptionLanguage,
+} from "@/lib/transcriptionLanguage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -103,6 +110,9 @@ export default function QuickCaptureScreen() {
 
   const [todayCount, setTodayCount] = useState<number | null>(null);
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
+  const [transcriptionLanguageCode, setTranscriptionLanguageCode] =
+    useState<TranscriptionLanguageCode>("auto");
   const [signingOut, setSigningOut] = useState(false);
 
   const successOpacity = useRef(new Animated.Value(0)).current;
@@ -131,6 +141,10 @@ export default function QuickCaptureScreen() {
       void loadTodayCount();
     }, [loadTodayCount]),
   );
+
+  useEffect(() => {
+    void getTranscriptionLanguage().then(setTranscriptionLanguageCode);
+  }, []);
 
   useEffect(() => {
     const recorder = audioRecorder;
@@ -353,6 +367,7 @@ export default function QuickCaptureScreen() {
       } as unknown as Blob);
     }
     formData.append("thought_id", thoughtId);
+    formData.append("transcription_language", transcriptionLanguageCode);
     const { error } = await supabase.functions.invoke("transcribe", {
       body: formData,
     });
@@ -616,6 +631,35 @@ export default function QuickCaptureScreen() {
             onPress={(e) => e.stopPropagation()}
           >
             <Text style={styles.settingsModalTitle}>Settings</Text>
+            <Pressable
+              style={({ pressed }) => [
+                styles.settingsLanguageRow,
+                pressed && styles.settingsLanguageRowPressed,
+              ]}
+              onPress={() => setLanguagePickerVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Transcription language"
+              testID="settings-transcription-language"
+            >
+              <View style={styles.settingsLanguageTextBlock}>
+                <Text style={styles.settingsLanguageLabel}>
+                  Voice transcription language
+                </Text>
+                <Text style={styles.settingsLanguageHint}>
+                  For AI transcription only. Does not change the app interface.
+                </Text>
+              </View>
+              <View style={styles.settingsLanguageValueRow}>
+                <Text style={styles.settingsLanguageValue} numberOfLines={1}>
+                  {labelForTranscriptionCode(transcriptionLanguageCode)}
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.secondary}
+                />
+              </View>
+            </Pressable>
             <Text style={styles.settingsModalHint}>
               Sign out on this device. Your captures stay in your account until
               you delete them.
@@ -648,6 +692,78 @@ export default function QuickCaptureScreen() {
                 )}
               </TouchableOpacity>
             </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={languagePickerVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setLanguagePickerVisible(false)}
+      >
+        <Pressable
+          style={styles.settingsModalBackdrop}
+          onPress={() => setLanguagePickerVisible(false)}
+          accessibilityLabel="Close language list"
+        >
+          <Pressable
+            style={styles.languagePickerSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.languagePickerTitle}>
+              Transcription language
+            </Text>
+            <ScrollView
+              style={styles.languagePickerList}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+            >
+              {TRANSCRIPTION_LANGUAGE_OPTIONS.map((opt) => {
+                const selected = opt.code === transcriptionLanguageCode;
+                return (
+                  <Pressable
+                    key={opt.code}
+                    style={({ pressed }) => [
+                      styles.languageOptionRow,
+                      pressed && styles.languageOptionRowPressed,
+                      selected && styles.languageOptionRowSelected,
+                    ]}
+                    onPress={() => {
+                      setTranscriptionLanguageCode(opt.code);
+                      void setTranscriptionLanguage(opt.code);
+                      setLanguagePickerVisible(false);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={opt.label}
+                    testID={`transcription-lang-${opt.code}`}
+                  >
+                    <Text
+                      style={[
+                        styles.languageOptionLabel,
+                        selected && styles.languageOptionLabelSelected,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                    {selected ? (
+                      <Ionicons
+                        name="checkmark"
+                        size={22}
+                        color={colors.primary}
+                      />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <Button
+              label="Done"
+              variant="secondary"
+              onPress={() => setLanguagePickerVisible(false)}
+              testID="transcription-lang-done"
+            />
           </Pressable>
         </Pressable>
       </Modal>
@@ -704,6 +820,86 @@ const styles = StyleSheet.create({
   settingsModalTitle: {
     ...typography.headlineMd,
     color: colors.onSurface,
+  },
+  settingsLanguageRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.s4,
+    paddingVertical: spacing.s4,
+    paddingHorizontal: spacing.s2,
+    marginHorizontal: -spacing.s2,
+    borderRadius: radius.md,
+  },
+  settingsLanguageRowPressed: {
+    backgroundColor: colors.surfaceContainerHigh,
+  },
+  settingsLanguageTextBlock: {
+    flex: 1,
+    gap: 4,
+  },
+  settingsLanguageLabel: {
+    ...typography.bodyLg,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: colors.onSurface,
+  },
+  settingsLanguageHint: {
+    ...typography.labelMd,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.secondary,
+  },
+  settingsLanguageValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    maxWidth: "42%",
+  },
+  settingsLanguageValue: {
+    ...typography.bodyLg,
+    color: colors.secondary,
+    flexShrink: 1,
+    textAlign: "right",
+  },
+  languagePickerSheet: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    padding: spacing.s8,
+    paddingBottom: spacing.s12,
+    maxHeight: "78%",
+  },
+  languagePickerTitle: {
+    ...typography.headlineMd,
+    color: colors.onSurface,
+    marginBottom: spacing.s4,
+  },
+  languagePickerList: {
+    flexGrow: 0,
+    marginBottom: spacing.s4,
+  },
+  languageOptionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.s4,
+    paddingHorizontal: spacing.s4,
+    borderRadius: radius.md,
+  },
+  languageOptionRowPressed: {
+    backgroundColor: colors.surfaceContainerHigh,
+  },
+  languageOptionRowSelected: {
+    backgroundColor: colors.surfaceContainerHigh,
+  },
+  languageOptionLabel: {
+    ...typography.bodyLg,
+    color: colors.onSurface,
+    flex: 1,
+  },
+  languageOptionLabelSelected: {
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: colors.primary,
   },
   settingsModalHint: {
     ...typography.bodyLg,
