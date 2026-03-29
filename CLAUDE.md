@@ -1,13 +1,13 @@
 # Sanctuary — Claude Instructions
 
 > Stack: Expo (React Native) · TypeScript · Supabase (PostgreSQL) · OpenRouter · pnpm
-> Last updated: 2026-03-28
+> Last updated: 2026-03-30
 
 ## Project Context
 
 Sanctuary is a mobile app (React Native/Expo) that serves as a digital sanctuary for personal thought capture and reflection. Users capture thoughts as text or voice recordings; AI (via OpenRouter) transcribes and auto-tags them. The app also supports journaling, daily check-ins, and mood tracking — built for individuals seeking calm and clarity in a distraction-free, serene interface.
 
-**Tech stack summary**: Expo (React Native) · Supabase (auth + PostgreSQL + storage) · OpenRouter (AI transcription + tagging) · pnpm
+**Tech stack summary**: Expo (React Native) · Supabase (auth + PostgreSQL + edge functions; Storage unused for voice in v1) · OpenRouter (AI transcription + topics) · pnpm
 
 ---
 
@@ -54,12 +54,13 @@ These apply to all agents at all times. No exceptions without explicit human ins
 src/
   app/              # Expo Router screens and layouts
   components/       # Shared UI components
-  lib/              # Supabase client, OpenRouter client, utilities
+  contexts/         # e.g. AuthContext
+  lib/              # Supabase client, theme, utilities
   hooks/            # Custom React hooks
   types/            # TypeScript types and interfaces
 assets/             # Images, fonts, icons
 tests/
-  e2e/              # E2E tests (Detox or Maestro — TBD)
+  e2e/              # E2E tests — add with TODO #013–#014 (framework TBD: Detox or Maestro); directory/script not present yet
 docs/
   user/USER_GUIDE.md
   technical/        # ARCHITECTURE.md, API.md, DATABASE.md, DECISIONS.md
@@ -124,11 +125,11 @@ refactor/<description>
 ## Testing Conventions
 
 - **Unit / component tests**: Jest — colocated as `*.test.ts` / `*.test.tsx` next to source files
-- **E2E tests**: [TBD — Detox or Maestro] — in `tests/e2e/`
+- **E2E tests**: Not configured yet (TODO #013–#014). Planned location: `tests/e2e/`. Framework TBD (Detox or Maestro).
 - **Run unit**: `pnpm test`
-- **Run E2E**: `pnpm run test:e2e`
+- **Run E2E**: `pnpm run test:e2e` — **no script in `package.json` yet**; add when E2E lands
 - **Coverage target**: 80% for new features
-- E2E tests use screen-based selectors and `testID` props
+- E2E tests (when added) should use screen-based selectors and `testID` props
 
 ---
 

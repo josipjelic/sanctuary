@@ -11,7 +11,7 @@ Read by: All agents building or integrating with backend functionality.
 > **Backend**: Supabase (PostgreSQL + Auth + Storage + Edge Functions)
 > **Client**: `@supabase/supabase-js` — used directly in the mobile app and in edge functions
 > **Authentication**: Supabase JWT (managed by Supabase Auth). Pass the session token via the Supabase client — it is sent automatically as a Bearer token.
-> **Last updated**: 2026-03-28
+> **Last updated**: 2026-03-30
 
 ---
 
@@ -20,8 +20,8 @@ Read by: All agents building or integrating with backend functionality.
 Sanctuary does not have a traditional REST API server. The mobile app interacts with Supabase directly using the Supabase JS client for:
 - **Auth**: Sign up, sign in, sign out, password reset
 - **Database**: Direct table queries (filtered by RLS — users only see their own rows)
-- **Storage**: Upload/download voice recordings
-- **Edge Functions**: AI-powered endpoints (transcription + topic assignment, text-only topic assignment) that call OpenRouter server-side
+- **Edge Functions**: AI-powered endpoints — `transcribe` (multipart audio → transcript + topic assignment) and `assign-topics` (typed capture path). Both call OpenRouter server-side. **Voice audio is not stored in Supabase Storage** in v1; it is posted to `transcribe` and discarded after processing.
+- **Storage**: Available from Supabase for future features; not used for voice capture in v1.
 
 This document tracks the Edge Function endpoints. Standard Supabase client patterns are documented in the Supabase docs.
 
@@ -139,3 +139,4 @@ The `topics` field is present when topic assignment completes successfully insid
 | 2026-03-28 | Initial stub — edge function signatures defined |
 | 2026-03-28 | Implemented tag-thought edge function (task #008) |
 | 2026-03-28 | Replaced tag-thought with assign-topics; user_topics + thought_topics; transcribe runs topic assignment; thoughts.tags renamed to topics |
+| 2026-03-30 | Overview: voice path uses multipart to `transcribe` only — no Storage for recordings in v1 |

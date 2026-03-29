@@ -19,7 +19,7 @@
 
 ## Backlog
 
-- [ ] #010 — Build thought detail / journaling screen [area: mobile] → [.tasks/010-thought-detail-screen.md](.tasks/010-thought-detail-screen.md)
+- [ ] #010 — Complete thought detail / journaling (minimal screen shipped in inbox — see task) [area: mobile] → [.tasks/010-thought-detail-screen.md](.tasks/010-thought-detail-screen.md)
 - [ ] #012 — Build daily check-in screen [area: mobile] → [.tasks/012-daily-checkin-screen.md](.tasks/012-daily-checkin-screen.md)
 - [ ] #013 — E2E tests for authentication flow [area: qa] → [.tasks/013-e2e-auth-tests.md](.tasks/013-e2e-auth-tests.md)
 - [ ] #014 — E2E tests for thought capture flow [area: qa] → [.tasks/014-e2e-capture-tests.md](.tasks/014-e2e-capture-tests.md)

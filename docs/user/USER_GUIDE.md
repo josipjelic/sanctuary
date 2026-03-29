@@ -8,7 +8,7 @@ Read by: End users and agents needing to understand user-facing flows.
 
 # Sanctuary — User Guide
 
-> Last updated: 2026-03-28
+> Last updated: 2026-03-30
 > Version: 0.1.0 (pre-release — features documented as they ship)
 
 ---
@@ -17,81 +17,101 @@ Read by: End users and agents needing to understand user-facing flows.
 
 ### Creating an Account
 
-1. Open the Sanctuary app on your iOS or Android device
-2. Tap **Sign Up**
-3. Enter your email address and choose a password (minimum 8 characters)
-4. Tap **Create Account**
-5. Check your email for a verification link and tap it
-6. You're in — you'll be taken to the main capture screen
+1. Open the Sanctuary app on your iOS or Android device (or web preview, if you use it).
+2. Tap **Sign Up**.
+3. Enter your email address and choose a password (minimum 8 characters).
+4. Tap **Create Account**.
 
-**What to expect**: After signing up, you'll see the Quick Capture screen. Your inbox starts empty — ready for your first thought.
+**Email confirmation depends on your environment:**
+
+- **Production Supabase** (real beta / App Store builds): You may need to open the verification link in the email before you can sign in. If email confirmation is enabled in the project, follow the link from your inbox.
+- **Local development** (developer machines): Email confirmation is often **disabled** so you can sign in immediately without opening a link.
+
+If sign-in fails after sign-up, check with whoever runs the project whether confirmation is required for your build.
+
+**What to expect**: After you are signed in, you land on **Capture** (Quick Capture). Your **Thoughts** inbox starts empty until you save your first thought.
 
 #### Common Issues
 
-**"Email already in use"**
-An account with this email already exists. Tap **Log In** instead, or use "Forgot password" to regain access.
+**"Email already in use"**  
+An account with this email already exists. Tap **Log In** instead, or use **Forgot password** on the sign-in screen to reset access.
 
 ---
 
 ### Logging In
 
-1. Open Sanctuary
-2. Tap **Log In**
-3. Enter your email and password
-4. Tap **Sign In**
+1. Open Sanctuary.
+2. Tap **Log In** (or you may be taken to sign-in automatically if you are logged out).
+3. Enter your email and password.
+4. Tap **Sign In**.
 
-**Forgot your password?** Tap "Forgot password" on the login screen, enter your email, and check your inbox for a reset link.
+**Forgot your password?** On the sign-in screen, tap **Forgot password**, enter your email, and use the reset link Supabase sends (when configured).
 
 ---
 
 ## Features
 
-> Features are documented as they are built. Check back as the app grows.
+### Quick Capture (Capture tab)
 
-### Quick Capture
+The home tab is where you record or type thoughts.
 
-[Coming soon — documents after task #006 is complete]
+- **Voice**: Tap and hold the large microphone control to record. Release to stop; the app sends audio for transcription and assigns a **topic** automatically when processing finishes.
+- **Text**: Type in the field and tap **Capture** to save. Topics are assigned automatically in the background.
+- **Today’s captures**: A subtitle shows how many thoughts you captured today (when loaded).
+- **Recent thoughts**: Use the row that links toward your inbox to jump to recent items.
 
----
-
-### Thought Inbox
-
-[Coming soon — documents after task #009 is complete]
-
----
-
-### Thought Detail & Journaling
-
-[Coming soon — documents after task #010 is complete]
+Grant **microphone** permission when prompted, or enable it in the system Settings app for Sanctuary, or voice capture will not work.
 
 ---
 
-### Library
+### Thought Inbox (Thoughts tab)
 
-[Coming soon — documents after task #011 is complete]
+- Lists your thoughts **newest first**, with a short preview and **topic** chips when assigned.
+- **Pull down** to refresh (useful while transcription or topic assignment is still running).
+- **Tap a thought** to open the detail screen.
+
+---
+
+### Thought Detail
+
+Opens from the inbox when you tap a thought.
+
+- Read the **full** thought text (not truncated).
+- Tap **Edit** to change the main text, then **Save** or **Cancel** in the header.
+- **Topics** appear as chips for context; they are assigned by the app (you cannot edit them on this screen yet).
+- **Delete** removes the thought after you confirm. This cannot be undone.
+
+**Not in the app yet** on this screen: longer journal notes (`body_extended`), automatic debounced saving, AI reflection prompts, and the full “Reflection Space” layout from the design spec. See the product backlog if you are tracking upcoming work.
+
+---
+
+### Library (Library tab)
+
+Browse thoughts by **topic** (your personal topic list).
+
+- Open a **folder**-style card to see thoughts that belong to that topic.
+- Use **Manage lists** (or equivalent) to **add** a new topic to your catalog, or manage topics as implemented in your build.
+
+An “all thoughts” filter and daily check-in history on this screen are **not** implemented yet.
 
 ---
 
 ### Daily Check-in
 
-[Coming soon — documents after task #012 is complete]
+**Coming in a future release.** The database supports daily check-ins, but there is no check-in screen in the app yet.
 
 ---
 
-## Account Settings
+## Settings and account
 
-### Changing Your Password
+There is **no separate Settings tab**. From the **Capture** screen, tap the **gear** icon in the header to open **Settings**.
 
-1. Go to **Settings** (tap your avatar or the settings icon)
-2. Tap **Change Password**
-3. Enter your current password, then your new password
-4. Tap **Save**
+In that sheet you can:
 
-### Logging Out
+- Choose **transcription language** (for voice — how the model is asked to interpret speech; options vary by build).
+- **Sign out** of Sanctuary.
 
-1. Go to **Settings**
-2. Tap **Log Out**
-3. Confirm
+**Changing your password** is not done inside this modal. Use **Forgot password** on the sign-in screen to receive a reset email when your Supabase project has reset emails configured.
 
 ---
 
@@ -101,9 +121,10 @@ An account with this email already exists. Tap **Log In** instead, or use "Forgo
 
 | Issue | Likely Cause | What to Do |
 |-------|-------------|------------|
-| "Session expired" on open | Supabase session timed out | Tap Log In and sign back in |
-| Voice recording not working | Microphone permission not granted | Go to phone Settings > Sanctuary > allow Microphone |
-| Thought saved but no topic showing | AI topic assignment is async — may take a few seconds | Wait a moment and pull to refresh |
+| "Session expired" on open | Supabase session timed out | Sign in again |
+| Voice recording not working | Microphone permission not granted | System Settings → Sanctuary → allow Microphone |
+| Thought saved but no topic yet | Topic assignment runs after save | Wait a few seconds and pull to refresh on the inbox |
+| Email never arrives after sign-up | Confirmation off in dev, or spam / wrong address | Check spam; ask your host whether confirmation is required |
 
 ### Getting Help
 

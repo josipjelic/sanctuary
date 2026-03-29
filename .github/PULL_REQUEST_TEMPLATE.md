@@ -31,9 +31,9 @@ Closes #
 
 ## Testing Done
 
-- [ ] Unit tests pass (`[npm test]`)
-- [ ] E2E tests pass (`[npm run test:e2e]`)
-- [ ] TypeScript check passes (`[npm run typecheck]`)
+- [ ] Unit tests pass (`pnpm test`)
+- [ ] E2E tests pass (`pnpm run test:e2e`) — **N/A until TODO #013/#014** (script not configured yet; skip this box)
+- [ ] TypeScript check passes (`pnpm run typecheck`)
 - [ ] Manually tested the happy path
 - [ ] Manually tested edge cases and error states
 - [ ] No regressions in related areas

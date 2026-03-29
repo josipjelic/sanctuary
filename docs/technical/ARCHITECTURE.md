@@ -12,7 +12,7 @@ Read by: All agents. Always read before making implementation decisions.
 
 # System Architecture
 
-> Last updated: 2026-03-28 (Library tab + topic folder grid; user-scoped topics + assign-topics pipeline)
+> Last updated: 2026-03-30 (docs aligned with code: state mgmt, routes, edge DB client)
 > Version: 0.1.0
 
 ---
@@ -30,7 +30,7 @@ PRD v1.1 documents user-scoped topics and the transcribe/assign-topics pipeline.
 
 ## Overview
 
-Sanctuary is a React Native mobile application (built with Expo) backed by Supabase as a managed backend-as-a-service. The mobile app communicates directly with Supabase for authentication, database reads/writes, and file storage. AI capabilities (voice transcription and topic assignment) are handled by Supabase Edge Functions that proxy to OpenRouter, keeping API credentials server-side.
+Sanctuary is a React Native mobile application (built with Expo) backed by Supabase as a managed backend-as-a-service. The mobile app communicates directly with Supabase for authentication, database reads/writes, and edge function invocation. **Voice audio is not stored in Supabase Storage** in v1 — recordings are sent as multipart uploads to the `transcribe` function and discarded after processing. AI capabilities (transcription and topic assignment) run in Supabase Edge Functions that proxy to OpenRouter, keeping API credentials server-side.
 
 The architecture prioritizes simplicity and fast iteration: there is no custom API server. All business logic runs either in the mobile app or in Supabase Edge Functions. Row Level Security (RLS) on all Supabase tables ensures each user can only access their own data.
 
@@ -47,7 +47,7 @@ The architecture prioritizes simplicity and fast iteration: there is no custom A
 +------------------------------------------+
 |              Supabase                     |
 |                                           |
-|  Auth  |  PostgreSQL  |  Storage          |
+|  Auth  |  PostgreSQL  |  Storage (unused for voice in v1) |
 |                                           |
 |  Edge Functions                           |
 |    +-- transcribe (voice -> text + topics)|
@@ -82,7 +82,7 @@ The architecture prioritizes simplicity and fast iteration: there is no custom A
 | Backend-as-a-service | Supabase | Latest | Auth, PostgreSQL, storage, edge functions — no custom server needed |
 | Database | PostgreSQL | 15 (managed by Supabase) | Relational, RLS support, well-understood |
 | AI proxy | OpenRouter | Latest | Model-flexible — swap transcription/tagging models without code changes |
-| State management | TBD (Zustand or React Context) | TBD | Lightweight; to be decided in task #004 |
+| State management | React Context + local `useState` | — | Task #004 delivered the design system only; `AuthContext` holds session; screens load Supabase data in component state / effects — no Zustand or React Query yet |
 | Formatter + Linter | Biome | Latest | All-in-one, fast |
 | Unit tests | Jest | 29.x | Standard for React Native |
 
@@ -143,29 +143,37 @@ Exports `colors`, `typography`, `shadows`, `spacing`, `radius`, and `animation` 
 
 ```
 src/
-  app/              # Expo Router screens and layouts (file-based routing)
-    _layout.tsx     # Root layout — wraps the entire navigator stack
-    index.tsx       # Home screen (maps to "/" route)
-  components/       # Shared UI components (empty at init; populated per task)
-  lib/
-    supabase.ts     # Supabase JS client singleton, initialized with AsyncStorage
-  hooks/            # Custom React hooks (empty at init)
-  types/            # TypeScript types and interfaces (empty at init)
-assets/             # Static images, icons, fonts
-tests/
-  e2e/              # E2E tests (framework TBD — Detox or Maestro)
+  app/
+    _layout.tsx       # Root: fonts, splash, AuthProvider, Stack (auth + app groups)
+    (auth)/           # sign-in, sign-up, forgot-password
+    (app)/            # Authenticated tabs: Capture, Thoughts (inbox), Library
+      _layout.tsx     # Tab navigator
+      index.tsx       # Quick Capture (Capture tab)
+      inbox/          # Stack: list + [thoughtId] thought detail (modal)
+      library/        # Stack: topic grid + [topicId] thought list
+  components/       # Shared UI (Button, Card, Topic, ThoughtListCard, …)
+  contexts/         # AuthContext (session + signOut)
+  hooks/            # useAuth, etc.
+  lib/              # supabase.ts, theme.ts, capture.ts, logger, …
+  types/            # thought.ts, thoughtList.ts, …
+assets/             # Static images, icons (fonts loaded via Google Fonts packages)
 ```
+
+**E2E tests**: Intended location is `tests/e2e/` at the repo root (see TODO #013–#014). That directory and `pnpm run test:e2e` are **not** set up yet.
+
+**Unit tests**: Jest, colocated as `*.test.ts` / `*.test.tsx` next to sources (see `package.json` `pnpm test`).
 
 ### Navigation
 
-Navigation is handled by **Expo Router v6** using file-based routing. The `src/app/` directory is the route root, following the Expo Router convention for a `src/`-based layout.
+Navigation is handled by **Expo Router v6** using file-based routing. The `src/app/` directory is the route root.
 
-- `src/app/_layout.tsx` — Root layout. Renders a `<Stack>` navigator. Also imports the URL polyfill (`react-native-url-polyfill/auto`) required by the Supabase client.
-- `src/app/index.tsx` — Entry screen, maps to the `/` route. Shown immediately after the app loads.
+- `src/app/_layout.tsx` — Root layout: font loading, splash screen, `AuthProvider`, and a root `<Stack>` with `headerShown: false`. Imports the URL polyfill (`react-native-url-polyfill/auto`) in the same module tree as the Supabase client.
+- `src/app/(auth)/` — Unauthenticated stack (sign-in, sign-up, forgot password).
+- `src/app/(app)/_layout.tsx` — After login, a **tab** navigator with **Capture**, **Thoughts**, and **Library**.
+- `src/app/(app)/inbox/_layout.tsx` — Nested stack: inbox list → `inbox/[thoughtId]` (thought detail as a modal).
+- Route params (e.g. `thoughtId`, `topicId`) are typed inline with `useLocalSearchParams` at each screen — there is no separate `src/navigation/types.ts`.
 
-Deep linking is configured via `app.json` (`scheme: "sanctuary"`) and the `expo-router` plugin. All navigable screens must declare a deep link route once they are implemented (task #005 and beyond).
-
-Route params will be typed in `src/navigation/types.ts` once the full navigation hierarchy is defined (task #005).
+Deep linking is configured via `app.json` (`scheme: "sanctuary"`) and the `expo-router` plugin.
 
 #### Quick Capture (home tab)
 
@@ -179,6 +187,11 @@ Route params will be typed in `src/navigation/types.ts` once the full navigation
 - **Data**: Topics load from `user_topics` (ordered by `name`). Per-topic thought counts aggregate client-side from `thoughts.topics`. **Add topic** inserts into `user_topics` using `src/lib/normalizeTopicLabel.ts`, kept in sync with `supabase/functions/_shared/assign-topics.ts`.
 - **Deferred vs PRD**: “All thoughts” library filter and **daily check-in history** ([FR-042](PRD.md)) are not implemented on this screen yet.
 
+#### Thoughts (inbox) and detail
+
+- **Inbox**: `src/app/(app)/inbox/index.tsx` — paginated list of thoughts, pull-to-refresh; tap opens detail.
+- **Detail (minimal)**: `src/app/(app)/inbox/[thoughtId].tsx` — full body, read-only topic chips, manual edit/save for `body`, delete with confirmation. Journaling (`body_extended`), debounced auto-save, reflection prompt, and full Reflection Space UI are **backlog** (TODO #010 — see `.tasks/010-thought-detail-screen.md`).
+
 ### Supabase Client
 
 The Supabase JS client is initialized in `src/lib/supabase.ts` as a module-level singleton. Key configuration:
@@ -190,9 +203,11 @@ The Supabase JS client is initialized in `src/lib/supabase.ts` as a module-level
 
 ### State Management
 
-State management strategy is **TBD** — to be decided in task #004. Candidates are Zustand (for global app state) and React Context (for simpler shared state). Server data will use React Query once task #004 is resolved.
+- **Global auth**: `src/contexts/AuthContext.tsx` + `useAuth()` — Supabase session, loading state, and `signOut`.
+- **Server-backed UI**: Each screen loads data with the Supabase client (`useEffect`, `useFocusEffect`, or callbacks) and holds rows in local `useState`. There is **no** React Query or SWR in the tree yet.
+- **Local UI**: Forms, modals, and recording state use `useState` / `useRef` as usual.
 
-Local UI state (form inputs, toggle open/closed) uses `useState` throughout. No global state library is introduced until task #004 is complete.
+Optional future additions (Zustand, TanStack Query) should be recorded in a new ADR if adopted.
 
 ---
 
@@ -231,8 +246,8 @@ Row Level Security is enabled on all user-data tables. The pattern is uniform ac
 Key rules:
 - The `user_id` column on every table is a `uuid` foreign key to `auth.users.id` with `ON DELETE CASCADE`.
 - INSERT policies use `WITH CHECK` (not `USING`) — this is a Supabase requirement for insert-time enforcement.
-- Edge functions use the Supabase **service role key** (never the anon key) for DB writes that must bypass RLS (e.g., updating `thoughts.body` after transcription). This key is stored as a Supabase project secret and is never exposed client-side.
-- The anon key used by the mobile app is safe to ship — it cannot bypass RLS.
+- **Edge functions `transcribe` and `assign-topics`** create a Supabase client with the **anon key** and forward the caller’s **`Authorization: Bearer <user_jwt>`** header. Database writes run **under the user’s identity**, so **RLS applies** — there is no service role on these paths in the current codebase. If a future function must bypass RLS (e.g. admin jobs), use the service role only in that function and document it here.
+- The anon key used by the mobile app is safe to ship — it cannot bypass RLS without a valid user JWT for permitted rows.
 
 ### Auth Configuration
 

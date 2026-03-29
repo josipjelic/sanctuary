@@ -1,6 +1,6 @@
 ---
 id: "010"
-title: "Build thought detail / journaling screen"
+title: "Complete thought detail / journaling screen"
 status: "todo"
 area: "mobile"
 agent: "@react-native-developer"
@@ -16,29 +16,37 @@ blocked_by: ["009", "008"]
 
 ## Description
 
-Build the Thought Detail screen, which opens when a user taps a thought in the inbox. It shows the full thought text, editable tags, a journaling expansion area (where the user can write a longer reflection), and an AI reflection prompt button. Edits are auto-saved (debounced). The user can delete the thought from this screen with a confirmation dialog.
+Finish the Thought Detail experience on top of the **minimal screen** already shipped at `src/app/(app)/inbox/[thoughtId].tsx` (opens from the Thoughts tab inbox). That route shows the full body, read-only **topic** chips (from denormalized `thoughts.topics`), manual edit/save for the main body, and delete with confirmation.
 
-## Acceptance Criteria
+Remaining work: journaling (`body_extended`), debounced auto-save, topic editing aligned with `user_topics` / `thought_topics`, AI reflection prompt via the `reflection-prompt` edge function (stubbed in `docs/technical/API.md`), Reflection Space styling per design system, and tests.
 
-- [ ] Full thought body displayed (not truncated)
-- [ ] Inline editable text area for expanding the thought into a journal entry (`body_extended` field)
-- [ ] Auto-save: changes debounced by 1s and synced to Supabase
-- [ ] Tags displayed as chips — tap to remove; text input to add new tags
-- [ ] Manual tag additions saved to `thoughts.tags`
-- [ ] "Get reflection prompt" button: calls Supabase edge function (or inline OpenRouter call) and displays a prompt inline
-- [ ] Delete button (with confirmation dialog): removes thought from Supabase, navigates back to inbox
-- [ ] Screen adheres to design system: Reflection Space component (60%+ viewport, xl padding, parchment)
-- [ ] Unit tests for auto-save debounce logic
+## Shipped (do not re-implement)
 
-## Technical Notes
+- [x] Full thought `body` displayed (not truncated)
+- [x] Manual edit flow for `body` (enter edit mode, Save/Cancel in header)
+- [x] Primary **topics** shown as read-only chips (`Topic` component)
+- [x] Delete with confirmation; navigates back after success
+- [x] Modal stack presentation from inbox (`inbox/_layout.tsx`)
 
-- Auto-save: use `useRef` for debounce timer, call `supabase.from('thoughts').update(...)` on change
-- The Reflection Space component is defined in the design system spec (`.assets/DESIGN.md` §5)
-- AI prompt: call edge function `reflection-prompt` with thought text; display as styled quote
-- Tag chips: inline tag editing — remove with tap, add with small `+` input that appears on tap
+## Remaining acceptance criteria
+
+- [ ] `body_extended`: inline area for longer journal reflection; persisted to `thoughts.body_extended`
+- [ ] Auto-save: debounce (~1s) and sync edits to Supabase (body and/or extended body per product choice)
+- [ ] Topic UX: align with catalog model — either read-only with clear copy, or controlled editing that updates `thought_topics` / `thoughts.topics` (not legacy “tags”)
+- [ ] “Get reflection prompt” button: `supabase.functions.invoke('reflection-prompt', …)` after the edge function exists; display inline
+- [ ] Reflection Space layout: `.assets/DESIGN.md` (Reflection Space — ~60%+ viewport, xl padding, parchment)
+- [ ] Unit tests for debounced auto-save (or equivalent persistence helper)
+
+## Technical notes
+
+- Auto-save: `useRef` debounce timer + `supabase.from('thoughts').update(...)`; avoid duplicate in-flight writes
+- Topics: see `docs/technical/DATABASE.md` and `_shared/assign-topics.ts` — v1 assigns one primary topic via AI; manual edits are out of scope unless explicitly specified in PRD
+- AI prompt: implement `supabase/functions/reflection-prompt` when building this task; keep `docs/technical/API.md` in sync
+- Do not reference `thoughts.tags` — column was renamed to **`topics`** (`text[]`)
 
 ## History
 
 | Date | Agent / Human | Event |
 |------|--------------|-------|
 | 2026-03-28 | human | Task created during onboarding |
+| 2026-03-30 | agent | Split shipped vs remaining; tags → topics; point to `inbox/[thoughtId].tsx` |
