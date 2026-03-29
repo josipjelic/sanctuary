@@ -144,6 +144,53 @@ For operators debugging `transcribe` and `assign-topics` (shared topic pipeline)
 
 There is **no** separate HTTP API or Postgres table for these events in v1. Retention and search are **platform-managed** — do not rely on logs as a long-term audit archive; see ADR-003.
 
+**Example log line shape**
+
+Each event is one **single-line JSON** object (what Deno prints from `console.log` / `console.error`). Pretty-printed examples below are for reading only; in the dashboard you will see one line per event.
+
+Successful transcription step start:
+
+```json
+{
+  "event": "ai.request.start",
+  "function": "transcribe",
+  "phase": "transcribe",
+  "model": "google/gemini-2.0-flash-001",
+  "thought_id": "550e8400-e29b-41d4-a716-446655440000",
+  "user_id": "660e8400-e29b-41d4-a716-446655440001",
+  "request_summary": {
+    "audio_mime": "audio/mp4",
+    "audio_bytes": 48210,
+    "audio_format": "m4a",
+    "transcription_language": "auto",
+    "prompt_preview": "Transcribe the following audio…"
+  }
+}
+```
+
+Topic phase error (same JSON shape; emitted on `console.error`):
+
+```json
+{
+  "event": "ai.error",
+  "function": "assign-topics",
+  "phase": "topics",
+  "model": "google/gemini-2.0-flash-001",
+  "thought_id": "550e8400-e29b-41d4-a716-446655440000",
+  "user_id": "660e8400-e29b-41d4-a716-446655440001",
+  "error": {
+    "message": "Topic JSON parse failed",
+    "kind": "topic_json_parse"
+  },
+  "response_summary": {
+    "raw_preview": "{\"broken\": …",
+    "raw_chars": 42
+  }
+}
+```
+
+Optional fields (`model`, `thought_id`, `user_id`, summaries, `error`) are omitted when not set — see `supabase/functions/_shared/ai-log.ts`.
+
 **`event` values**
 
 | `event` | Meaning |
@@ -157,7 +204,7 @@ There is **no** separate HTTP API or Postgres table for these events in v1. Rete
 | Field | Meaning |
 |-------|---------|
 | `function` | `transcribe` or `assign-topics` (or the caller name passed into shared topic code). |
-| `phase` | `transcribe` — audio → text; `topics` — topic assignment (runs inside `transcribe` after transcribe, or inside `assign-topics` for typed capture). |
+| `phase` | `transcribe` — speech-to-text OpenRouter call inside `/transcribe` only. `topics` — topic-assignment OpenRouter call: runs **after** a successful transcribe in the same `/transcribe` request, or alone inside `/assign-topics` for typed capture. A single voice capture therefore produces **both** phases in order in the logs when both steps run. |
 | `model` | OpenRouter model id used for that call. |
 | `thought_id` | Thought UUID when known. |
 | `user_id` | Authenticated user UUID for correlation. |
@@ -165,9 +212,13 @@ There is **no** separate HTTP API or Postgres table for these events in v1. Rete
 | `response_summary` | Aggregates or **truncated** previews — e.g. transcript character count and preview, latency ms, OpenRouter error body preview, topic JSON preview on parse errors. |
 | `error` | `{ message, http_status?, kind? }` — human-readable message, optional HTTP status from OpenRouter, optional machine-readable `kind` (e.g. `openrouter_http`, `empty_transcript`, `topic_json_parse`). |
 
+**PRD (Security NFR) — device vs server**
+
+The PRD Security NFR requires **no user data in device logs or in analytics SDK payloads** (the mobile app must not log thought bodies, transcripts, tokens, or similar client-side). That rule does **not** forbid **server-side** Edge Function logs used to operate the AI pipeline. Those server logs are allowed when they follow the redaction rules here and in `docs/technical/ARCHITECTURE.md` (*Observability and AI I/O logging*). Full rationale: [ADR-003](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs).
+
 **Privacy (operator expectations)**
 
-- **No raw audio** in logs: no buffers, base64 payloads, or multipart bodies.
+- **No raw audio** in logs: no buffers, base64-encoded audio, file bytes, or multipart bodies — only metadata such as MIME type and byte length (as in `request_summary` for the transcribe phase).
 - **No secrets**: API keys and service role material must never appear in log lines.
 - Text fields in summaries use **truncation** (short previews plus lengths where relevant), not full prompts or full user transcripts in routine lines. Full operational contract and prohibited fields: `docs/technical/ARCHITECTURE.md` — *Observability and AI I/O logging*.
 
@@ -184,3 +235,4 @@ There is **no** separate HTTP API or Postgres table for these events in v1. Rete
 | 2026-03-28 | Replaced tag-thought with assign-topics; user_topics + thought_topics; transcribe runs topic assignment; thoughts.tags renamed to topics |
 | 2026-03-30 | Overview: voice path uses multipart to `transcribe` only — no Storage for recordings in v1 |
 | 2026-03-30 | Observability: AI edge logging for operators (`event` types, fields, privacy); link ADR-003 |
+| 2026-03-30 | Observability: example log JSON, PRD Security NFR vs server-side logs, clarify `phase` ordering for `/transcribe` |

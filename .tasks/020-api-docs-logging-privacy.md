@@ -24,7 +24,7 @@ Primary file: `docs/technical/API.md`. Add a **brief ops note** elsewhere only i
 
 - [x] `docs/technical/API.md` describes logging for transcribe / assign-topics (or points to DECISIONS/ARCHITECTURE for full spec) including privacy constraints
 - [x] Any short ops pointer is consistent with #018/#019 and does not duplicate PRD.md
-- [ ] PR reviewed with #019 implementation
+- [ ] PR reviewed with #019 implementation (human / orchestrator)
 
 ## Technical Notes
 
@@ -36,3 +36,4 @@ Primary file: `docs/technical/API.md`. Add a **brief ops note** elsewhere only i
 |------|--------------|-------|
 | 2026-03-30 | @project-manager | Task created |
 | 2026-03-30 | @documentation-writer | API.md observability section; task marked completed |
+| 2026-03-30 | @documentation-writer | Task #020: enriched API.md — example log lines, PRD device/analytics vs server logs, `phase` ordering; USER_GUIDE unchanged (internal ops) |
