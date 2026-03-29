@@ -22,6 +22,7 @@ Read by: All agents. Check this file before proposing changes that may conflict 
 |----|-------|--------|------|
 | ADR-001 | Expo + Supabase + OpenRouter stack selection | Accepted | 2026-03-28 |
 | ADR-002 | User-scoped topics, match threshold, transcribe pipeline | Accepted | 2026-03-28 |
+| ADR-003 | AI I/O observability via Supabase Edge Function logs | Accepted | 2026-03-30 |
 
 ---
 
@@ -103,3 +104,35 @@ Early v1 stored free-form labels on each thought as `thoughts.tags` (`text[]`) w
 - One OpenRouter call chain per voice capture for transcribe + topics (higher latency than split calls, fewer client failures).
 - Reuse quality depends on model calibration of `best_match_score`; prompts and monitoring may need iteration.
 - PRD v1.1 describes topics at the requirement level; implementation detail and threshold live in ADR-002 and `docs/technical/ARCHITECTURE.md`.
+
+---
+
+## ADR-003: AI I/O Observability via Supabase Edge Function Logs
+
+**Date**: 2026-03-30
+**Status**: Accepted
+**Deciders**: Orchestrated task (feature/ai-supabase-logging), @systems-architect
+
+### Context
+
+Operators need visibility into AI-related edge operations (transcription, topic assignment) for debugging and incident response. The product must not widen the attack surface or violate privacy: **raw voice must never appear in logs**, and secrets must never leak. The PRD security NFR states that **no user data** is stored in **device** logs or **analytics** payloads — the scope of that rule must be reconciled with legitimate **server-side** operational logging.
+
+### Options Considered
+
+1. **Dedicated Postgres audit table for AI I/O** — Persist structured rows (request/response metadata, correlation IDs) in a new table. — Pros: queryable in SQL, long retention if we control it, joins with `thoughts`. Cons: new schema, RLS/privacy review, storage growth, not the platform’s native operator view; higher implementation and compliance surface than needed for v1.
+
+2. **Supabase Edge Function logs (`console` → project logs / dashboard)** — Emit structured, JSON-serializable log lines from edge functions; operators use Supabase-hosted log UI and exports. — Pros: no new tables, aligns with Deno/Supabase runtime, minimal moving parts, credentials stay in existing secret model. Cons: retention and search UX are **platform-managed** (no promise of indefinite retention); advanced analytics require export or a future ADR.
+
+3. **Third-party APM/log aggregation (e.g. Datadog, Axiom) wired from Edge** — Forward logs to an external sink. — Pros: powerful retention, alerting, dashboards. Cons: extra vendor, cost, secret handling for ingest keys, and operational overhead — disproportionate for current scale.
+
+### Decision
+
+Use **Supabase Edge Function logging only** for AI I/O observability in v1: structured log events from `transcribe`, `assign-topics`, and shared OpenRouter/topic helpers (implementation: task #019, @backend-developer). **Do not** add a Postgres audit table for this purpose unless a future ADR revisits the trade-off.
+
+**Reconciliation with PRD (Security, NFR section):** The NFR *“No user data stored in device logs or analytics payloads”* applies to the **mobile client** and **client-sent analytics** — the app must not write thought content, transcripts, or PII into on-device logs or third-party analytics SDK payloads. **Server-side** Edge Function logs used strictly for operating the AI pipeline are **in scope** and **not** a violation of that NFR, provided redaction rules in `docs/technical/ARCHITECTURE.md` are followed (no raw audio, no secrets, no full multipart bodies).
+
+### Consequences
+
+- **Positive**: Single place for operators to tail AI operations (Supabase dashboard); no migration or RLS policy set for a new audit table; implementation stays inside existing edge functions.
+- **Negative**: Log retention, indexing, and export behavior follow Supabase platform limits and changes — document that we **do not** rely on logs as a durable compliance archive; use DB state for authoritative user data.
+- **Neutral**: If v1 outgrows dashboard logs, a follow-up ADR may add export or a vendor without changing the core “no raw audio / no secrets” rules.

@@ -12,7 +12,7 @@ Read by: All agents. Always read before making implementation decisions.
 
 # System Architecture
 
-> Last updated: 2026-03-30 (docs aligned with code: state mgmt, routes, edge DB client)
+> Last updated: 2026-03-30 (AI I/O observability: ADR-003, Edge log contract)
 > Version: 0.1.0
 
 ---
@@ -213,7 +213,7 @@ Optional future additions (Zustand, TanStack Query) should be recorded in a new 
 
 ## Backend Architecture
 
-> Last updated: 2026-03-28 by @backend-developer (task #003)
+> Last updated: 2026-03-30 — observability contract (ADR-003); edge inventory 2026-03-28 (task #003)
 
 ### Edge Function Inventory
 
@@ -281,6 +281,37 @@ Auth is handled entirely by Supabase Auth (email + password). There is no custom
 - `EXPO_PUBLIC_SUPABASE_URL` — Supabase project URL (client-side, safe to expose)
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key (client-side, safe to expose; RLS enforces access control)
 - `OPENROUTER_API_KEY` — OpenRouter API key (server-side only; stored as a Supabase project secret, never in the app bundle)
+
+### Observability and AI I/O logging
+
+> **ADR**: ADR-003. **Implementation**: task #019 (@backend-developer) — this section is the contract only.
+
+AI-related edge work (`transcribe`, `assign-topics`, shared OpenRouter/topic modules) is observable via **Supabase Edge Function logs** (Deno `console` output surfaced in the Supabase project dashboard). There is **no** v1 Postgres table for AI audit trails; durable user content lives in the database as today.
+
+**PRD alignment (Security NFR):** PRD requires *no user data in **device** logs or **analytics** payloads*. That constraint does **not** forbid **server-side** Edge logs used to operate and debug the AI pipeline, as long as redaction rules below are respected. The mobile app must continue to avoid logging thought bodies, transcripts, or tokens in client-side logs or analytics.
+
+**Retention:** Log retention, search, and export are **Supabase platform–managed** and may change; do not treat Edge logs as an indefinite or compliance-grade archive. Operational forensics should assume a bounded window unless the platform or a future ADR adds explicit export.
+
+**Structured logging contract**
+
+- Emit **JSON-serializable** objects; prefer **one log line per event** as **single-line JSON** (e.g. `console.log(JSON.stringify({ ... }))`) so dashboard filters and copy/paste stay usable.
+- Recommended fields (use when applicable; omit nullable fields rather than sending `null` noise):
+  - `event` — stable event name (e.g. `ai.request.start`, `ai.response.complete`, `ai.error`)
+  - `function` — edge function name (`transcribe`, `assign-topics`)
+  - `thought_id` — UUID string when a thought row is known
+  - `user_id` — UUID string (`auth` subject) for correlation; still subject to redaction policy if product stance tightens
+  - `model` — OpenRouter/model id used for the call
+  - `phase` — `"transcribe"` | `"topics"` (and future phases if the pipeline splits further)
+  - `request_summary` / `response_summary` — non-secret, truncated or aggregate descriptions (e.g. byte length, topic count, status codes, error class) — **not** full prompts/responses unless explicitly approved in a future ADR
+
+**Prohibited in logs**
+
+- `OPENROUTER_API_KEY` or any Supabase **service_role** / signing secrets
+- **Raw audio**: no audio buffers, base64 audio, or binary dumps
+- **Full multipart bodies** or complete file payloads
+- For voice **input**, log **metadata only** when needed: e.g. MIME type, size in bytes, duration in ms **if available** from client metadata or headers — never content of the recording
+
+**Handoff (#019):** Implement logging in `supabase/functions/transcribe`, `supabase/functions/assign-topics`, and shared helpers under `supabase/functions/_shared/` per this contract; keep the device and any analytics SDK payloads free of user content (unchanged PRD rule).
 
 ---
 

@@ -1,14 +1,14 @@
 ---
 id: "018"
 title: "AI I/O observability via Supabase Edge Function logging (architecture)"
-status: "todo"
+status: "completed"
 area: "infra"
 agent: "@systems-architect"
 priority: "normal"
 created_at: "2026-03-30"
 due_date: null
 started_at: null
-completed_at: null
+completed_at: "2026-03-30"
 prd_refs: ["FR-012", "FR-013", "FR-016"]
 blocks: ["019"]
 blocked_by: []
@@ -22,9 +22,9 @@ This task produces the written decisions and architecture updates so backend imp
 
 ## Acceptance Criteria
 
-- [ ] ADR or `docs/technical/DECISIONS.md` entry describing: what is logged, log levels/structure, where logs appear (Supabase dashboard), and explicit prohibition on raw audio in logs
-- [ ] `docs/technical/ARCHITECTURE.md` updated to reference AI I/O observability and Edge Function logging boundaries
-- [ ] Clear handoff for #019: field names, redaction rules, and which functions/modules are in scope (`transcribe`, `assign-topics`, shared OpenRouter/topic helpers)
+- [x] ADR or `docs/technical/DECISIONS.md` entry describing: what is logged, log levels/structure, where logs appear (Supabase dashboard), and explicit prohibition on raw audio in logs
+- [x] `docs/technical/ARCHITECTURE.md` updated to reference AI I/O observability and Edge Function logging boundaries
+- [x] Clear handoff for #019: field names, redaction rules, and which functions/modules are in scope (`transcribe`, `assign-topics`, shared OpenRouter/topic helpers)
 
 ## Technical Notes
 
@@ -37,3 +37,4 @@ This task produces the written decisions and architecture updates so backend imp
 | Date | Agent / Human | Event |
 |------|--------------|-------|
 | 2026-03-30 | @project-manager | Task created |
+| 2026-03-30 | @systems-architect | ADR-003 + ARCHITECTURE observability contract; task completed |
