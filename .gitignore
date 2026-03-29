@@ -6,6 +6,8 @@
 
 # Dependencies
 node_modules/
+# Project-local pnpm store (optional: pnpm config set store-dir .pnpm-store)
+.pnpm-store/
 .pnp
 .pnp.js
 
