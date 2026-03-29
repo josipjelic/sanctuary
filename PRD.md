@@ -8,16 +8,16 @@
 
 ---
 
-**Version**: 1.1
-**Status**: Draft
-**Last updated by human**: 2026-03-28
+**Version**: 1.2
+**Status**: Active (development — beta scope in progress)
+**Last updated by human**: 2026-03-30
 **Product owner**: Josip
 
 ---
 
 ## 1. Executive Summary
 
-Sanctuary is a mobile app (React Native/Expo) that gives individuals a calm, friction-free space to capture and reflect on their thoughts. Users record anything — an idea, a feeling, a grocery list, a voice memo — and AI (via OpenRouter) transcribes voice capture and assigns a **topic** from each user’s personal topic list (or creates a new topic when nothing fits well enough). The app supports journaling (expanding captured thoughts), daily check-ins for mood tracking, and an organized inbox and library for browsing past captures. Sanctuary is designed as the antithesis of "hustle-culture" productivity apps: serene, spacious, and intentional. The target audience is individuals seeking calm and clarity who want to stop losing fleeting thoughts and start building a personal reflection practice.
+Sanctuary is a mobile app (React Native/Expo) that gives individuals a calm, friction-free space to capture and reflect on their thoughts. Users record anything — an idea, a feeling, a grocery list, a voice memo — and AI (via OpenRouter) transcribes voice capture and assigns a **topic** from each user’s personal topic list (or creates a new topic when nothing fits well enough). The **v1** product also targets journaling (including an extended reflection field), daily check-ins for mood tracking, inbox search and topic filters, AI reflection prompts on the thought detail screen, and an organized inbox and library. **As of the current build**, the capture loop, inbox, and library-by-topic are implemented; thought detail, search/filter, check-ins, and reflection prompts remain to reach full v1 (see §8). Sanctuary is designed as the antithesis of "hustle-culture" productivity apps: serene, spacious, and intentional. The target audience is individuals seeking calm and clarity who want to stop losing fleeting thoughts and start building a personal reflection practice.
 
 ---
 
@@ -42,7 +42,7 @@ Voice transcription has become fast and affordable via APIs. AI-assisted labelin
 ### 3.1 Business Goals
 
 - Deliver a working, polished friends-and-family beta that validates the core capture + reflection loop
-- Establish the design system and architecture foundation for future features (notifications, AI reflection prompts, sharing)
+- Establish the design system and architecture foundation for future features (notifications, sharing); **AI reflection prompts** are in-scope for v1 but not yet shipped (see §8)
 - Gather qualitative feedback from beta users to inform v2 prioritization
 
 ### 3.2 Success Metrics
@@ -142,8 +142,8 @@ Voice transcription has become fast and affordable via APIs. AI-assisted labelin
 
 ### Platform Support
 - iOS 16+ and Android 10+ (API level 29+)
-- Tested on both physical devices and simulators
-- Expo Go compatible during development
+- Tested on both physical devices and simulators (ongoing)
+- Expo Go compatible during development; **production builds** use EAS (CI pipeline for PRs still on backlog)
 
 ### Reliability
 - Supabase-managed uptime SLA applies
@@ -165,20 +165,49 @@ The following will **not** be built in the initial version:
 
 ---
 
-## 8. Open Questions
+## 8. Current implementation status
 
-> These are unresolved decisions that require human input before implementation can proceed.
+> **Informative only** — requirements in §5 remain the v1 target. This section tracks what the repository ships **today** so agents and stakeholders do not assume unfinished features are live.
+
+**Last synced with codebase**: 2026-03-30
+
+| Capability | FR refs | Status | Notes |
+|------------|---------|--------|--------|
+| Email auth (sign up, sign in, reset, session, sign out) | FR-001–005 | **Shipped** | Supabase Auth |
+| Quick capture — text and voice | FR-010, FR-011, FR-014, FR-015 | **Shipped** | Voice sent to edge function for transcription; not stored in Supabase Storage |
+| Voice transcription + topic assignment pipeline | FR-012, FR-013, FR-016 | **Shipped** | `/transcribe` then shared assign-topics logic; text capture uses `/assign-topics` |
+| Inbox — chronological list, newest first | FR-020 | **Shipped** | Paginated list, pull-to-refresh |
+| Inbox — filter by topic | FR-021 | **Not started** | Topic browsing is via **Library** (tap a topic); inbox has no topic filter UI |
+| Inbox / library — keyword search | FR-022 | **Not started** | No search field on inbox |
+| Library — browse by topic | FR-023 | **Shipped** | Folder-style topic grid, topic detail list, manage lists (add topic) |
+| Thought detail — view | — | **Shipped** | Stack screen from inbox |
+| Thought detail — edit primary text | FR-031 | **Shipped** | Edits `body` only |
+| Thought detail — extended journaling field | FR-030 | **Not started** | `body_extended` exists in schema; no UI |
+| Thought detail — delete with confirmation | FR-032 | **Shipped** | |
+| Thought detail — change topic manually | FR-033 | **Not started** | Topics shown read-only |
+| Thought detail — AI reflection prompt | FR-034 | **Not started** | `reflection-prompt` edge function is specified in `docs/technical/API.md` but not implemented end-to-end |
+| Daily check-in (mood, intention, one per day, history in library) | FR-040–043 | **Not started** | `daily_checkins` table and RLS exist; no check-in screen or library history section |
+| Automated E2E tests | — | **Not started** | Framework choice still open (see §9) |
+| PR CI (lint, typecheck, unit tests) | — | **Not started** | Backlog |
+
+**Summary**: Core **capture → inbox → library by topic** is usable. Remaining v1 gaps for a PRD-complete beta: thought detail parity (extended journal, topic edit, reflection prompt), inbox search and topic filter (or an explicit product decision to meet FR-021/022 only via library patterns), daily check-in UI + library history, and quality gates (CI, E2E).
+
+---
+
+## 9. Open Questions
+
+> Decisions that are still open or only partially settled. Resolved defaults are documented in `docs/technical/API.md` and edge function env vars.
 
 | # | Question | Owner | Status |
 |---|----------|-------|--------|
-| 1 | Which OpenRouter model for voice transcription? (Whisper, Groq Whisper, etc.) | Josip | Open |
-| 2 | Which OpenRouter model(s) for topic assignment and reflection prompts? (configurable via Supabase secrets; defaults documented in `docs/technical/API.md`) | Josip | Open |
+| 1 | Which OpenRouter model for voice transcription long-term? | Josip | **Default in code**: `OPENROUTER_TRANSCRIPTION_MODEL` with fallback `google/gemini-2.0-flash-001` (multimodal). Operators may override via secret. |
+| 2 | Which OpenRouter model(s) for topic assignment and (future) reflection prompts? | Josip | **Default in code**: `OPENROUTER_TOPIC_MODEL` or `OPENROUTER_TAGGING_MODEL`, fallback `google/gemini-2.0-flash-001`. Reflection-prompt endpoint not deployed yet. |
 | 3 | E2E test framework: Detox or Maestro? | Josip | Open |
 | 4 | Should voice audio files be stored in Supabase Storage, or only the transcript? | Josip | **Resolved: transcripts only — audio stored locally on device, never uploaded** |
 
 ---
 
-## 9. Revision History
+## 10. Revision History
 
 > Human-owned changelog. Agents add entries only when the human has directed a PRD update in-session.
 
@@ -186,3 +215,4 @@ The following will **not** be built in the initial version:
 |------|--------|--------------------|
 | 2026-03-28 | Josip | Initial draft — onboarding complete |
 | 2026-03-28 | Josip | v1.1 — FR-013/016/021/023/033 and reliability: user-scoped **topics** (one per thought), reuse-vs-create behavior, pipeline notes; executive summary and open questions aligned |
+| 2026-03-30 | Josip | v1.2 — §8 implementation status vs repo; executive summary and §3.1 aligned with shipped vs pending; §9 open questions updated for documented model defaults; §6 platform note on CI |
