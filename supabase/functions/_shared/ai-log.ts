@@ -37,10 +37,18 @@ export type AiLogPayload = {
 };
 
 const DEFAULT_MAX = 240;
-/** Default max chars for `openrouter_*_json` log fields (Edge: override with OPENROUTER_LOG_JSON_MAX_CHARS). */
-const DEFAULT_JSON_LOG_MAX = 65_536;
-/** Hard cap so a single log line cannot exceed platform limits. */
-const ABS_JSON_LOG_MAX = 524_288;
+/**
+ * Default max chars per `openrouter_*_json` string *before* the final line clamp.
+ * Hosted Supabase allows **≤10,000 characters per console message** (see Supabase Functions logging docs);
+ * the full JSON envelope (event, summaries, ids) must share that budget.
+ */
+const DEFAULT_JSON_LOG_MAX = 6_500;
+/** Never exceed this for a single field; whole line is clamped again in `finalizeLogLine`. */
+const ABS_JSON_LOG_MAX = 9_000;
+/** Supabase-hosted hard limit per `console.log` / `console.error` message. */
+const SUPABASE_LOG_LINE_MAX = 10_000;
+/** Target max serialized line (leave margin for encoding quirks). */
+const LOG_LINE_TARGET = 9_850;
 
 function denoEnvGet(key: string): string | undefined {
   try {
@@ -56,9 +64,9 @@ function denoEnvGet(key: string): string | undefined {
 }
 
 /**
- * Max characters for serialized OpenRouter JSON in logs.
- * In Edge Functions, set `OPENROUTER_LOG_JSON_MAX_CHARS` (e.g. `131072`).
- * `0` or negative means use the absolute cap (up to ~512 KiB).
+ * Max characters for each `openrouter_*_json` string (before final whole-line clamp).
+ * On **hosted Supabase**, log lines cannot exceed ~10k chars total; values above ~9k are clamped.
+ * Set `OPENROUTER_LOG_JSON_MAX_CHARS` to lower this if you need shorter lines.
  */
 export function getOpenRouterLogJsonMaxChars(): number {
   const raw = denoEnvGet("OPENROUTER_LOG_JSON_MAX_CHARS");
@@ -165,14 +173,59 @@ export function truncateForLog(text: string, maxChars = DEFAULT_MAX): string {
   return `${t.slice(0, maxChars)}…[len=${t.length}]`;
 }
 
-function serializeLine(payload: AiLogPayload): string {
-  return JSON.stringify(buildRecord(payload));
+/**
+ * Ensures one `console.*` message stays under Supabase's per-line cap while keeping valid JSON.
+ */
+export function finalizeLogLine(payload: AiLogPayload): string {
+  const rec = buildRecord(payload);
+  let line = JSON.stringify(rec);
+  if (line.length <= LOG_LINE_TARGET) return line;
+
+  const trimField = (
+    key: "openrouter_request_json" | "openrouter_response_json",
+  ) => {
+    const v = rec[key];
+    if (typeof v !== "string") return;
+    const clone = { ...rec };
+    delete clone[key];
+    const baseLen = JSON.stringify(clone).length;
+    const room = Math.max(120, LOG_LINE_TARGET - baseLen - 96);
+    rec[key] =
+      v.length <= room
+        ? v
+        : `${v.slice(0, room)}…[truncated json len=${v.length}]`;
+    line = JSON.stringify(rec);
+  };
+
+  trimField("openrouter_request_json");
+  if (line.length <= LOG_LINE_TARGET) return line;
+  trimField("openrouter_response_json");
+  if (line.length <= LOG_LINE_TARGET) return line;
+
+  rec.openrouter_request_json = undefined;
+  rec.openrouter_response_json = undefined;
+  line = JSON.stringify(rec);
+  if (line.length <= LOG_LINE_TARGET) return line;
+
+  return JSON.stringify({
+    event: payload.event,
+    function: payload.function,
+    phase: payload.phase,
+    model: payload.model,
+    thought_id: payload.thought_id,
+    user_id: payload.user_id,
+    error: {
+      message:
+        "Log line still exceeded platform cap after trimming openrouter_*_json; summaries omitted",
+      kind: "log_cap",
+    },
+  });
 }
 
 export function logAiInfo(payload: AiLogPayload): void {
-  console.log(serializeLine(payload));
+  console.log(finalizeLogLine(payload));
 }
 
 export function logAiError(payload: AiLogPayload): void {
-  console.error(serializeLine(payload));
+  console.error(finalizeLogLine(payload));
 }

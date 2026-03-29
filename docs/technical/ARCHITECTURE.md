@@ -303,7 +303,7 @@ AI-related edge work (`transcribe`, `assign-topics`, shared OpenRouter/topic mod
   - `model` — OpenRouter/model id used for the call
   - `phase` — `"transcribe"` | `"topics"` (and future phases if the pipeline splits further)
   - `request_summary` / `response_summary` — non-secret metadata and **short previews** (e.g. byte length, topic count, latency, truncated text for quick scanning)
-  - `openrouter_request_json` / `openrouter_response_json` — stringified JSON of the OpenRouter `chat/completions` **request body** (sanitized: no API key in body; voice `input_audio.data` replaced with a **base64 length placeholder**) and **response JSON** from OpenRouter. Length-capped per Edge secret/env **`OPENROUTER_LOG_JSON_MAX_CHARS`** (default 65536; `0` uses an internal upper bound ~512 KiB). Use this to audit exactly what was sent and returned (minus redactions above).
+  - `openrouter_request_json` / `openrouter_response_json` — stringified JSON of the OpenRouter `chat/completions` **request body** (sanitized: no API key in body; voice `input_audio.data` replaced with a **base64 length placeholder**) and **response JSON** from OpenRouter. **Hosted Supabase allows ≤10,000 characters per log line**; the logger defaults to ~6.5k chars per `openrouter_*` field and **re-trims the whole line** so messages are not dropped. Optional env **`OPENROUTER_LOG_JSON_MAX_CHARS`** lowers the per-field budget (capped ~9k). Use this to audit payloads within platform limits.
 
 **Prohibited in logs**
 

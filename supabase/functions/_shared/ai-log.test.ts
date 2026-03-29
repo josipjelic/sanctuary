@@ -1,4 +1,5 @@
 import {
+  finalizeLogLine,
   logAiError,
   logAiInfo,
   sanitizeOpenRouterRequestForLog,
@@ -46,6 +47,24 @@ describe("truncateJsonForLog", () => {
     const out = truncateJsonForLog(s);
     expect(out.length).toBeLessThan(s.length);
     expect(out).toMatch(/truncated json len=/);
+  });
+});
+
+describe("finalizeLogLine (Supabase 10k cap)", () => {
+  it("keeps total line under 10000 chars when openrouter JSON is huge", () => {
+    const huge = "x".repeat(50_000);
+    const line = finalizeLogLine({
+      event: "ai.request.start",
+      function: "assign-topics",
+      phase: "topics",
+      model: "m",
+      thought_id: "t1",
+      user_id: "u1",
+      openrouter_request_json: huge,
+      request_summary: { n: 1 },
+    });
+    expect(line.length).toBeLessThanOrEqual(10_000);
+    expect(() => JSON.parse(line)).not.toThrow();
   });
 });
 

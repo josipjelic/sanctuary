@@ -144,6 +144,8 @@ For operators debugging `transcribe` and `assign-topics` (shared topic pipeline)
 
 There is **no** separate HTTP API or Postgres table for these events in v1. Retention and search are **platform-managed** — do not rely on logs as a long-term audit archive; see ADR-003.
 
+**Hosted Supabase limit:** each `console.log` / `console.error` line is capped at **10,000 characters** ([Functions logging](https://supabase.com/docs/guides/functions/logging)). The app’s `ai-log` helper clamps each emitted JSON line to stay under that cap (large `openrouter_*_json` fields are truncated further if needed). If you see no custom lines, confirm the function was invoked on this project and check the **Logs** tab (not only **Invocations**).
+
 **Example log line shape**
 
 Each event is one **single-line JSON** object (what Deno prints from `console.log` / `console.error`). Pretty-printed examples below are for reading only; in the dashboard you will see one line per event.
@@ -210,8 +212,8 @@ Optional fields (`model`, `thought_id`, `user_id`, summaries, `error`) are omitt
 | `user_id` | Authenticated user UUID for correlation. |
 | `request_summary` | Non-secret metadata only — e.g. for voice: MIME type, byte length, format, truncated prompt preview (not raw audio). For topics: catalog size, thought text length, **truncated** thought preview, prompt length. |
 | `response_summary` | Aggregates or **truncated** previews — e.g. transcript character count and preview, latency ms, OpenRouter error body preview, topic JSON preview on parse errors. |
-| `openrouter_request_json` | Single string: JSON of the OpenRouter request **body** actually sent (`model` + `messages`). Voice: `input_audio.data` is **not** logged; it is replaced with `[omitted base64, length=N chars]`. Text/topics: the user message includes the **full** topic prompt (catalog + thought) unless the whole JSON exceeds `OPENROUTER_LOG_JSON_MAX_CHARS` (then truncated with a suffix marker). |
-| `openrouter_response_json` | Single string: JSON of OpenRouter’s **response** body on success, or a small wrapper `{ http_status, body }` / `{ assistant_message_text }` on errors — capped by the same max length env. |
+| `openrouter_request_json` | Single string: JSON of the OpenRouter request **body** actually sent (`model` + `messages`). Voice: `input_audio.data` is **not** logged; it is replaced with `[omitted base64, length=N chars]`. **Supabase ≤10k chars per log line** — long topic prompts are truncated so the line is accepted. Optional `OPENROUTER_LOG_JSON_MAX_CHARS` lowers the per-field budget. |
+| `openrouter_response_json` | Single string: JSON of OpenRouter’s **response** body on success, or a small wrapper `{ http_status, body }` / `{ assistant_message_text }` on errors — same line-length limits as above. |
 | `error` | `{ message, http_status?, kind? }` — human-readable message, optional HTTP status from OpenRouter, optional machine-readable `kind` (e.g. `openrouter_http`, `empty_transcript`, `topic_json_parse`). |
 
 **PRD (Security NFR) — device vs server**
