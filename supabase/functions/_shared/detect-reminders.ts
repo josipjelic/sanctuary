@@ -4,6 +4,7 @@
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { logAiError, logAiInfo, truncateForLog } from "./ai-log.ts";
+import { normalizeReminderScheduledAt } from "./reminder-scheduled-at-normalize.ts";
 
 export interface DetectRemindersParams {
   userId: string;
@@ -46,9 +47,11 @@ function buildReminderSystemPrompt(
 
   return `You are a reminder extraction assistant. Given a thought or note, extract any future time references that could become reminders. ${tzBlock}${timeBlock}Return ONLY valid JSON matching this schema: { "reminders": [ { "extracted_text": "string — the relevant text snippet", "scheduled_at": "ISO 8601 datetime string" } ] }. If there are no future time references, return { "reminders": [] }. Interpret vague references ("next Monday", "Wednesday afternoon", "in 3 hours") in the user's local timezone${
     ianaTimezone ? ` (${ianaTimezone})` : ""
-  }. Use 09:00 local time for morning references, 14:00 for afternoon, 19:00 for evening when no time is specified. For each reminder, scheduled_at MUST be ISO 8601 with an explicit offset that matches the user's local civil time for that instant (account for DST rules of ${
+  }. Use 09:00 local time for morning references, 14:00 for afternoon, 19:00 for evening when no time is specified. Phrases like "u dva" / "at two" in the afternoon mean 14:00 local, not 14:00 UTC. For each reminder, scheduled_at MUST be ISO 8601 with an explicit offset that matches the user's local civil time for that instant (account for DST rules of ${
     ianaTimezone ?? "that timezone"
-  } when relevant).`;
+  } when relevant). Never use Z or +00:00 for a time the user stated in local terms — use the correct offset for ${
+    ianaTimezone ?? "their timezone"
+  }.`;
 }
 
 interface ReminderModelItem {
@@ -326,7 +329,7 @@ export async function detectRemindersForThought(
     user_id: userId,
     thought_id: thoughtId,
     extracted_text: r.extracted_text,
-    scheduled_at: r.scheduled_at,
+    scheduled_at: normalizeReminderScheduledAt(r.scheduled_at, ianaTimezone),
     status: "inactive" as const,
     updated_at: new Date().toISOString(),
   }));
