@@ -8,7 +8,7 @@ Read by: End users and agents needing to understand user-facing flows.
 
 # Sanctuary — User Guide
 
-> Last updated: 2026-03-30
+> Last updated: 2026-03-31
 > Version: 0.1.0 (pre-release — features documented as they ship)
 
 ---
@@ -96,6 +96,48 @@ An “all thoughts” filter and daily check-in history on this screen are **not
 
 ---
 
+### Reminders
+
+When you capture a thought that mentions a future time — "call the dentist next Tuesday", "review the proposal in 3 hours", "dentist Wednesday at 3 pm" — Sanctuary quietly notices and queues it as a reminder for you to review. Nothing is scheduled without your approval.
+
+#### Reviewing reminders
+
+When one or more reminders are waiting for your decision, a pill appears at the top of the **Thoughts** tab:
+
+> **🔔 2 reminders to review**
+
+Tap it to open the Reminder sheet. Each item shows:
+
+- The text snippet Sanctuary detected as a time reference
+- A suggested date and time (tap to edit before approving)
+- **Approve** and **Dismiss** buttons
+
+**Approve** schedules a notification on your device. **Dismiss** removes the reminder without scheduling anything.
+
+You can also tap the bell icon on any thought card in the inbox to jump straight to that thought's reminder.
+
+#### Bell icons
+
+A small bell icon appears on the right side of a thought's timestamp row when a reminder exists for it:
+
+- **Outline bell** — reminder is waiting for your review
+- **Solid bell** — reminder is approved and scheduled
+
+#### After approval
+
+Once you approve a reminder, your device will deliver a notification at the scheduled time (minus your chosen lead time — see below). The notification appears even if Sanctuary is closed, as long as you have granted notification permission.
+
+If Sanctuary asks for notification permission when you first approve a reminder, tap **Allow**. Without permission, no notifications will fire. You can also enable this later in your device's Settings app under Sanctuary → Notifications.
+
+#### Notification settings
+
+From the **Capture** screen, tap the **gear** icon to open **Settings**, then scroll to the **Reminders** section.
+
+- **Lead time** — how early to notify you before the reminder's scheduled time. Options: At the time, 15 minutes before (default), 30 minutes before, 1 hour before, In the morning.
+- **Morning time** — shown when you choose "In the morning". Sets the time the notification fires on the morning of (or before) the reminder day. Default is 07:30.
+
+---
+
 ### Daily Check-in
 
 **Coming in a future release.** The database supports daily check-ins, but there is no check-in screen in the app yet.
@@ -109,6 +151,7 @@ There is **no separate Settings tab**. From the **Capture** screen, tap the **ge
 In that sheet you can:
 
 - Choose **transcription language** (for voice — how the model is asked to interpret speech; options vary by build).
+- Configure **Reminders** — set the notification lead time and morning digest time (see the Reminders section above).
 - **Sign out** of Sanctuary.
 
 **Changing your password** is not done inside this modal. Use **Forgot password** on the sign-in screen to receive a reset email when your Supabase project has reset emails configured.
@@ -125,6 +168,9 @@ In that sheet you can:
 | Voice recording not working | Microphone permission not granted | System Settings → Sanctuary → allow Microphone |
 | Thought saved but no topic yet | Topic assignment runs after save | Wait a few seconds and pull to refresh on the inbox |
 | Email never arrives after sign-up | Confirmation off in dev, or spam / wrong address | Check spam; ask your host whether confirmation is required |
+| Reminder pill not appearing after capture | AI found no clear future time reference in the text | This is expected — try rephrasing with a specific date or time |
+| Notification did not fire | Notification permission was denied, or notifications are off for Sanctuary | System Settings → Sanctuary → Notifications → Allow |
+| Reminder suggests the wrong date or time | AI resolved a relative reference differently than you intended | Tap the suggested time in the Reminder sheet to edit it before approving |
 
 ### Getting Help
 

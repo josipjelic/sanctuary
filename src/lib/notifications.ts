@@ -1,75 +1,127 @@
-/**
- * Client-side notification scheduling utilities (ADR-004).
- * Wraps expo-notifications and provides fire-date computation for reminders.
- */
+import * as Notifications from "expo-notifications";
 
-export interface ComputeFireDateParams {
-  /** The reminder datetime as resolved by the AI and stored in the DB. */
-  scheduledAt: Date;
-  /**
-   * Lead time preference key matching user_preferences `notification_lead_time`.
-   * Valid values: '15min' | '30min' | '1hour' | 'morning' | 'at_time'
-   */
-  leadTime: string;
-  /**
-   * HH:MM string for morning digest time (from user_preferences `morning_time`).
-   * Only used when leadTime === 'morning'. Defaults to '07:30'.
-   */
-  morningTime?: string;
+// Show notifications when the app is in the foreground (banner + sound).
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+/** Request notification permission from the OS. Returns true when granted. */
+export async function requestNotificationPermission(): Promise<boolean> {
+  const { status: existing } = await Notifications.getPermissionsAsync();
+  if (existing === "granted") return true;
+
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === "granted";
 }
 
 /**
- * Pure function — computes the notification fire time for a given reminder.
- *
- * Lead time semantics:
- * - 'at_time'   → fire at scheduledAt exactly
- * - '15min'     → 15 minutes before scheduledAt
- * - '30min'     → 30 minutes before scheduledAt
- * - '1hour'     → 60 minutes before scheduledAt
- * - 'morning'   → morningTime on the day of scheduledAt;
- *                  if scheduledAt is on or before morningTime that same day,
- *                  use morningTime on the previous day.
- *
- * All date arithmetic treats scheduledAt as a local Date object (no timezone conversion).
- * The caller is responsible for constructing scheduledAt in the appropriate timezone.
+ * Schedule a local notification.
+ * @returns Expo notification identifier — persist this to cancel/reschedule.
  */
-export function computeFireDate(params: ComputeFireDateParams): Date {
+export async function scheduleReminder(params: {
+  title: string;
+  body: string;
+  fireDate: Date;
+}): Promise<string> {
+  const id = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: params.title,
+      body: params.body,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: params.fireDate,
+    },
+  });
+  return id;
+}
+
+/** Cancel a previously scheduled notification by its identifier. */
+export async function cancelReminder(notificationId: string): Promise<void> {
+  await Notifications.cancelScheduledNotificationAsync(notificationId);
+}
+
+export type LeadTime = "at_time" | "15min" | "30min" | "1hour" | "morning";
+
+/**
+ * Compute the local Date at which a notification should fire.
+ *
+ * - "at_time" -> fire exactly at scheduled_at
+ * - "15min"   -> fire 15 minutes before scheduled_at
+ * - "30min"   -> fire 30 minutes before scheduled_at
+ * - "1hour"   -> fire 1 hour before scheduled_at
+ * - "morning" -> fire at morningTime on the calendar day of scheduled_at.
+ *                If scheduled_at is earlier in the day than morningTime, fire
+ *                at morningTime on the day BEFORE so the user gets advance warning.
+ */
+export function computeFireDate(params: {
+  scheduledAt: Date;
+  leadTime: LeadTime;
+  morningTime?: string; // "HH:MM", defaults to "07:30"
+}): Date {
   const { scheduledAt, leadTime, morningTime = "07:30" } = params;
 
-  if (leadTime === "at_time") {
-    return new Date(scheduledAt.getTime());
-  }
+  switch (leadTime) {
+    case "at_time":
+      return new Date(scheduledAt);
 
-  if (leadTime === "15min") {
-    return new Date(scheduledAt.getTime() - 15 * 60 * 1000);
-  }
-
-  if (leadTime === "30min") {
-    return new Date(scheduledAt.getTime() - 30 * 60 * 1000);
-  }
-
-  if (leadTime === "1hour") {
-    return new Date(scheduledAt.getTime() - 60 * 60 * 1000);
-  }
-
-  if (leadTime === "morning") {
-    const [hourStr, minuteStr] = morningTime.split(":");
-    const morningHour = parseInt(hourStr, 10);
-    const morningMinute = parseInt(minuteStr, 10);
-
-    // Build a candidate morning Date on the same calendar day as scheduledAt
-    const candidate = new Date(scheduledAt.getTime());
-    candidate.setHours(morningHour, morningMinute, 0, 0);
-
-    // If scheduledAt is at or before the morning window on the same day,
-    // use the morning of the previous day instead.
-    if (scheduledAt.getTime() <= candidate.getTime()) {
-      candidate.setDate(candidate.getDate() - 1);
+    case "15min": {
+      const d = new Date(scheduledAt);
+      d.setMinutes(d.getMinutes() - 15);
+      return d;
     }
 
-    return candidate;
-  }
+    case "30min": {
+      const d = new Date(scheduledAt);
+      d.setMinutes(d.getMinutes() - 30);
+      return d;
+    }
 
-  // Unknown lead time — fall back to scheduledAt
-  return new Date(scheduledAt.getTime());
+    case "1hour": {
+      const d = new Date(scheduledAt);
+      d.setHours(d.getHours() - 1);
+      return d;
+    }
+
+    case "morning": {
+      const [hourStr, minuteStr] = morningTime.split(":");
+      const hour = Number.parseInt(hourStr, 10);
+      const minute = Number.parseInt(minuteStr, 10);
+
+      // Start with morning time on the same calendar day as scheduledAt
+      const candidate = new Date(scheduledAt);
+      candidate.setHours(hour, minute, 0, 0);
+
+      // If scheduledAt is before morningTime on that day, move to day-before morning
+      if (scheduledAt <= candidate) {
+        candidate.setDate(candidate.getDate() - 1);
+      }
+      return candidate;
+    }
+
+    default:
+      return new Date(scheduledAt);
+  }
+}
+
+/** Labels for the lead-time options shown in Settings. */
+export const LEAD_TIME_OPTIONS: { value: LeadTime; label: string }[] = [
+  { value: "at_time", label: "At the time" },
+  { value: "15min", label: "15 minutes before" },
+  { value: "30min", label: "30 minutes before" },
+  { value: "1hour", label: "1 hour before" },
+  { value: "morning", label: "In the morning" },
+];
+
+export function labelForLeadTime(value: LeadTime): string {
+  return (
+    LEAD_TIME_OPTIONS.find((o) => o.value === value)?.label ??
+    "15 minutes before"
+  );
 }

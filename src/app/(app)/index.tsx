@@ -10,12 +10,18 @@ import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import {
+  LEAD_TIME_OPTIONS,
+  type LeadTime,
+  labelForLeadTime,
+} from "@/lib/notifications";
+import {
   TRANSCRIPTION_LANGUAGE_OPTIONS,
   type TranscriptionLanguageCode,
   getTranscriptionLanguage,
   labelForTranscriptionCode,
   setTranscriptionLanguage,
 } from "@/lib/transcriptionLanguage";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -31,9 +37,11 @@ import type { RecordingOptions } from "expo-audio";
 import { Redirect, router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   Animated,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Modal,
   Platform,
   Pressable,
@@ -112,6 +120,12 @@ export default function QuickCaptureScreen() {
     useState<TranscriptionLanguageCode>("auto");
   const [signingOut, setSigningOut] = useState(false);
 
+  // Reminders settings
+  const [leadTimePickerVisible, setLeadTimePickerVisible] = useState(false);
+  const [leadTime, setLeadTime] = useState<LeadTime>("15min");
+  const [morningTime, setMorningTime] = useState("07:30");
+  const [morningPickerVisible, setMorningPickerVisible] = useState(false);
+
   const successOpacity = useRef(new Animated.Value(0)).current;
   const [successVisible, setSuccessVisible] = useState(false);
   const pulseOpacity = useRef(new Animated.Value(1)).current;
@@ -142,6 +156,23 @@ export default function QuickCaptureScreen() {
   useEffect(() => {
     void getTranscriptionLanguage().then(setTranscriptionLanguageCode);
   }, []);
+
+  useEffect(() => {
+    if (!settingsVisible) return;
+    void (async () => {
+      const { data } = await supabase
+        .from("user_preferences")
+        .select("key, value")
+        .in("key", ["notification_lead_time", "morning_notification_time"]);
+      for (const row of data ?? []) {
+        if (row.key === "notification_lead_time") {
+          setLeadTime((row.value as string) as LeadTime);
+        } else if (row.key === "morning_notification_time") {
+          setMorningTime(row.value as string);
+        }
+      }
+    })();
+  }, [settingsVisible]);
 
   useEffect(() => {
     const recorder = audioRecorder;
@@ -397,6 +428,37 @@ export default function QuickCaptureScreen() {
       setSigningOut(false);
       setSettingsVisible(false);
     }
+  }
+
+  async function saveLeadTime(value: LeadTime) {
+    setLeadTime(value);
+    void AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
+      if (!reduced) {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      }
+    });
+    await supabase.from("user_preferences").upsert(
+      { key: "notification_lead_time", value: value, updated_at: new Date().toISOString() },
+      { onConflict: "user_id, key" },
+    );
+  }
+
+  async function saveMorningTime(date: Date) {
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    const timeStr = `${hh}:${mm}`;
+    setMorningTime(timeStr);
+    await supabase.from("user_preferences").upsert(
+      { key: "morning_notification_time", value: timeStr, updated_at: new Date().toISOString() },
+      { onConflict: "user_id, key" },
+    );
+  }
+
+  function morningTimeAsDate(): Date {
+    const [h, m] = morningTime.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d;
   }
 
   return (
@@ -658,6 +720,97 @@ export default function QuickCaptureScreen() {
                 />
               </View>
             </Pressable>
+            {/* Reminders section separator */}
+            <View style={styles.settingsSectionDivider} />
+
+            {/* Reminders section label */}
+            <Text
+              style={styles.settingsSectionLabel}
+              accessibilityRole="header"
+            >
+              REMINDERS
+            </Text>
+
+            {/* Lead-time row */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.settingsLanguageRow,
+                pressed && styles.settingsLanguageRowPressed,
+              ]}
+              onPress={() => setLeadTimePickerVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Reminder lead time: ${labelForLeadTime(leadTime)}. Tap to change.`}
+              accessibilityHint="Opens options for how far in advance you receive reminders"
+              testID="settings-reminder-lead-time"
+            >
+              <View style={styles.settingsLanguageTextBlock}>
+                <Text style={styles.settingsLanguageLabel}>
+                  Reminder lead time
+                </Text>
+                <Text style={styles.settingsLanguageHint}>
+                  How far in advance you are notified
+                </Text>
+              </View>
+              <View style={styles.settingsLanguageValueRow}>
+                <Text style={styles.settingsLanguageValue} numberOfLines={1}>
+                  {labelForLeadTime(leadTime)}
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.secondary}
+                />
+              </View>
+            </Pressable>
+
+            {/* Morning time row — conditional */}
+            {leadTime === "morning" && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.settingsLanguageRow,
+                  pressed && styles.settingsLanguageRowPressed,
+                ]}
+                onPress={() => setMorningPickerVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Morning reminder time: ${morningTime}. Tap to change.`}
+                testID="settings-morning-time"
+              >
+                <View style={styles.settingsLanguageTextBlock}>
+                  <Text style={styles.settingsLanguageLabel}>
+                    Morning time
+                  </Text>
+                  <Text style={styles.settingsLanguageHint}>
+                    Reminders will be sent at this time on the relevant morning
+                  </Text>
+                </View>
+                <View style={styles.settingsLanguageValueRow}>
+                  <Text style={styles.settingsLanguageValue} numberOfLines={1}>
+                    {morningTime}
+                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={colors.secondary}
+                  />
+                </View>
+              </Pressable>
+            )}
+
+            {/* Android morning time picker (system dialog) */}
+            {morningPickerVisible && Platform.OS === "android" && (
+              <DateTimePicker
+                value={morningTimeAsDate()}
+                mode="time"
+                display="default"
+                onChange={(_, selected) => {
+                  setMorningPickerVisible(false);
+                  if (selected) {
+                    void saveMorningTime(selected);
+                  }
+                }}
+              />
+            )}
+
             <Text style={styles.settingsModalHint}>
               Sign out on this device. Your captures stay in your account until
               you delete them.
@@ -765,6 +918,129 @@ export default function QuickCaptureScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Lead-time picker sheet */}
+      <Modal
+        visible={leadTimePickerVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setLeadTimePickerVisible(false)}
+      >
+        <Pressable
+          style={styles.settingsModalBackdrop}
+          onPress={() => setLeadTimePickerVisible(false)}
+          accessibilityLabel="Close lead time options"
+        >
+          <Pressable
+            style={styles.languagePickerSheet}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.languagePickerTitle}>Remind me</Text>
+            <ScrollView
+              style={styles.languagePickerList}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {LEAD_TIME_OPTIONS.map((opt) => {
+                const selected = opt.value === leadTime;
+                return (
+                  <Pressable
+                    key={opt.value}
+                    style={({ pressed }) => [
+                      styles.languageOptionRow,
+                      pressed && styles.languageOptionRowPressed,
+                      selected && styles.languageOptionRowSelected,
+                    ]}
+                    onPress={() => {
+                      void saveLeadTime(opt.value);
+                      setLeadTimePickerVisible(false);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={opt.label}
+                    testID={`lead-time-${opt.value}`}
+                  >
+                    <Text
+                      style={[
+                        styles.languageOptionLabel,
+                        selected && styles.languageOptionLabelSelected,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                    {selected ? (
+                      opt.value === "morning" ? (
+                        <Ionicons
+                          name="chevron-forward"
+                          size={22}
+                          color={colors.primary}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="checkmark"
+                          size={22}
+                          color={colors.primary}
+                        />
+                      )
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <Button
+              label="Done"
+              variant="secondary"
+              onPress={() => setLeadTimePickerVisible(false)}
+              testID="lead-time-done"
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* iOS morning time picker sheet */}
+      {morningPickerVisible && Platform.OS === "ios" && (
+        <Modal
+          visible
+          animationType="slide"
+          transparent
+          onRequestClose={() => setMorningPickerVisible(false)}
+        >
+          <Pressable
+            style={styles.settingsModalBackdrop}
+            onPress={() => setMorningPickerVisible(false)}
+            accessibilityLabel="Cancel time selection"
+          >
+            <Pressable
+              style={styles.settingsModalSheet}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <Text style={styles.settingsModalTitle}>Morning time</Text>
+              <DateTimePicker
+                value={morningTimeAsDate()}
+                mode="time"
+                display="spinner"
+                onChange={(_, selected) => {
+                  if (selected) {
+                    void saveMorningTime(selected);
+                  }
+                }}
+              />
+              <View style={styles.settingsModalActions}>
+                <Button
+                  label="Cancel"
+                  variant="secondary"
+                  onPress={() => setMorningPickerVisible(false)}
+                />
+                <Button
+                  label="Done"
+                  variant="primary"
+                  onPress={() => setMorningPickerVisible(false)}
+                />
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -818,6 +1094,16 @@ const styles = StyleSheet.create({
   settingsModalTitle: {
     ...typography.headlineMd,
     color: colors.onSurface,
+  },
+  settingsSectionDivider: {
+    height: 1,
+    backgroundColor: colors.surfaceContainerHigh,
+    marginVertical: spacing.s2,
+  },
+  settingsSectionLabel: {
+    ...typography.labelMd,
+    color: colors.outlineVariant,
+    letterSpacing: 0.5,
   },
   settingsLanguageRow: {
     flexDirection: "row",

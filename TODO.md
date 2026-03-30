@@ -13,7 +13,7 @@
 
 ## Up Next (prioritized)
 
-*(nothing queued — pull next item from Backlog)*
+*(nothing currently up next)*
 
 ---
 
@@ -46,6 +46,13 @@
 - [x] #019 — Instrument transcribe, assign-topics, shared OpenRouter code with structured logging; never log audio bodies [area: backend] → [.tasks/019-edge-function-logging-instrumentation.md](.tasks/019-edge-function-logging-instrumentation.md)
 - [x] #020 — Update API.md (and brief ops note if appropriate) for logging visibility and privacy [area: docs] → [.tasks/020-api-docs-logging-privacy.md](.tasks/020-api-docs-logging-privacy.md)
 - [x] #021 — Tests asserting logging omits audio and matches expected structure where testable [area: qa] → [.tasks/021-logging-privacy-tests.md](.tasks/021-logging-privacy-tests.md)
+- [x] #022 — Reminders subsystem architecture + ADR [area: infra] → [.tasks/022-reminders-architecture.md](.tasks/022-reminders-architecture.md)
+- [x] #023 — UX design: reminder indicators, approval sheet, notification settings [area: design] → [.tasks/023-reminders-ux-design.md](.tasks/023-reminders-ux-design.md)
+- [x] #024 — Database schema: reminders + user_preferences tables + migration [area: database] → [.tasks/024-reminders-database-schema.md](.tasks/024-reminders-database-schema.md)
+- [x] #025 — Backend: detect-reminders edge function + pipeline wiring [area: backend] → [.tasks/025-reminders-backend.md](.tasks/025-reminders-backend.md)
+- [x] #026 — Mobile: inbox indicators + reminder approval sheet + settings + push tokens [area: mobile] → [.tasks/026-reminders-mobile.md](.tasks/026-reminders-mobile.md)
+- [x] #027 — Tests: reminder detection, state transitions, preference persistence [area: qa] → [.tasks/027-reminders-tests.md](.tasks/027-reminders-tests.md)
+- [x] #028 — Docs: USER_GUIDE.md reminders section [area: docs] → [.tasks/028-reminders-docs.md](.tasks/028-reminders-docs.md)
 
 ---
 
