@@ -1,4 +1,10 @@
-import { Card, ReminderApprovalSheet, ThoughtListCard } from "@/components";
+import {
+  Card,
+  ReminderApprovalSheet,
+  ReminderEditSheet,
+  ThoughtListCard,
+} from "@/components";
+import type { Reminder } from "@/types/reminder";
 import { supabase } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import type { ThoughtListPreview } from "@/types/thoughtList";
@@ -99,6 +105,9 @@ export default function InboxScreen() {
     Record<string, ThoughtReminderStatus>
   >({});
   const [approvalSheetVisible, setApprovalSheetVisible] = useState(false);
+  const [postApproveEditVisible, setPostApproveEditVisible] = useState(false);
+  const [postApproveReminder, setPostApproveReminder] =
+    useState<Reminder | null>(null);
 
   const loadReminders = useCallback(async (ids: string[]) => {
     const [count, statusMap] = await Promise.all([
@@ -260,6 +269,19 @@ export default function InboxScreen() {
         visible={approvalSheetVisible}
         onClose={() => setApprovalSheetVisible(false)}
         onApprovalChange={handleApprovalChange}
+        onReminderApproved={(r) => {
+          setPostApproveReminder(r);
+          setPostApproveEditVisible(true);
+        }}
+      />
+      <ReminderEditSheet
+        visible={postApproveEditVisible}
+        reminder={postApproveReminder}
+        onClose={() => {
+          setPostApproveEditVisible(false);
+          setPostApproveReminder(null);
+        }}
+        onReminderChanged={handleApprovalChange}
       />
     </SafeAreaView>
   );

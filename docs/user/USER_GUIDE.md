@@ -80,7 +80,7 @@ Opens from the inbox when you tap a thought.
 - Tap **Edit** to change the main text, then **Save** or **Cancel** in the header.
 - **Topics** appear as chips for context; they are assigned by the app (you cannot edit them on this screen yet).
 - **Delete** removes the thought after you confirm. This cannot be undone.
-- **Reminder card** — if Sanctuary detected a time reference in this thought, a reminder card appears below the timestamp. You can edit the suggested date and time, then tap **Approve** to schedule a notification or **Dismiss** to remove it. If a reminder is already approved, tap **Reschedule** to change the time or **Dismiss** to cancel it.
+- **Reminder card** — if Sanctuary detected a time reference in this thought, a reminder card appears below the timestamp. You can edit the **reminder text** (what the notification will say) and the suggested date and time, then tap **Approve** to schedule a notification or **Dismiss** to remove it. After you approve, a **Scheduled reminder** sheet opens so you can adjust again; you can also keep editing on the card (**Reschedule** / **Dismiss**) once the sheet is closed. If a reminder is already approved, tap **Reschedule** to change the time or text or **Dismiss** to cancel it. The same text field is available for each reminder in the inbox **Reminders to review** sheet.
 
 **Not in the app yet** on this screen: longer journal notes (`body_extended`), automatic debounced saving, AI reflection prompts, and the full “Reflection Space” layout from the design spec. See the product backlog if you are tracking upcoming work.
 
@@ -113,7 +113,7 @@ Tap it to open the Reminder sheet. Each item shows:
 - A suggested date and time (tap to edit before approving)
 - **Approve** and **Dismiss** buttons
 
-**Approve** schedules a notification on your device. **Dismiss** removes the reminder without scheduling anything.
+**Approve** schedules a notification on your device, then opens a **Scheduled reminder** sheet so you can tweak the text or time again before you close it. **Dismiss** removes the reminder without scheduling anything.
 
 You can also tap the bell icon on any thought card in the inbox to jump straight to that thought's reminder.
 

@@ -4,7 +4,7 @@
  * and in the Reminders Subsystem spec (ARCHITECTURE.md / ADR-004).
  */
 
-import { computeFireDate } from "./notifications";
+import { computeFireDate, type LeadTime } from "./notifications";
 
 // Helper: create a Date from a local-style ISO string without timezone shift.
 // new Date("2026-04-06T14:00:00") is parsed as local time by V8 when no Z/offset is given.
@@ -160,7 +160,11 @@ describe("computeFireDate", () => {
 
   it("unknown lead time falls back to scheduledAt", () => {
     const scheduledAt = local("2026-04-06T14:00:00");
-    const result = computeFireDate({ scheduledAt, leadTime: "never" });
+    const result = computeFireDate({
+      scheduledAt,
+      // Exercise `default` branch — value is not a valid stored preference
+      leadTime: "unknown" as LeadTime,
+    });
     expect(result.getTime()).toBe(scheduledAt.getTime());
   });
 });

@@ -1,4 +1,4 @@
-import { Button, Topic } from "@/components";
+import { Button, ReminderEditSheet, Topic } from "@/components";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
 import {
   cancelReminder,
@@ -97,6 +97,8 @@ async function loadUserPreferences(): Promise<{
   return { leadTime, morningTime };
 }
 
+const MAX_REMINDER_TEXT_LENGTH = 500;
+
 /** Format a Date as "Tuesday, 8 April · 14:00" */
 function formatReminderDate(d: Date): string {
   const dayName = d.toLocaleDateString("en-GB", { weekday: "long" });
@@ -128,8 +130,14 @@ export default function ThoughtDetailScreen() {
   const [editedReminderDate, setEditedReminderDate] = useState<Date>(
     new Date(),
   );
+  /** User-editable notification body / DB `extracted_text` */
+  const [editedReminderText, setEditedReminderText] = useState("");
   const [pickerState, setPickerState] = useState<DatePickerState | null>(null);
   const [pastDateError, setPastDateError] = useState(false);
+  const [snippetError, setSnippetError] = useState(false);
+  const [postApproveEditVisible, setPostApproveEditVisible] = useState(false);
+  const [postApproveSheetReminder, setPostApproveSheetReminder] =
+    useState<Reminder | null>(null);
 
   const loadThought = useCallback(async () => {
     if (!thoughtId) return;
@@ -144,7 +152,11 @@ export default function ThoughtDetailScreen() {
       setReminder(reminderData);
       if (reminderData) {
         setEditedReminderDate(new Date(reminderData.scheduled_at));
+        setEditedReminderText(reminderData.extracted_text);
+      } else {
+        setEditedReminderText("");
       }
+      setSnippetError(false);
     } finally {
       setLoading(false);
     }
@@ -358,6 +370,15 @@ export default function ThoughtDetailScreen() {
   async function handleApproveReminder() {
     if (!reminder) return;
 
+    const wasInactive = reminder.status === "inactive";
+
+    const bodyText = editedReminderText.trim();
+    if (!bodyText) {
+      setSnippetError(true);
+      return;
+    }
+    setSnippetError(false);
+
     if (editedReminderDate <= new Date()) {
       setPastDateError(true);
       return;
@@ -384,7 +405,7 @@ export default function ThoughtDetailScreen() {
     try {
       notifId = await scheduleReminder({
         title: "Reminder",
-        body: reminder.extracted_text,
+        body: bodyText,
         fireDate,
       });
     } catch {
@@ -398,21 +419,25 @@ export default function ThoughtDetailScreen() {
         status: "active",
         notification_id: notifId,
         scheduled_at: editedReminderDate.toISOString(),
+        extracted_text: bodyText,
         updated_at: now,
       })
       .eq("id", reminder.id);
 
-    setReminder((prev) =>
-      prev
-        ? {
-            ...prev,
-            status: "active",
-            notification_id: notifId,
-            scheduled_at: editedReminderDate.toISOString(),
-            updated_at: now,
-          }
-        : prev,
-    );
+    const nextRow: Reminder = {
+      ...reminder,
+      status: "active",
+      notification_id: notifId,
+      scheduled_at: editedReminderDate.toISOString(),
+      extracted_text: bodyText,
+      updated_at: now,
+    };
+
+    setReminder(nextRow);
+    if (wasInactive) {
+      setPostApproveSheetReminder(nextRow);
+      setPostApproveEditVisible(true);
+    }
   }
 
   async function handleRescheduleReminder() {
@@ -438,6 +463,8 @@ export default function ThoughtDetailScreen() {
       .eq("id", reminder.id);
 
     setReminder(null);
+    setPostApproveEditVisible(false);
+    setPostApproveSheetReminder(null);
   }
 
   // ---------------------------------------------------------------------------
@@ -506,15 +533,25 @@ export default function ThoughtDetailScreen() {
           >
             <Text style={styles.reminderLabel}>REMINDER</Text>
 
-            <View style={styles.snippetBlock}>
-              <Text
-                style={styles.snippetText}
-                numberOfLines={2}
-                accessibilityLabel={`Extracted text: ${reminder.extracted_text}`}
-              >
-                {reminder.extracted_text}
+            <Text style={styles.snippetMicroLabel}>Reminder text</Text>
+            <TextInput
+              style={styles.snippetInput}
+              value={editedReminderText}
+              onChangeText={(t) => {
+                setEditedReminderText(t);
+                if (snippetError && t.trim()) setSnippetError(false);
+              }}
+              multiline
+              maxLength={MAX_REMINDER_TEXT_LENGTH}
+              placeholder="What should the notification say?"
+              placeholderTextColor={colors.outlineVariant}
+              accessibilityLabel="Edit reminder notification text"
+            />
+            {snippetError && (
+              <Text style={styles.pastDateError} accessibilityRole="alert">
+                Add a short description for this reminder
               </Text>
-            </View>
+            )}
 
             <Pressable
               style={({ pressed }) => [
@@ -639,6 +676,16 @@ export default function ThoughtDetailScreen() {
           minimumDate={new Date()}
         />
       )}
+
+      <ReminderEditSheet
+        visible={postApproveEditVisible}
+        reminder={postApproveSheetReminder}
+        onClose={() => {
+          setPostApproveEditVisible(false);
+          setPostApproveSheetReminder(null);
+        }}
+        onReminderChanged={() => void loadThought()}
+      />
     </SafeAreaView>
   );
 }
@@ -717,16 +764,20 @@ const styles = StyleSheet.create({
     color: colors.outlineVariant,
     textTransform: "uppercase",
   },
-  snippetBlock: {
+  snippetMicroLabel: {
+    ...typography.labelMd,
+    color: colors.outlineVariant,
+  },
+  snippetInput: {
+    ...typography.bodyLg,
+    color: colors.onSurfaceVariant,
+    fontStyle: "italic",
     backgroundColor: colors.surfaceContainerHighest,
     borderRadius: radius.sm,
     paddingVertical: spacing.s2,
     paddingHorizontal: spacing.s4,
-  },
-  snippetText: {
-    ...typography.bodyLg,
-    color: colors.onSurfaceVariant,
-    fontStyle: "italic",
+    minHeight: 56,
+    textAlignVertical: "top",
   },
   dateRow: {
     flexDirection: "row",

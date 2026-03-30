@@ -22,14 +22,19 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
+
+const MAX_REMINDER_TEXT_LENGTH = 500;
 
 interface ReminderApprovalSheetProps {
   visible: boolean;
   onClose: () => void;
   /** Called after any approve or dismiss so the parent can refresh counts. */
   onApprovalChange: () => void;
+  /** Called immediately after a successful approve with the persisted active row. */
+  onReminderApproved?: (reminder: Reminder) => void;
 }
 
 type EditingStep = "date" | "time";
@@ -48,13 +53,6 @@ function formatReminderDate(d: Date): string {
   const hours = String(d.getHours()).padStart(2, "0");
   const mins = String(d.getMinutes()).padStart(2, "0");
   return `${dayName}, ${dayNum} ${month} · ${hours}:${mins}`;
-}
-
-/** Extract up to 120 chars of the extracted_text for display. */
-function snippetFor(text: string): string {
-  const trimmed = text.trim();
-  if (trimmed.length <= 120) return trimmed;
-  return `${trimmed.slice(0, 117)}…`;
 }
 
 async function loadUserPreferences(): Promise<{
@@ -83,9 +81,12 @@ export function ReminderApprovalSheet({
   visible,
   onClose,
   onApprovalChange,
+  onReminderApproved,
 }: ReminderApprovalSheetProps) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [localDates, setLocalDates] = useState<Record<string, Date>>({});
+  const [localTexts, setLocalTexts] = useState<Record<string, string>>({});
+  const [emptySnippetId, setEmptySnippetId] = useState<string | null>(null);
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [pastDateError, setPastDateError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -105,15 +106,19 @@ export function ReminderApprovalSheet({
       const rows = (data ?? []) as Reminder[];
       setReminders(rows);
 
-      // Initialise local date state and fade animations
+      // Initialise local date state, editable text, and fade animations
       const dates: Record<string, Date> = {};
+      const texts: Record<string, string> = {};
       for (const r of rows) {
         dates[r.id] = new Date(r.scheduled_at);
+        texts[r.id] = r.extracted_text;
         if (!fadeAnims.current[r.id]) {
           fadeAnims.current[r.id] = new Animated.Value(1);
         }
       }
       setLocalDates(dates);
+      setLocalTexts(texts);
+      setEmptySnippetId(null);
     } finally {
       setLoading(false);
     }
@@ -146,6 +151,13 @@ export function ReminderApprovalSheet({
   }
 
   async function handleApprove(reminder: Reminder) {
+    const bodyText = (localTexts[reminder.id] ?? reminder.extracted_text).trim();
+    if (!bodyText) {
+      setEmptySnippetId(reminder.id);
+      return;
+    }
+    setEmptySnippetId(null);
+
     const fireDate = localDates[reminder.id] ?? new Date(reminder.scheduled_at);
 
     if (fireDate <= new Date()) {
@@ -168,7 +180,7 @@ export function ReminderApprovalSheet({
     try {
       notificationId = await scheduleReminder({
         title: "Reminder",
-        body: snippetFor(reminder.extracted_text),
+        body: bodyText,
         fireDate: computedFire,
       });
     } catch {
@@ -181,6 +193,7 @@ export function ReminderApprovalSheet({
         status: "active",
         notification_id: notificationId,
         scheduled_at: fireDate.toISOString(),
+        extracted_text: bodyText,
         updated_at: new Date().toISOString(),
       })
       .eq("id", reminder.id);
@@ -189,6 +202,17 @@ export function ReminderApprovalSheet({
       // Reappear with error — not currently animated back in, just keep item
       return;
     }
+
+    const approved: Reminder = {
+      ...reminder,
+      status: "active",
+      notification_id: notificationId,
+      scheduled_at: fireDate.toISOString(),
+      extracted_text: bodyText,
+      updated_at: new Date().toISOString(),
+    };
+
+    onReminderApproved?.(approved);
 
     removeItemAnimated(reminder.id, () => {
       setReminders((prev) => prev.filter((r) => r.id !== reminder.id));
@@ -356,14 +380,29 @@ export function ReminderApprovalSheet({
                     <Text style={styles.itemMicroLabel}>
                       Detected in your thought
                     </Text>
-                    <View style={styles.snippetBlock}>
-                      <Text
-                        style={styles.snippetText}
-                        numberOfLines={3}
-                      >
-                        {snippetFor(reminder.extracted_text)}
+                    <TextInput
+                      style={styles.snippetInput}
+                      value={localTexts[reminder.id] ?? reminder.extracted_text}
+                      onChangeText={(t) => {
+                        setLocalTexts((prev) => ({
+                          ...prev,
+                          [reminder.id]: t,
+                        }));
+                        if (emptySnippetId === reminder.id && t.trim()) {
+                          setEmptySnippetId(null);
+                        }
+                      }}
+                      multiline
+                      maxLength={MAX_REMINDER_TEXT_LENGTH}
+                      placeholder="What should the notification say?"
+                      placeholderTextColor={colors.outlineVariant}
+                      accessibilityLabel="Edit reminder notification text"
+                    />
+                    {emptySnippetId === reminder.id && (
+                      <Text style={styles.dateError} accessibilityRole="alert">
+                        Add a short description for this reminder
                       </Text>
-                    </View>
+                    )}
 
                     {/* Section B: Date/time row */}
                     <Text style={styles.itemMicroLabel}>Suggested reminder</Text>
@@ -537,16 +576,16 @@ const styles = StyleSheet.create({
     ...typography.labelMd,
     color: colors.outlineVariant,
   },
-  snippetBlock: {
+  snippetInput: {
+    ...typography.bodyLg,
+    color: colors.onSurfaceVariant,
+    fontStyle: "italic",
     backgroundColor: colors.surfaceContainerHigh,
     borderRadius: radius.md,
     paddingVertical: spacing.s2,
     paddingHorizontal: spacing.s4,
-  },
-  snippetText: {
-    ...typography.bodyLg,
-    color: colors.onSurfaceVariant,
-    fontStyle: "italic",
+    minHeight: 56,
+    textAlignVertical: "top",
   },
   dateRow: {
     flexDirection: "row",
