@@ -1,13 +1,25 @@
-import { Topic } from "@/components";
+import { Button, Topic } from "@/components";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
+import {
+  cancelReminder,
+  computeFireDate,
+  requestNotificationPermission,
+  scheduleReminder,
+} from "@/lib/notifications";
+import type { LeadTime } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
-import { colors, spacing, typography } from "@/lib/theme";
+import { colors, radius, spacing, typography } from "@/lib/theme";
+import type { Reminder } from "@/types/reminder";
 import type { Thought } from "@/types/thought";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -28,6 +40,13 @@ type ThoughtDetail = Pick<
   | "updated_at"
 >;
 
+type DatePickerStep = "date" | "time";
+
+interface DatePickerState {
+  currentDate: Date;
+  step: DatePickerStep;
+}
+
 async function fetchThought(thoughtId: string): Promise<ThoughtDetail | null> {
   const { data, error } = await supabase
     .from("thoughts")
@@ -39,6 +58,53 @@ async function fetchThought(thoughtId: string): Promise<ThoughtDetail | null> {
 
   if (error) return null;
   return data as ThoughtDetail;
+}
+
+async function fetchReminder(thoughtId: string): Promise<Reminder | null> {
+  const { data } = await supabase
+    .from("reminders")
+    .select(
+      "id, thought_id, extracted_text, scheduled_at, status, notification_id, lead_time, created_at, updated_at",
+    )
+    .eq("thought_id", thoughtId)
+    .in("status", ["inactive", "active"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return (data as Reminder | null) ?? null;
+}
+
+async function loadUserPreferences(): Promise<{
+  leadTime: LeadTime;
+  morningTime: string;
+}> {
+  const { data } = await supabase
+    .from("user_preferences")
+    .select("key, value")
+    .in("key", ["notification_lead_time", "morning_notification_time"]);
+
+  let leadTime: LeadTime = "15min";
+  let morningTime = "07:30";
+
+  for (const row of data ?? []) {
+    if (row.key === "notification_lead_time") {
+      leadTime = (row.value as string) as LeadTime;
+    } else if (row.key === "morning_notification_time") {
+      morningTime = row.value as string;
+    }
+  }
+  return { leadTime, morningTime };
+}
+
+/** Format a Date as "Tuesday, 8 April · 14:00" */
+function formatReminderDate(d: Date): string {
+  const dayName = d.toLocaleDateString("en-GB", { weekday: "long" });
+  const dayNum = d.getDate();
+  const month = d.toLocaleDateString("en-GB", { month: "long" });
+  const hours = String(d.getHours()).padStart(2, "0");
+  const mins = String(d.getMinutes()).padStart(2, "0");
+  return `${dayName}, ${dayNum} ${month} · ${hours}:${mins}`;
 }
 
 export default function ThoughtDetailScreen() {
@@ -58,13 +124,27 @@ export default function ThoughtDetailScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const [reminder, setReminder] = useState<Reminder | null>(null);
+  const [editedReminderDate, setEditedReminderDate] = useState<Date>(
+    new Date(),
+  );
+  const [pickerState, setPickerState] = useState<DatePickerState | null>(null);
+  const [pastDateError, setPastDateError] = useState(false);
+
   const loadThought = useCallback(async () => {
     if (!thoughtId) return;
     setLoading(true);
     try {
-      const data = await fetchThought(thoughtId);
-      setThought(data);
-      if (data) setDraftBody(data.body);
+      const [thoughtData, reminderData] = await Promise.all([
+        fetchThought(thoughtId),
+        fetchReminder(thoughtId),
+      ]);
+      setThought(thoughtData);
+      if (thoughtData) setDraftBody(thoughtData.body);
+      setReminder(reminderData);
+      if (reminderData) {
+        setEditedReminderDate(new Date(reminderData.scheduled_at));
+      }
     } finally {
       setLoading(false);
     }
@@ -234,6 +314,136 @@ export default function ThoughtDetailScreen() {
     handleDeletePress,
   ]);
 
+  // ---------------------------------------------------------------------------
+  // Reminder actions
+  // ---------------------------------------------------------------------------
+
+  function openReminderDatePicker() {
+    setPickerState({ currentDate: editedReminderDate, step: "date" });
+    setPastDateError(false);
+  }
+
+  function handlePickerChange(_: unknown, selected?: Date) {
+    if (!pickerState) return;
+
+    if (!selected) {
+      setPickerState(null);
+      return;
+    }
+
+    if (Platform.OS === "android") {
+      if (pickerState.step === "date") {
+        setPickerState({ currentDate: selected, step: "time" });
+      } else {
+        const merged = new Date(pickerState.currentDate);
+        merged.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
+        setEditedReminderDate(merged);
+        setPickerState(null);
+      }
+    } else {
+      setPickerState({ ...pickerState, currentDate: selected });
+    }
+  }
+
+  function confirmIosPicker() {
+    if (!pickerState) return;
+    if (pickerState.step === "date") {
+      setPickerState({ ...pickerState, step: "time" });
+      return;
+    }
+    setEditedReminderDate(pickerState.currentDate);
+    setPickerState(null);
+  }
+
+  async function handleApproveReminder() {
+    if (!reminder) return;
+
+    if (editedReminderDate <= new Date()) {
+      setPastDateError(true);
+      return;
+    }
+    setPastDateError(false);
+
+    const granted = await requestNotificationPermission();
+    if (!granted) {
+      Alert.alert(
+        "Notifications disabled",
+        "Enable notifications in Settings to schedule this reminder.",
+      );
+      return;
+    }
+
+    const prefs = await loadUserPreferences();
+    const fireDate = computeFireDate({
+      scheduledAt: editedReminderDate,
+      leadTime: prefs.leadTime,
+      morningTime: prefs.morningTime,
+    });
+
+    let notifId: string | null = null;
+    try {
+      notifId = await scheduleReminder({
+        title: "Reminder",
+        body: reminder.extracted_text,
+        fireDate,
+      });
+    } catch {
+      // non-fatal
+    }
+
+    const now = new Date().toISOString();
+    await supabase
+      .from("reminders")
+      .update({
+        status: "active",
+        notification_id: notifId,
+        scheduled_at: editedReminderDate.toISOString(),
+        updated_at: now,
+      })
+      .eq("id", reminder.id);
+
+    setReminder((prev) =>
+      prev
+        ? {
+            ...prev,
+            status: "active",
+            notification_id: notifId,
+            scheduled_at: editedReminderDate.toISOString(),
+            updated_at: now,
+          }
+        : prev,
+    );
+  }
+
+  async function handleRescheduleReminder() {
+    if (!reminder) return;
+
+    if (reminder.notification_id) {
+      await cancelReminder(reminder.notification_id).catch(() => {});
+    }
+
+    await handleApproveReminder();
+  }
+
+  async function handleDismissReminder() {
+    if (!reminder) return;
+
+    if (reminder.notification_id) {
+      await cancelReminder(reminder.notification_id).catch(() => {});
+    }
+
+    await supabase
+      .from("reminders")
+      .update({ status: "dismissed", updated_at: new Date().toISOString() })
+      .eq("id", reminder.id);
+
+    setReminder(null);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={["bottom"]}>
@@ -253,6 +463,8 @@ export default function ThoughtDetailScreen() {
       </SafeAreaView>
     );
   }
+
+  const isPastDate = editedReminderDate <= new Date();
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
@@ -285,7 +497,148 @@ export default function ThoughtDetailScreen() {
         <Text style={styles.timestampText}>
           {formatRelativeTime(thought.created_at)}
         </Text>
+
+        {reminder !== null && (
+          <View
+            style={styles.reminderCard}
+            accessible
+            accessibilityLabel="Reminder"
+          >
+            <Text style={styles.reminderLabel}>REMINDER</Text>
+
+            <View style={styles.snippetBlock}>
+              <Text
+                style={styles.snippetText}
+                numberOfLines={2}
+                accessibilityLabel={`Extracted text: ${reminder.extracted_text}`}
+              >
+                {reminder.extracted_text}
+              </Text>
+            </View>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.dateRow,
+                pressed && styles.dateRowPressed,
+              ]}
+              onPress={openReminderDatePicker}
+              accessibilityRole="button"
+              accessibilityLabel={`Reminder time: ${formatReminderDate(editedReminderDate)}. Tap to change.`}
+              accessibilityHint="Opens date and time picker"
+            >
+              <Text style={styles.dateText}>
+                {formatReminderDate(editedReminderDate)}
+              </Text>
+              <Ionicons
+                name="pencil-outline"
+                size={16}
+                color={colors.outlineVariant}
+              />
+            </Pressable>
+
+            {pastDateError && (
+              <Text
+                style={styles.pastDateError}
+                accessibilityRole="alert"
+              >
+                Choose a future date and time
+              </Text>
+            )}
+
+            <View style={styles.actionRow}>
+              {reminder.status === "inactive" ? (
+                <>
+                  <Button
+                    label="Approve"
+                    variant="primary"
+                    onPress={() => void handleApproveReminder()}
+                    style={styles.actionBtn}
+                    disabled={isPastDate}
+                  />
+                  <Button
+                    label="Dismiss"
+                    variant="secondary"
+                    onPress={() => void handleDismissReminder()}
+                    style={styles.actionBtn}
+                  />
+                </>
+              ) : (
+                <>
+                  <Button
+                    label="Reschedule"
+                    variant="primary"
+                    onPress={() => void handleRescheduleReminder()}
+                    style={styles.actionBtn}
+                    disabled={isPastDate}
+                  />
+                  <Button
+                    label="Dismiss"
+                    variant="secondary"
+                    onPress={() => void handleDismissReminder()}
+                    style={styles.actionBtn}
+                  />
+                </>
+              )}
+            </View>
+          </View>
+        )}
       </ScrollView>
+
+      {/* iOS date/time picker — two-step modal */}
+      {pickerState !== null && Platform.OS === "ios" && (
+        <Modal
+          visible
+          animationType="slide"
+          transparent
+          onRequestClose={() => setPickerState(null)}
+        >
+          <Pressable
+            style={styles.pickerBackdrop}
+            onPress={() => setPickerState(null)}
+            accessibilityLabel="Cancel date selection"
+          >
+            <Pressable
+              style={styles.pickerSheet}
+              onPress={(e) => e.stopPropagation()}
+              accessible={false}
+            >
+              <Text style={styles.pickerTitle}>
+                {pickerState.step === "date" ? "Select date" : "Select time"}
+              </Text>
+              <DateTimePicker
+                value={pickerState.currentDate}
+                mode={pickerState.step}
+                display="spinner"
+                onChange={handlePickerChange}
+                minimumDate={new Date()}
+              />
+              <View style={styles.pickerActions}>
+                <Button
+                  label="Cancel"
+                  variant="secondary"
+                  onPress={() => setPickerState(null)}
+                />
+                <Button
+                  label={pickerState.step === "date" ? "Next" : "Confirm"}
+                  variant="primary"
+                  onPress={confirmIosPicker}
+                />
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Android — system dialog, no overlay */}
+      {pickerState !== null && Platform.OS === "android" && (
+        <DateTimePicker
+          value={pickerState.currentDate}
+          mode={pickerState.step}
+          display="default"
+          onChange={handlePickerChange}
+          minimumDate={new Date()}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -351,5 +704,82 @@ const styles = StyleSheet.create({
   },
   headerButtonDelete: {
     color: colors.error,
+  },
+  // Reminder card
+  reminderCard: {
+    backgroundColor: colors.surfaceContainerHigh,
+    borderRadius: radius.lg,
+    padding: spacing.s4,
+    gap: spacing.s4,
+  },
+  reminderLabel: {
+    ...typography.labelMd,
+    color: colors.outlineVariant,
+    textTransform: "uppercase",
+  },
+  snippetBlock: {
+    backgroundColor: colors.surfaceContainerHighest,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.s2,
+    paddingHorizontal: spacing.s4,
+  },
+  snippetText: {
+    ...typography.bodyLg,
+    color: colors.onSurfaceVariant,
+    fontStyle: "italic",
+  },
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 44,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.s2,
+  },
+  dateRowPressed: {
+    backgroundColor: colors.surfaceContainerLowest,
+  },
+  dateText: {
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    fontSize: 16,
+    lineHeight: 26,
+    color: colors.onSurface,
+    flex: 1,
+  },
+  pastDateError: {
+    ...typography.labelMd,
+    color: colors.error,
+    marginTop: -spacing.s2,
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: spacing.s4,
+  },
+  actionBtn: {
+    flex: 1,
+  },
+  // Date/time picker (iOS modal)
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: `${colors.onSurface}66`,
+    justifyContent: "flex-end",
+  },
+  pickerSheet: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    padding: spacing.s8,
+    paddingBottom: spacing.s12,
+    gap: spacing.s4,
+  },
+  pickerTitle: {
+    ...typography.headlineMd,
+    color: colors.onSurface,
+    marginBottom: spacing.s2,
+  },
+  pickerActions: {
+    flexDirection: "row",
+    gap: spacing.s4,
+    marginTop: spacing.s4,
   },
 });

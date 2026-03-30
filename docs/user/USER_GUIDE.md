@@ -80,6 +80,7 @@ Opens from the inbox when you tap a thought.
 - Tap **Edit** to change the main text, then **Save** or **Cancel** in the header.
 - **Topics** appear as chips for context; they are assigned by the app (you cannot edit them on this screen yet).
 - **Delete** removes the thought after you confirm. This cannot be undone.
+- **Reminder card** — if Sanctuary detected a time reference in this thought, a reminder card appears below the timestamp. You can edit the suggested date and time, then tap **Approve** to schedule a notification or **Dismiss** to remove it. If a reminder is already approved, tap **Reschedule** to change the time or **Dismiss** to cancel it.
 
 **Not in the app yet** on this screen: longer journal notes (`body_extended`), automatic debounced saving, AI reflection prompts, and the full “Reflection Space” layout from the design spec. See the product backlog if you are tracking upcoming work.
 
