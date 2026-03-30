@@ -84,7 +84,11 @@ export function ThoughtListCard({
           accessibilityLabel={timestampLabel}
           accessibilityRole="button"
           accessibilityHint={
-            hasPendingReminder ? "Opens reminders review sheet" : undefined
+            hasPendingReminder
+              ? "Opens reminders review sheet"
+              : hasApprovedReminder
+                ? "Opens reminder sheet to reschedule or dismiss"
+                : undefined
           }
         >
           <Text

@@ -1,5 +1,5 @@
 /**
- * Bottom sheet for editing an **active** reminder after approval (or any time opened with an active row).
+ * Bottom sheet for reviewing (**inactive**) or rescheduling (**active**) a single reminder.
  */
 import { Button } from "@/components/Button";
 import {
@@ -69,7 +69,7 @@ async function loadUserPreferences(): Promise<{
 
 export interface ReminderEditSheetProps {
   visible: boolean;
-  /** Must be `status === "active"` when visible. */
+  /** `inactive` (review / approve) or `active` (reschedule). */
   reminder: Reminder | null;
   onClose: () => void;
   onReminderChanged: () => void;
@@ -91,7 +91,7 @@ export function ReminderEditSheet({
   const show =
     visible &&
     reminder !== null &&
-    reminder.status === "active";
+    (reminder.status === "active" || reminder.status === "inactive");
 
   useLayoutEffect(() => {
     if (show && reminder) {
@@ -103,6 +103,10 @@ export function ReminderEditSheet({
       setPickerState(null);
     }
   }, [show, reminder]);
+
+  const effective = working ?? reminder;
+  const isInactive = effective?.status === "inactive";
+  const isActive = effective?.status === "active";
 
   useEffect(() => {
     if (!visible) {
@@ -147,6 +151,74 @@ export function ReminderEditSheet({
     setEditedDate(pickerState.currentDate);
     setPickerState(null);
   };
+
+  async function applyApprove() {
+    const row = working ?? reminder;
+    if (!row || row.status !== "inactive") return;
+
+    const bodyText = editedText.trim();
+    if (!bodyText) {
+      setSnippetError(true);
+      return;
+    }
+    setSnippetError(false);
+
+    if (editedDate <= new Date()) {
+      setPastDateError(true);
+      return;
+    }
+    setPastDateError(false);
+
+    const granted = await requestNotificationPermission();
+    if (!granted) {
+      Alert.alert(
+        "Notifications disabled",
+        "Enable notifications in Settings to schedule this reminder.",
+      );
+      return;
+    }
+
+    const prefs = await loadUserPreferences();
+    const fireDate = computeFireDate({
+      scheduledAt: editedDate,
+      leadTime: prefs.leadTime,
+      morningTime: prefs.morningTime,
+    });
+
+    let notifId: string | null = null;
+    try {
+      notifId = await scheduleReminder({
+        title: "Reminder",
+        body: bodyText,
+        fireDate,
+      });
+    } catch {
+      // non-fatal
+    }
+
+    const now = new Date().toISOString();
+    await supabase
+      .from("reminders")
+      .update({
+        status: "active",
+        notification_id: notifId,
+        scheduled_at: editedDate.toISOString(),
+        extracted_text: bodyText,
+        updated_at: now,
+      })
+      .eq("id", row.id);
+
+    const next: Reminder = {
+      ...row,
+      status: "active",
+      notification_id: notifId,
+      scheduled_at: editedDate.toISOString(),
+      extracted_text: bodyText,
+      updated_at: now,
+    };
+    setWorking(next);
+    onReminderChanged();
+  }
 
   async function applyReschedule() {
     const row = working ?? reminder;
@@ -262,7 +334,7 @@ export function ReminderEditSheet({
                 accessibilityRole="header"
                 nativeID="reminder-edit-sheet-title"
               >
-                Scheduled reminder
+                {isInactive ? "Review reminder" : "Scheduled reminder"}
               </Text>
               <Pressable
                 style={({ pressed }) => [
@@ -331,19 +403,41 @@ export function ReminderEditSheet({
               )}
 
               <View style={styles.actionRow}>
-                <Button
-                  label="Save"
-                  variant="primary"
-                  onPress={() => void applyReschedule()}
-                  style={styles.actionBtn}
-                  disabled={isPastDate}
-                />
-                <Button
-                  label="Dismiss"
-                  variant="secondary"
-                  onPress={() => void handleDismiss()}
-                  style={styles.actionBtn}
-                />
+                {isInactive ? (
+                  <>
+                    <Button
+                      label="Approve"
+                      variant="primary"
+                      onPress={() => void applyApprove()}
+                      style={styles.actionBtn}
+                      disabled={isPastDate}
+                    />
+                    <Button
+                      label="Dismiss"
+                      variant="secondary"
+                      onPress={() => void handleDismiss()}
+                      style={styles.actionBtn}
+                    />
+                  </>
+                ) : (
+                  isActive && (
+                    <>
+                      <Button
+                        label="Save"
+                        variant="primary"
+                        onPress={() => void applyReschedule()}
+                        style={styles.actionBtn}
+                        disabled={isPastDate}
+                      />
+                      <Button
+                        label="Dismiss"
+                        variant="secondary"
+                        onPress={() => void handleDismiss()}
+                        style={styles.actionBtn}
+                      />
+                    </>
+                  )
+                )}
               </View>
             </ScrollView>
           </Pressable>

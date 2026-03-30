@@ -54,6 +54,23 @@ async function fetchPendingReminderCount(): Promise<number> {
  * For the given thought IDs, returns a map of thought_id -> reminder status.
  * Only returns entries that have at least one non-dismissed reminder.
  */
+async function fetchActiveReminderForThought(
+  thoughtId: string,
+): Promise<Reminder | null> {
+  const { data, error } = await supabase
+    .from("reminders")
+    .select(
+      "id, user_id, thought_id, extracted_text, scheduled_at, status, notification_id, lead_time, created_at, updated_at",
+    )
+    .eq("thought_id", thoughtId)
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return null;
+  return (data as Reminder | null) ?? null;
+}
+
 async function fetchReminderStatusMap(
   thoughtIds: string[],
 ): Promise<Record<string, ThoughtReminderStatus>> {
@@ -105,9 +122,10 @@ export default function InboxScreen() {
     Record<string, ThoughtReminderStatus>
   >({});
   const [approvalSheetVisible, setApprovalSheetVisible] = useState(false);
-  const [postApproveEditVisible, setPostApproveEditVisible] = useState(false);
-  const [postApproveReminder, setPostApproveReminder] =
-    useState<Reminder | null>(null);
+  const [reminderSheetVisible, setReminderSheetVisible] = useState(false);
+  const [reminderSheetRow, setReminderSheetRow] = useState<Reminder | null>(
+    null,
+  );
 
   const loadReminders = useCallback(async (ids: string[]) => {
     const [count, statusMap] = await Promise.all([
@@ -228,9 +246,21 @@ export default function InboxScreen() {
               hasPendingReminder={reminderStatus === "pending"}
               hasApprovedReminder={reminderStatus === "approved"}
               onBellPress={
-                reminderStatus !== null
+                reminderStatus === "pending"
                   ? () => setApprovalSheetVisible(true)
-                  : undefined
+                  : reminderStatus === "approved"
+                    ? () => {
+                        void (async () => {
+                          const r = await fetchActiveReminderForThought(
+                            item.id,
+                          );
+                          if (r) {
+                            setReminderSheetRow(r);
+                            setReminderSheetVisible(true);
+                          }
+                        })();
+                      }
+                    : undefined
               }
             />
           );
@@ -269,17 +299,13 @@ export default function InboxScreen() {
         visible={approvalSheetVisible}
         onClose={() => setApprovalSheetVisible(false)}
         onApprovalChange={handleApprovalChange}
-        onReminderApproved={(r) => {
-          setPostApproveReminder(r);
-          setPostApproveEditVisible(true);
-        }}
       />
       <ReminderEditSheet
-        visible={postApproveEditVisible}
-        reminder={postApproveReminder}
+        visible={reminderSheetVisible}
+        reminder={reminderSheetRow}
         onClose={() => {
-          setPostApproveEditVisible(false);
-          setPostApproveReminder(null);
+          setReminderSheetVisible(false);
+          setReminderSheetRow(null);
         }}
         onReminderChanged={handleApprovalChange}
       />

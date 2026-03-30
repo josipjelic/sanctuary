@@ -33,8 +33,6 @@ interface ReminderApprovalSheetProps {
   onClose: () => void;
   /** Called after any approve or dismiss so the parent can refresh counts. */
   onApprovalChange: () => void;
-  /** Called immediately after a successful approve with the persisted active row. */
-  onReminderApproved?: (reminder: Reminder) => void;
 }
 
 type EditingStep = "date" | "time";
@@ -81,7 +79,6 @@ export function ReminderApprovalSheet({
   visible,
   onClose,
   onApprovalChange,
-  onReminderApproved,
 }: ReminderApprovalSheetProps) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [localDates, setLocalDates] = useState<Record<string, Date>>({});
@@ -202,17 +199,6 @@ export function ReminderApprovalSheet({
       // Reappear with error — not currently animated back in, just keep item
       return;
     }
-
-    const approved: Reminder = {
-      ...reminder,
-      status: "active",
-      notification_id: notificationId,
-      scheduled_at: fireDate.toISOString(),
-      extracted_text: bodyText,
-      updated_at: new Date().toISOString(),
-    };
-
-    onReminderApproved?.(approved);
 
     removeItemAnimated(reminder.id, () => {
       setReminders((prev) => prev.filter((r) => r.id !== reminder.id));

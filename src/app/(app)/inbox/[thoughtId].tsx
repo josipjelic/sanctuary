@@ -1,25 +1,15 @@
-import { Button, ReminderEditSheet, Topic } from "@/components";
+import { ReminderEditSheet, Topic } from "@/components";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
-import {
-  cancelReminder,
-  computeFireDate,
-  requestNotificationPermission,
-  scheduleReminder,
-} from "@/lib/notifications";
-import type { LeadTime } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import type { Reminder } from "@/types/reminder";
 import type { Thought } from "@/types/thought";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -40,13 +30,6 @@ type ThoughtDetail = Pick<
   | "updated_at"
 >;
 
-type DatePickerStep = "date" | "time";
-
-interface DatePickerState {
-  currentDate: Date;
-  step: DatePickerStep;
-}
-
 async function fetchThought(thoughtId: string): Promise<ThoughtDetail | null> {
   const { data, error } = await supabase
     .from("thoughts")
@@ -64,7 +47,7 @@ async function fetchReminder(thoughtId: string): Promise<Reminder | null> {
   const { data } = await supabase
     .from("reminders")
     .select(
-      "id, thought_id, extracted_text, scheduled_at, status, notification_id, lead_time, created_at, updated_at",
+      "id, user_id, thought_id, extracted_text, scheduled_at, status, notification_id, lead_time, created_at, updated_at",
     )
     .eq("thought_id", thoughtId)
     .in("status", ["inactive", "active"])
@@ -73,40 +56,6 @@ async function fetchReminder(thoughtId: string): Promise<Reminder | null> {
     .maybeSingle();
 
   return (data as Reminder | null) ?? null;
-}
-
-async function loadUserPreferences(): Promise<{
-  leadTime: LeadTime;
-  morningTime: string;
-}> {
-  const { data } = await supabase
-    .from("user_preferences")
-    .select("key, value")
-    .in("key", ["notification_lead_time", "morning_notification_time"]);
-
-  let leadTime: LeadTime = "15min";
-  let morningTime = "07:30";
-
-  for (const row of data ?? []) {
-    if (row.key === "notification_lead_time") {
-      leadTime = (row.value as string) as LeadTime;
-    } else if (row.key === "morning_notification_time") {
-      morningTime = row.value as string;
-    }
-  }
-  return { leadTime, morningTime };
-}
-
-const MAX_REMINDER_TEXT_LENGTH = 500;
-
-/** Format a Date as "Tuesday, 8 April · 14:00" */
-function formatReminderDate(d: Date): string {
-  const dayName = d.toLocaleDateString("en-GB", { weekday: "long" });
-  const dayNum = d.getDate();
-  const month = d.toLocaleDateString("en-GB", { month: "long" });
-  const hours = String(d.getHours()).padStart(2, "0");
-  const mins = String(d.getMinutes()).padStart(2, "0");
-  return `${dayName}, ${dayNum} ${month} · ${hours}:${mins}`;
 }
 
 export default function ThoughtDetailScreen() {
@@ -127,17 +76,7 @@ export default function ThoughtDetailScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const [reminder, setReminder] = useState<Reminder | null>(null);
-  const [editedReminderDate, setEditedReminderDate] = useState<Date>(
-    new Date(),
-  );
-  /** User-editable notification body / DB `extracted_text` */
-  const [editedReminderText, setEditedReminderText] = useState("");
-  const [pickerState, setPickerState] = useState<DatePickerState | null>(null);
-  const [pastDateError, setPastDateError] = useState(false);
-  const [snippetError, setSnippetError] = useState(false);
-  const [postApproveEditVisible, setPostApproveEditVisible] = useState(false);
-  const [postApproveSheetReminder, setPostApproveSheetReminder] =
-    useState<Reminder | null>(null);
+  const [reminderSheetVisible, setReminderSheetVisible] = useState(false);
 
   const loadThought = useCallback(async () => {
     if (!thoughtId) return;
@@ -150,13 +89,7 @@ export default function ThoughtDetailScreen() {
       setThought(thoughtData);
       if (thoughtData) setDraftBody(thoughtData.body);
       setReminder(reminderData);
-      if (reminderData) {
-        setEditedReminderDate(new Date(reminderData.scheduled_at));
-        setEditedReminderText(reminderData.extracted_text);
-      } else {
-        setEditedReminderText("");
-      }
-      setSnippetError(false);
+      if (!reminderData) setReminderSheetVisible(false);
     } finally {
       setLoading(false);
     }
@@ -327,147 +260,6 @@ export default function ThoughtDetailScreen() {
   ]);
 
   // ---------------------------------------------------------------------------
-  // Reminder actions
-  // ---------------------------------------------------------------------------
-
-  function openReminderDatePicker() {
-    setPickerState({ currentDate: editedReminderDate, step: "date" });
-    setPastDateError(false);
-  }
-
-  function handlePickerChange(_: unknown, selected?: Date) {
-    if (!pickerState) return;
-
-    if (!selected) {
-      setPickerState(null);
-      return;
-    }
-
-    if (Platform.OS === "android") {
-      if (pickerState.step === "date") {
-        setPickerState({ currentDate: selected, step: "time" });
-      } else {
-        const merged = new Date(pickerState.currentDate);
-        merged.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
-        setEditedReminderDate(merged);
-        setPickerState(null);
-      }
-    } else {
-      setPickerState({ ...pickerState, currentDate: selected });
-    }
-  }
-
-  function confirmIosPicker() {
-    if (!pickerState) return;
-    if (pickerState.step === "date") {
-      setPickerState({ ...pickerState, step: "time" });
-      return;
-    }
-    setEditedReminderDate(pickerState.currentDate);
-    setPickerState(null);
-  }
-
-  async function handleApproveReminder() {
-    if (!reminder) return;
-
-    const wasInactive = reminder.status === "inactive";
-
-    const bodyText = editedReminderText.trim();
-    if (!bodyText) {
-      setSnippetError(true);
-      return;
-    }
-    setSnippetError(false);
-
-    if (editedReminderDate <= new Date()) {
-      setPastDateError(true);
-      return;
-    }
-    setPastDateError(false);
-
-    const granted = await requestNotificationPermission();
-    if (!granted) {
-      Alert.alert(
-        "Notifications disabled",
-        "Enable notifications in Settings to schedule this reminder.",
-      );
-      return;
-    }
-
-    const prefs = await loadUserPreferences();
-    const fireDate = computeFireDate({
-      scheduledAt: editedReminderDate,
-      leadTime: prefs.leadTime,
-      morningTime: prefs.morningTime,
-    });
-
-    let notifId: string | null = null;
-    try {
-      notifId = await scheduleReminder({
-        title: "Reminder",
-        body: bodyText,
-        fireDate,
-      });
-    } catch {
-      // non-fatal
-    }
-
-    const now = new Date().toISOString();
-    await supabase
-      .from("reminders")
-      .update({
-        status: "active",
-        notification_id: notifId,
-        scheduled_at: editedReminderDate.toISOString(),
-        extracted_text: bodyText,
-        updated_at: now,
-      })
-      .eq("id", reminder.id);
-
-    const nextRow: Reminder = {
-      ...reminder,
-      status: "active",
-      notification_id: notifId,
-      scheduled_at: editedReminderDate.toISOString(),
-      extracted_text: bodyText,
-      updated_at: now,
-    };
-
-    setReminder(nextRow);
-    if (wasInactive) {
-      setPostApproveSheetReminder(nextRow);
-      setPostApproveEditVisible(true);
-    }
-  }
-
-  async function handleRescheduleReminder() {
-    if (!reminder) return;
-
-    if (reminder.notification_id) {
-      await cancelReminder(reminder.notification_id).catch(() => {});
-    }
-
-    await handleApproveReminder();
-  }
-
-  async function handleDismissReminder() {
-    if (!reminder) return;
-
-    if (reminder.notification_id) {
-      await cancelReminder(reminder.notification_id).catch(() => {});
-    }
-
-    await supabase
-      .from("reminders")
-      .update({ status: "dismissed", updated_at: new Date().toISOString() })
-      .eq("id", reminder.id);
-
-    setReminder(null);
-    setPostApproveEditVisible(false);
-    setPostApproveSheetReminder(null);
-  }
-
-  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
@@ -490,8 +282,6 @@ export default function ThoughtDetailScreen() {
       </SafeAreaView>
     );
   }
-
-  const isPastDate = editedReminderDate <= new Date();
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
@@ -526,164 +316,51 @@ export default function ThoughtDetailScreen() {
         </Text>
 
         {reminder !== null && (
-          <View
-            style={styles.reminderCard}
-            accessible
-            accessibilityLabel="Reminder"
+          <Pressable
+            style={({ pressed }) => [
+              styles.reminderPromptRow,
+              pressed && styles.reminderPromptRowPressed,
+            ]}
+            onPress={() => setReminderSheetVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              reminder.status === "inactive"
+                ? "Reminder awaiting your review. Opens reminder sheet."
+                : "Scheduled reminder. Opens sheet to reschedule or dismiss."
+            }
+            accessibilityHint="Opens reminder sheet"
           >
-            <Text style={styles.reminderLabel}>REMINDER</Text>
-
-            <Text style={styles.snippetMicroLabel}>Reminder text</Text>
-            <TextInput
-              style={styles.snippetInput}
-              value={editedReminderText}
-              onChangeText={(t) => {
-                setEditedReminderText(t);
-                if (snippetError && t.trim()) setSnippetError(false);
-              }}
-              multiline
-              maxLength={MAX_REMINDER_TEXT_LENGTH}
-              placeholder="What should the notification say?"
-              placeholderTextColor={colors.outlineVariant}
-              accessibilityLabel="Edit reminder notification text"
+            <Ionicons
+              name={
+                reminder.status === "inactive"
+                  ? "notifications-outline"
+                  : "notifications"
+              }
+              size={18}
+              color={
+                reminder.status === "inactive"
+                  ? colors.primary
+                  : colors.outlineVariant
+              }
             />
-            {snippetError && (
-              <Text style={styles.pastDateError} accessibilityRole="alert">
-                Add a short description for this reminder
-              </Text>
-            )}
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.dateRow,
-                pressed && styles.dateRowPressed,
-              ]}
-              onPress={openReminderDatePicker}
-              accessibilityRole="button"
-              accessibilityLabel={`Reminder time: ${formatReminderDate(editedReminderDate)}. Tap to change.`}
-              accessibilityHint="Opens date and time picker"
-            >
-              <Text style={styles.dateText}>
-                {formatReminderDate(editedReminderDate)}
-              </Text>
-              <Ionicons
-                name="pencil-outline"
-                size={16}
-                color={colors.outlineVariant}
-              />
-            </Pressable>
-
-            {pastDateError && (
-              <Text
-                style={styles.pastDateError}
-                accessibilityRole="alert"
-              >
-                Choose a future date and time
-              </Text>
-            )}
-
-            <View style={styles.actionRow}>
-              {reminder.status === "inactive" ? (
-                <>
-                  <Button
-                    label="Approve"
-                    variant="primary"
-                    onPress={() => void handleApproveReminder()}
-                    style={styles.actionBtn}
-                    disabled={isPastDate}
-                  />
-                  <Button
-                    label="Dismiss"
-                    variant="secondary"
-                    onPress={() => void handleDismissReminder()}
-                    style={styles.actionBtn}
-                  />
-                </>
-              ) : (
-                <>
-                  <Button
-                    label="Reschedule"
-                    variant="primary"
-                    onPress={() => void handleRescheduleReminder()}
-                    style={styles.actionBtn}
-                    disabled={isPastDate}
-                  />
-                  <Button
-                    label="Dismiss"
-                    variant="secondary"
-                    onPress={() => void handleDismissReminder()}
-                    style={styles.actionBtn}
-                  />
-                </>
-              )}
-            </View>
-          </View>
+            <Text style={styles.reminderPromptText}>
+              {reminder.status === "inactive"
+                ? "Reminder · review in sheet"
+                : "Reminder · tap to reschedule"}
+            </Text>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={colors.outlineVariant}
+            />
+          </Pressable>
         )}
       </ScrollView>
 
-      {/* iOS date/time picker — two-step modal */}
-      {pickerState !== null && Platform.OS === "ios" && (
-        <Modal
-          visible
-          animationType="slide"
-          transparent
-          onRequestClose={() => setPickerState(null)}
-        >
-          <Pressable
-            style={styles.pickerBackdrop}
-            onPress={() => setPickerState(null)}
-            accessibilityLabel="Cancel date selection"
-          >
-            <Pressable
-              style={styles.pickerSheet}
-              onPress={(e) => e.stopPropagation()}
-              accessible={false}
-            >
-              <Text style={styles.pickerTitle}>
-                {pickerState.step === "date" ? "Select date" : "Select time"}
-              </Text>
-              <DateTimePicker
-                value={pickerState.currentDate}
-                mode={pickerState.step}
-                display="spinner"
-                onChange={handlePickerChange}
-                minimumDate={new Date()}
-              />
-              <View style={styles.pickerActions}>
-                <Button
-                  label="Cancel"
-                  variant="secondary"
-                  onPress={() => setPickerState(null)}
-                />
-                <Button
-                  label={pickerState.step === "date" ? "Next" : "Confirm"}
-                  variant="primary"
-                  onPress={confirmIosPicker}
-                />
-              </View>
-            </Pressable>
-          </Pressable>
-        </Modal>
-      )}
-
-      {/* Android — system dialog, no overlay */}
-      {pickerState !== null && Platform.OS === "android" && (
-        <DateTimePicker
-          value={pickerState.currentDate}
-          mode={pickerState.step}
-          display="default"
-          onChange={handlePickerChange}
-          minimumDate={new Date()}
-        />
-      )}
-
       <ReminderEditSheet
-        visible={postApproveEditVisible}
-        reminder={postApproveSheetReminder}
-        onClose={() => {
-          setPostApproveEditVisible(false);
-          setPostApproveSheetReminder(null);
-        }}
+        visible={reminderSheetVisible}
+        reminder={reminder}
+        onClose={() => setReminderSheetVisible(false)}
         onReminderChanged={() => void loadThought()}
       />
     </SafeAreaView>
@@ -752,85 +429,23 @@ const styles = StyleSheet.create({
   headerButtonDelete: {
     color: colors.error,
   },
-  // Reminder card
-  reminderCard: {
-    backgroundColor: colors.surfaceContainerHigh,
-    borderRadius: radius.lg,
-    padding: spacing.s4,
-    gap: spacing.s4,
-  },
-  reminderLabel: {
-    ...typography.labelMd,
-    color: colors.outlineVariant,
-    textTransform: "uppercase",
-  },
-  snippetMicroLabel: {
-    ...typography.labelMd,
-    color: colors.outlineVariant,
-  },
-  snippetInput: {
-    ...typography.bodyLg,
-    color: colors.onSurfaceVariant,
-    fontStyle: "italic",
-    backgroundColor: colors.surfaceContainerHighest,
-    borderRadius: radius.sm,
-    paddingVertical: spacing.s2,
-    paddingHorizontal: spacing.s4,
-    minHeight: 56,
-    textAlignVertical: "top",
-  },
-  dateRow: {
+  reminderPromptRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    minHeight: 44,
-    borderRadius: radius.sm,
+    gap: spacing.s2,
+    minHeight: 48,
+    paddingVertical: spacing.s2,
     paddingHorizontal: spacing.s2,
+    marginTop: spacing.s2,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceContainerHigh,
   },
-  dateRowPressed: {
-    backgroundColor: colors.surfaceContainerLowest,
+  reminderPromptRowPressed: {
+    opacity: 0.85,
   },
-  dateText: {
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    fontSize: 16,
-    lineHeight: 26,
+  reminderPromptText: {
+    ...typography.bodyLg,
     color: colors.onSurface,
     flex: 1,
-  },
-  pastDateError: {
-    ...typography.labelMd,
-    color: colors.error,
-    marginTop: -spacing.s2,
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: spacing.s4,
-  },
-  actionBtn: {
-    flex: 1,
-  },
-  // Date/time picker (iOS modal)
-  pickerBackdrop: {
-    flex: 1,
-    backgroundColor: `${colors.onSurface}66`,
-    justifyContent: "flex-end",
-  },
-  pickerSheet: {
-    backgroundColor: colors.surfaceContainerLowest,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    padding: spacing.s8,
-    paddingBottom: spacing.s12,
-    gap: spacing.s4,
-  },
-  pickerTitle: {
-    ...typography.headlineMd,
-    color: colors.onSurface,
-    marginBottom: spacing.s2,
-  },
-  pickerActions: {
-    flexDirection: "row",
-    gap: spacing.s4,
-    marginTop: spacing.s4,
   },
 });
