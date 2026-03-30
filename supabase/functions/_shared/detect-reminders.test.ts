@@ -50,13 +50,17 @@ function makeOrResponse(content: string, status = 200): Response {
 }
 
 /** Standard params used across most tests — override individual fields as needed. */
-function baseParams(overrides: Partial<Parameters<typeof detectRemindersForThought>[0]> = {}) {
+function baseParams(
+  overrides: Partial<Parameters<typeof detectRemindersForThought>[0]> = {},
+) {
   return {
     userId: "user-uuid-1",
     thoughtId: "thought-uuid-1",
     text: "Call mum next Monday",
     currentIsoTimestamp: "2026-04-01T10:00:00",
-    supabaseClient: makeSupabaseMock() as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+    supabaseClient: makeSupabaseMock() as unknown as Parameters<
+      typeof detectRemindersForThought
+    >[0]["supabaseClient"],
     openRouterApiKey: "test-api-key",
     model: "test/model",
     callerFunction: "detect-reminders",
@@ -89,7 +93,9 @@ describe("detectRemindersForThought — no reminders returned", () => {
 
     const sbMock = makeSupabaseMock();
     const params = baseParams({
-      supabaseClient: sbMock as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+      supabaseClient: sbMock as unknown as Parameters<
+        typeof detectRemindersForThought
+      >[0]["supabaseClient"],
     });
 
     await detectRemindersForThought(params);
@@ -98,14 +104,18 @@ describe("detectRemindersForThought — no reminders returned", () => {
     expect(sbMock._remindersInsertMock).not.toHaveBeenCalled();
 
     // Final thoughts update should have set status to 'complete'
-    const allFromCalls: string[] = sbMock.from.mock.calls.map((c: [string]) => c[0]);
+    const allFromCalls: string[] = sbMock.from.mock.calls.map(
+      (c: [string]) => c[0],
+    );
     const thoughtsCalls = allFromCalls.filter((t) => t === "thoughts");
     expect(thoughtsCalls.length).toBeGreaterThanOrEqual(2); // pending + complete
 
     // The last thoughts update arg must be 'complete'
-    const lastUpdateCall = sbMock.from.mock.results.filter(
-      (_: unknown, i: number) => sbMock.from.mock.calls[i][0] === "thoughts",
-    ).pop();
+    const lastUpdateCall = sbMock.from.mock.results
+      .filter(
+        (_: unknown, i: number) => sbMock.from.mock.calls[i][0] === "thoughts",
+      )
+      .pop();
     expect(lastUpdateCall).toBeDefined();
   });
 
@@ -131,7 +141,9 @@ describe("detectRemindersForThought — no reminders returned", () => {
 
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: { from: fromMock } as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: { from: fromMock } as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
@@ -155,12 +167,15 @@ describe("detectRemindersForThought — single reminder", () => {
     const sbMock = makeSupabaseMock();
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: sbMock as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: sbMock as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
     expect(sbMock._remindersInsertMock).toHaveBeenCalledTimes(1);
-    const inserted: Array<Record<string, unknown>> = sbMock._remindersInsertMock.mock.calls[0][0];
+    const inserted: Array<Record<string, unknown>> =
+      sbMock._remindersInsertMock.mock.calls[0][0];
     expect(inserted).toHaveLength(1);
     expect(inserted[0]).toMatchObject({
       user_id: "user-uuid-1",
@@ -196,7 +211,9 @@ describe("detectRemindersForThought — single reminder", () => {
 
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: { from: fromMock } as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: { from: fromMock } as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
@@ -213,8 +230,14 @@ describe("detectRemindersForThought — multiple reminders", () => {
     const orPayload = JSON.stringify({
       reminders: [
         { extracted_text: "Call mum", scheduled_at: "2026-04-07T09:00:00" },
-        { extracted_text: "Dentist Wednesday 3pm", scheduled_at: "2026-04-09T15:00:00" },
-        { extracted_text: "Submit report by Friday", scheduled_at: "2026-04-11T17:00:00" },
+        {
+          extracted_text: "Dentist Wednesday 3pm",
+          scheduled_at: "2026-04-09T15:00:00",
+        },
+        {
+          extracted_text: "Submit report by Friday",
+          scheduled_at: "2026-04-11T17:00:00",
+        },
       ],
     });
     global.fetch = jest.fn().mockResolvedValueOnce(makeOrResponse(orPayload));
@@ -222,7 +245,9 @@ describe("detectRemindersForThought — multiple reminders", () => {
     const sbMock = makeSupabaseMock();
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: sbMock as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: sbMock as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
@@ -243,11 +268,14 @@ describe("detectRemindersForThought — multiple reminders", () => {
     const sbMock = makeSupabaseMock();
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: sbMock as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: sbMock as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
-    const inserted: Array<Record<string, unknown>> = sbMock._remindersInsertMock.mock.calls[0][0];
+    const inserted: Array<Record<string, unknown>> =
+      sbMock._remindersInsertMock.mock.calls[0][0];
     for (const row of inserted) {
       expect(row.status).toBe("inactive");
       expect(row.user_id).toBe("user-uuid-1");
@@ -262,9 +290,9 @@ describe("detectRemindersForThought — multiple reminders", () => {
 
 describe("detectRemindersForThought — malformed JSON response", () => {
   it("marks status failed and does not insert any rows", async () => {
-    global.fetch = jest.fn().mockResolvedValueOnce(
-      makeOrResponse("This is not JSON at all!"),
-    );
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(makeOrResponse("This is not JSON at all!"));
 
     const statusSequence: string[] = [];
     const insertMock = jest.fn();
@@ -284,7 +312,9 @@ describe("detectRemindersForThought — malformed JSON response", () => {
 
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: { from: fromMock } as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: { from: fromMock } as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
@@ -294,9 +324,13 @@ describe("detectRemindersForThought — malformed JSON response", () => {
   });
 
   it("marks status failed when response JSON missing 'reminders' array", async () => {
-    global.fetch = jest.fn().mockResolvedValueOnce(
-      makeOrResponse(JSON.stringify({ has_reminder: true, description: "oops" })),
-    );
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(
+        makeOrResponse(
+          JSON.stringify({ has_reminder: true, description: "oops" }),
+        ),
+      );
 
     const statusSequence: string[] = [];
     const fromMock = jest.fn((table: string) => {
@@ -315,7 +349,9 @@ describe("detectRemindersForThought — malformed JSON response", () => {
 
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: { from: fromMock } as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: { from: fromMock } as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
@@ -329,19 +365,22 @@ describe("detectRemindersForThought — malformed JSON response", () => {
       ],
     });
     // Simulate model wrapping response in markdown code block
-    global.fetch = jest.fn().mockResolvedValueOnce(
-      makeOrResponse("```json\n" + inner + "\n```"),
-    );
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(makeOrResponse(`\`\`\`json\n${inner}\n\`\`\``));
 
     const sbMock = makeSupabaseMock();
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: sbMock as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: sbMock as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
     expect(sbMock._remindersInsertMock).toHaveBeenCalledTimes(1);
-    const inserted: Array<Record<string, unknown>> = sbMock._remindersInsertMock.mock.calls[0][0];
+    const inserted: Array<Record<string, unknown>> =
+      sbMock._remindersInsertMock.mock.calls[0][0];
     expect(inserted[0].extracted_text).toBe("Team standup");
   });
 });
@@ -352,9 +391,9 @@ describe("detectRemindersForThought — malformed JSON response", () => {
 
 describe("detectRemindersForThought — OpenRouter HTTP error", () => {
   it("marks status failed on 500 response and does not insert", async () => {
-    global.fetch = jest.fn().mockResolvedValueOnce(
-      makeOrResponse("Internal Server Error", 500),
-    );
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(makeOrResponse("Internal Server Error", 500));
 
     const statusSequence: string[] = [];
     const insertMock = jest.fn();
@@ -374,7 +413,9 @@ describe("detectRemindersForThought — OpenRouter HTTP error", () => {
 
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: { from: fromMock } as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: { from: fromMock } as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
@@ -384,9 +425,9 @@ describe("detectRemindersForThought — OpenRouter HTTP error", () => {
   });
 
   it("marks status failed on 401 response", async () => {
-    global.fetch = jest.fn().mockResolvedValueOnce(
-      makeOrResponse("Unauthorized", 401),
-    );
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(makeOrResponse("Unauthorized", 401));
 
     const statusSequence: string[] = [];
     const fromMock = jest.fn((table: string) => {
@@ -405,7 +446,9 @@ describe("detectRemindersForThought — OpenRouter HTTP error", () => {
 
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: { from: fromMock } as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: { from: fromMock } as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
@@ -419,7 +462,9 @@ describe("detectRemindersForThought — OpenRouter HTTP error", () => {
 
 describe("detectRemindersForThought — network error", () => {
   it("marks status failed when fetch throws and does not insert", async () => {
-    global.fetch = jest.fn().mockRejectedValueOnce(new Error("Network unreachable"));
+    global.fetch = jest
+      .fn()
+      .mockRejectedValueOnce(new Error("Network unreachable"));
 
     const statusSequence: string[] = [];
     const insertMock = jest.fn();
@@ -439,7 +484,9 @@ describe("detectRemindersForThought — network error", () => {
 
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: { from: fromMock } as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: { from: fromMock } as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
@@ -457,7 +504,10 @@ describe("detectRemindersForThought — partial/invalid reminder items", () => {
     const orPayload = JSON.stringify({
       reminders: [
         { extracted_text: "", scheduled_at: "2026-04-07T09:00:00" },
-        { extracted_text: "Valid reminder", scheduled_at: "2026-04-08T10:00:00" },
+        {
+          extracted_text: "Valid reminder",
+          scheduled_at: "2026-04-08T10:00:00",
+        },
       ],
     });
     global.fetch = jest.fn().mockResolvedValueOnce(makeOrResponse(orPayload));
@@ -465,12 +515,15 @@ describe("detectRemindersForThought — partial/invalid reminder items", () => {
     const sbMock = makeSupabaseMock();
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: sbMock as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: sbMock as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
     expect(sbMock._remindersInsertMock).toHaveBeenCalledTimes(1);
-    const inserted: Array<Record<string, unknown>> = sbMock._remindersInsertMock.mock.calls[0][0];
+    const inserted: Array<Record<string, unknown>> =
+      sbMock._remindersInsertMock.mock.calls[0][0];
     // Only the valid item should be inserted
     expect(inserted).toHaveLength(1);
     expect(inserted[0].extracted_text).toBe("Valid reminder");
@@ -480,7 +533,10 @@ describe("detectRemindersForThought — partial/invalid reminder items", () => {
     const orPayload = JSON.stringify({
       reminders: [
         { extracted_text: "Bad date", scheduled_at: "not-a-date" },
-        { extracted_text: "Good reminder", scheduled_at: "2026-04-09T12:00:00" },
+        {
+          extracted_text: "Good reminder",
+          scheduled_at: "2026-04-09T12:00:00",
+        },
       ],
     });
     global.fetch = jest.fn().mockResolvedValueOnce(makeOrResponse(orPayload));
@@ -488,11 +544,14 @@ describe("detectRemindersForThought — partial/invalid reminder items", () => {
     const sbMock = makeSupabaseMock();
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: sbMock as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: sbMock as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
-    const inserted: Array<Record<string, unknown>> = sbMock._remindersInsertMock.mock.calls[0][0];
+    const inserted: Array<Record<string, unknown>> =
+      sbMock._remindersInsertMock.mock.calls[0][0];
     expect(inserted).toHaveLength(1);
     expect(inserted[0].extracted_text).toBe("Good reminder");
   });
@@ -500,9 +559,7 @@ describe("detectRemindersForThought — partial/invalid reminder items", () => {
   it("does not insert when all items are invalid — marks complete (not failed)", async () => {
     // All items are skipped by the parser — the result is an empty valid array
     const orPayload = JSON.stringify({
-      reminders: [
-        { extracted_text: "", scheduled_at: "not-a-date" },
-      ],
+      reminders: [{ extracted_text: "", scheduled_at: "not-a-date" }],
     });
     global.fetch = jest.fn().mockResolvedValueOnce(makeOrResponse(orPayload));
 
@@ -524,7 +581,9 @@ describe("detectRemindersForThought — partial/invalid reminder items", () => {
 
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: { from: fromMock } as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: { from: fromMock } as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 
@@ -552,7 +611,9 @@ describe("detectRemindersForThought — DB insert error", () => {
     const fromMock = jest.fn((table: string) => {
       if (table === "reminders") {
         return {
-          insert: jest.fn().mockReturnValue({ error: { message: "unique constraint" } }),
+          insert: jest
+            .fn()
+            .mockReturnValue({ error: { message: "unique constraint" } }),
         };
       }
       return {
@@ -567,7 +628,9 @@ describe("detectRemindersForThought — DB insert error", () => {
 
     await detectRemindersForThought(
       baseParams({
-        supabaseClient: { from: fromMock } as unknown as Parameters<typeof detectRemindersForThought>[0]["supabaseClient"],
+        supabaseClient: { from: fromMock } as unknown as Parameters<
+          typeof detectRemindersForThought
+        >[0]["supabaseClient"],
       }),
     );
 

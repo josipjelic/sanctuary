@@ -10,8 +10,6 @@ describe("reminderTimeContext", () => {
 
   it("formatLocalIsoWithOffset produces ISO-like string with numeric offset", () => {
     const s = formatLocalIsoWithOffset(new Date(2026, 2, 30, 14, 5, 9));
-    expect(s).toMatch(
-      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/,
-    );
+    expect(s).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/);
   });
 });

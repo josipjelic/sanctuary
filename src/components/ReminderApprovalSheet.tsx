@@ -1,19 +1,21 @@
 import { Button } from "@/components/Button";
-import { supabase } from "@/lib/supabase";
-import { colors, radius, spacing, typography } from "@/lib/theme";
+import { addReminderToDeviceCalendar } from "@/lib/deviceCalendar";
 import type { LeadTime } from "@/lib/notifications";
 import {
+  cancelReminder,
   computeFireDate,
   requestNotificationPermission,
   scheduleReminder,
-  cancelReminder,
 } from "@/lib/notifications";
+import { supabase } from "@/lib/supabase";
+import { colors, radius, spacing, typography } from "@/lib/theme";
 import type { Reminder } from "@/types/reminder";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AccessibilityInfo,
+  Alert,
   Animated,
   LayoutAnimation,
   Modal,
@@ -67,7 +69,7 @@ async function loadUserPreferences(): Promise<{
 
   for (const row of data ?? []) {
     if (row.key === "notification_lead_time") {
-      leadTime = (row.value as string) as LeadTime;
+      leadTime = row.value as string as LeadTime;
     } else if (row.key === "morning_notification_time") {
       morningTime = row.value as string;
     }
@@ -148,7 +150,9 @@ export function ReminderApprovalSheet({
   }
 
   async function handleApprove(reminder: Reminder) {
-    const bodyText = (localTexts[reminder.id] ?? reminder.extracted_text).trim();
+    const bodyText = (
+      localTexts[reminder.id] ?? reminder.extracted_text
+    ).trim();
     if (!bodyText) {
       setEmptySnippetId(reminder.id);
       return;
@@ -200,10 +204,54 @@ export function ReminderApprovalSheet({
       return;
     }
 
-    removeItemAnimated(reminder.id, () => {
-      setReminders((prev) => prev.filter((r) => r.id !== reminder.id));
-      onApprovalChange();
-    });
+    const finishRemoval = () => {
+      removeItemAnimated(reminder.id, () => {
+        setReminders((prev) => prev.filter((r) => r.id !== reminder.id));
+        onApprovalChange();
+      });
+    };
+
+    if (Platform.OS === "web") {
+      finishRemoval();
+      return;
+    }
+
+    Alert.alert(
+      "Add to calendar?",
+      "Save this reminder as an event in your calendar app.",
+      [
+        { text: "Not now", style: "cancel", onPress: finishRemoval },
+        {
+          text: "Add",
+          onPress: () => {
+            void (async () => {
+              const result = await addReminderToDeviceCalendar({
+                title: bodyText,
+                scheduledAt: fireDate,
+              });
+              if (result.ok) {
+                Alert.alert(
+                  "Added to calendar",
+                  "You can edit the event anytime in your calendar app.",
+                  [{ text: "OK", onPress: finishRemoval }],
+                );
+              } else if (result.code === "denied") {
+                Alert.alert(
+                  "Calendar access needed",
+                  "Allow calendar access in Settings to add this reminder.",
+                  [{ text: "OK", onPress: finishRemoval }],
+                );
+              } else {
+                Alert.alert("Could not add", result.message, [
+                  { text: "OK", onPress: finishRemoval },
+                ]);
+              }
+            })();
+          },
+        },
+      ],
+      { cancelable: false },
+    );
   }
 
   async function handleDismiss(reminder: Reminder) {
@@ -391,7 +439,9 @@ export function ReminderApprovalSheet({
                     )}
 
                     {/* Section B: Date/time row */}
-                    <Text style={styles.itemMicroLabel}>Suggested reminder</Text>
+                    <Text style={styles.itemMicroLabel}>
+                      Suggested reminder
+                    </Text>
                     <Pressable
                       style={({ pressed }) => [
                         styles.dateRow,
@@ -413,10 +463,7 @@ export function ReminderApprovalSheet({
                     </Pressable>
 
                     {pastDateError && (
-                      <Text
-                        style={styles.dateError}
-                        accessibilityRole="alert"
-                      >
+                      <Text style={styles.dateError} accessibilityRole="alert">
                         {pastDateError}
                       </Text>
                     )}
@@ -462,9 +509,7 @@ export function ReminderApprovalSheet({
               onPress={(e) => e.stopPropagation()}
             >
               <Text style={styles.pickerTitle}>
-                {editing.step === "date"
-                  ? "Select date"
-                  : "Select time"}
+                {editing.step === "date" ? "Select date" : "Select time"}
               </Text>
               <DateTimePicker
                 value={editing.currentDate}

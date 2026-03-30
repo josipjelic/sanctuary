@@ -7,14 +7,14 @@ import {
   validateCaptureText,
 } from "@/lib/capture";
 import { logger } from "@/lib/logger";
-import { getReminderTimeContext } from "@/lib/reminderTimeContext";
-import { supabase } from "@/lib/supabase";
-import { colors, radius, spacing, typography } from "@/lib/theme";
 import {
   LEAD_TIME_OPTIONS,
   type LeadTime,
   labelForLeadTime,
 } from "@/lib/notifications";
+import { getReminderTimeContext } from "@/lib/reminderTimeContext";
+import { supabase } from "@/lib/supabase";
+import { colors, radius, spacing, typography } from "@/lib/theme";
 import {
   TRANSCRIPTION_LANGUAGE_OPTIONS,
   type TranscriptionLanguageCode,
@@ -22,8 +22,8 @@ import {
   labelForTranscriptionCode,
   setTranscriptionLanguage,
 } from "@/lib/transcriptionLanguage";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   AudioModule,
@@ -167,7 +167,7 @@ export default function QuickCaptureScreen() {
         .in("key", ["notification_lead_time", "morning_notification_time"]);
       for (const row of data ?? []) {
         if (row.key === "notification_lead_time") {
-          setLeadTime((row.value as string) as LeadTime);
+          setLeadTime(row.value as string as LeadTime);
         } else if (row.key === "morning_notification_time") {
           setMorningTime(row.value as string);
         }
@@ -448,7 +448,11 @@ export default function QuickCaptureScreen() {
       }
     });
     await supabase.from("user_preferences").upsert(
-      { key: "notification_lead_time", value: value, updated_at: new Date().toISOString() },
+      {
+        key: "notification_lead_time",
+        value: value,
+        updated_at: new Date().toISOString(),
+      },
       { onConflict: "user_id, key" },
     );
   }
@@ -459,7 +463,11 @@ export default function QuickCaptureScreen() {
     const timeStr = `${hh}:${mm}`;
     setMorningTime(timeStr);
     await supabase.from("user_preferences").upsert(
-      { key: "morning_notification_time", value: timeStr, updated_at: new Date().toISOString() },
+      {
+        key: "morning_notification_time",
+        value: timeStr,
+        updated_at: new Date().toISOString(),
+      },
       { onConflict: "user_id, key" },
     );
   }
@@ -786,9 +794,7 @@ export default function QuickCaptureScreen() {
                 testID="settings-morning-time"
               >
                 <View style={styles.settingsLanguageTextBlock}>
-                  <Text style={styles.settingsLanguageLabel}>
-                    Morning time
-                  </Text>
+                  <Text style={styles.settingsLanguageLabel}>Morning time</Text>
                   <Text style={styles.settingsLanguageHint}>
                     Reminders will be sent at this time on the relevant morning
                   </Text>

@@ -113,11 +113,11 @@ Tap it to open the Reminder sheet. Each item shows:
 - A suggested date and time (tap to edit before approving)
 - **Approve** and **Dismiss** buttons
 
-**Approve** schedules a notification on your device and removes that row from the list so you can continue with any other pending reminders. **Dismiss** removes the reminder without scheduling anything.
+**Approve** schedules a notification on your device and removes that row from the list so you can continue with any other pending reminders. Right after approving from this list, Sanctuary may ask if you also want to **add the reminder to your phone or tablet’s calendar app** — that step is optional. **Dismiss** removes the reminder without scheduling anything.
 
 Tap the **outline** bell on a thought card to open this **Reminders to review** sheet. Tap the **solid** bell to open the **Scheduled reminder** sheet for that thought (reschedule or dismiss) — not the review list, which only shows pending items.
 
-When you open a reminder from the **thought detail** screen (reminder row under the timestamp), you get one bottom sheet for that thought: **Approve** switches it to **scheduled** mode in place so you can **Save** further changes or **Dismiss**.
+When you open a reminder from the **thought detail** screen (reminder row under the timestamp), you get one bottom sheet for that thought: **Approve** switches it to **scheduled** mode in place so you can **Save** further changes or **Dismiss**. After you approve, you may be offered the same optional **add to calendar** step. While a reminder is scheduled, use **Add to calendar** in that sheet if you want a calendar event without going through approve again.
 
 #### Bell icons
 
@@ -131,6 +131,8 @@ A small bell icon appears on the right side of a thought's timestamp row when a 
 Once you approve a reminder, your device will deliver a notification at the scheduled time (minus your chosen lead time — see below). The notification appears even if Sanctuary is closed, as long as you have granted notification permission.
 
 If Sanctuary asks for notification permission when you first approve a reminder, tap **Allow**. Without permission, no notifications will fire. You can also enable this later in your device's Settings app under Sanctuary → Notifications.
+
+If you choose to add the reminder to your **calendar app**, the system may ask for calendar access — that is separate from notification permission. The calendar event is created at the **same date and time** as the reminder itself; your lead-time setting only affects when the **notification** fires, not the calendar event.
 
 #### Notification settings
 

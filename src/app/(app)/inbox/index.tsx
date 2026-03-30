@@ -4,9 +4,9 @@ import {
   ReminderEditSheet,
   ThoughtListCard,
 } from "@/components";
-import type { Reminder } from "@/types/reminder";
 import { supabase } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
+import type { Reminder } from "@/types/reminder";
 import type { ThoughtListPreview } from "@/types/thoughtList";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";

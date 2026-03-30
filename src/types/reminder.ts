@@ -1,8 +1,4 @@
-export type ReminderStatus =
-  | "inactive"
-  | "active"
-  | "dismissed"
-  | "sent";
+export type ReminderStatus = "inactive" | "active" | "dismissed" | "sent";
 
 export interface Reminder {
   id: string;

@@ -2,6 +2,7 @@
  * Bottom sheet for reviewing (**inactive**) or rescheduling (**active**) a single reminder.
  */
 import { Button } from "@/components/Button";
+import { addReminderToDeviceCalendar } from "@/lib/deviceCalendar";
 import {
   cancelReminder,
   computeFireDate,
@@ -12,8 +13,8 @@ import type { LeadTime } from "@/lib/notifications";
 import { supabase } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import type { Reminder } from "@/types/reminder";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useEffect, useLayoutEffect, useState } from "react";
 import {
   Alert,
@@ -59,7 +60,7 @@ async function loadUserPreferences(): Promise<{
 
   for (const row of data ?? []) {
     if (row.key === "notification_lead_time") {
-      leadTime = (row.value as string) as LeadTime;
+      leadTime = row.value as string as LeadTime;
     } else if (row.key === "morning_notification_time") {
       morningTime = row.value as string;
     }
@@ -87,6 +88,7 @@ export function ReminderEditSheet({
   const [pickerState, setPickerState] = useState<DatePickerState | null>(null);
   const [pastDateError, setPastDateError] = useState(false);
   const [snippetError, setSnippetError] = useState(false);
+  const [addingCalendar, setAddingCalendar] = useState(false);
 
   const show =
     visible &&
@@ -218,6 +220,77 @@ export function ReminderEditSheet({
     };
     setWorking(next);
     onReminderChanged();
+
+    if (Platform.OS !== "web") {
+      Alert.alert(
+        "Add to calendar?",
+        "Save this reminder as an event in your calendar app.",
+        [
+          { text: "Not now", style: "cancel" },
+          {
+            text: "Add",
+            onPress: () => {
+              void (async () => {
+                const result = await addReminderToDeviceCalendar({
+                  title: bodyText,
+                  scheduledAt: editedDate,
+                });
+                if (result.ok) {
+                  Alert.alert(
+                    "Added to calendar",
+                    "You can edit the event anytime in your calendar app.",
+                  );
+                } else if (result.code === "denied") {
+                  Alert.alert(
+                    "Calendar access needed",
+                    "Allow calendar access in Settings to add this reminder.",
+                  );
+                } else {
+                  Alert.alert("Could not add", result.message);
+                }
+              })();
+            },
+          },
+        ],
+        { cancelable: false },
+      );
+    }
+  }
+
+  async function handleAddToCalendar() {
+    const row = working ?? reminder;
+    if (!row || row.status !== "active") return;
+    if (Platform.OS === "web") return;
+
+    const bodyText = editedText.trim();
+    if (!bodyText) {
+      setSnippetError(true);
+      return;
+    }
+    setSnippetError(false);
+
+    setAddingCalendar(true);
+    try {
+      const result = await addReminderToDeviceCalendar({
+        title: bodyText,
+        scheduledAt: editedDate,
+      });
+      if (result.ok) {
+        Alert.alert(
+          "Added to calendar",
+          "You can edit the event anytime in your calendar app.",
+        );
+      } else if (result.code === "denied") {
+        Alert.alert(
+          "Calendar access needed",
+          "Allow calendar access in Settings to add this reminder.",
+        );
+      } else {
+        Alert.alert("Could not add", result.message);
+      }
+    } finally {
+      setAddingCalendar(false);
+    }
   }
 
   async function applyReschedule() {
@@ -439,6 +512,16 @@ export function ReminderEditSheet({
                   )
                 )}
               </View>
+
+              {isActive && Platform.OS !== "web" && (
+                <Button
+                  label={addingCalendar ? "Adding…" : "Add to calendar"}
+                  variant="secondary"
+                  onPress={() => void handleAddToCalendar()}
+                  style={styles.calendarBtn}
+                  disabled={addingCalendar || isPastDate}
+                />
+              )}
             </ScrollView>
           </Pressable>
         </Pressable>
@@ -594,6 +677,10 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     flex: 1,
+  },
+  calendarBtn: {
+    alignSelf: "stretch",
+    marginTop: spacing.s2,
   },
   pickerBackdrop: {
     flex: 1,

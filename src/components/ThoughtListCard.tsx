@@ -42,9 +42,7 @@ export function ThoughtListCard({
   const topicPending = item.tagging_status === "pending";
 
   const showBell = hasPendingReminder || hasApprovedReminder;
-  const bellColor = hasPendingReminder
-    ? colors.primary
-    : colors.outlineVariant;
+  const bellColor = hasPendingReminder ? colors.primary : colors.outlineVariant;
   const bellIcon = hasPendingReminder
     ? "notifications-outline"
     : "notifications";

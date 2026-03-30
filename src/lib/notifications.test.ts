@@ -4,7 +4,7 @@
  * and in the Reminders Subsystem spec (ARCHITECTURE.md / ADR-004).
  */
 
-import { computeFireDate, type LeadTime } from "./notifications";
+import { type LeadTime, computeFireDate } from "./notifications";
 
 // Helper: create a Date from a local-style ISO string without timezone shift.
 // new Date("2026-04-06T14:00:00") is parsed as local time by V8 when no Z/offset is given.

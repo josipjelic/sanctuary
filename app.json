@@ -44,7 +44,14 @@
           "microphonePermission": "Sanctuary needs your microphone to capture voice thoughts."
         }
       ],
-      "expo-font"
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Sanctuary can add approved reminders as events in your calendar."
+        }
+      ],
+      "expo-font",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
