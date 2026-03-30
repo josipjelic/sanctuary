@@ -7,6 +7,7 @@ import {
   validateCaptureText,
 } from "@/lib/capture";
 import { logger } from "@/lib/logger";
+import { getReminderTimeContext } from "@/lib/reminderTimeContext";
 import { supabase } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import {
@@ -268,9 +269,15 @@ export default function QuickCaptureScreen() {
         setSubmitError("Failed to save. Please try again.");
         return;
       }
+      const reminderCtx = getReminderTimeContext();
       supabase.functions
         .invoke("assign-topics", {
-          body: { thought_id: inserted.id, text: text.trim() },
+          body: {
+            thought_id: inserted.id,
+            text: text.trim(),
+            iana_timezone: reminderCtx.ianaTimezone,
+            current_local_iso: reminderCtx.currentLocalIso,
+          },
         })
         .catch(() => {});
       setText("");
@@ -397,6 +404,9 @@ export default function QuickCaptureScreen() {
     }
     formData.append("thought_id", thoughtId);
     formData.append("transcription_language", transcriptionLanguageCode);
+    const reminderCtx = getReminderTimeContext();
+    formData.append("iana_timezone", reminderCtx.ianaTimezone);
+    formData.append("current_local_iso", reminderCtx.currentLocalIso);
     const { error } = await supabase.functions.invoke("transcribe", {
       body: formData,
     });

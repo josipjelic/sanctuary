@@ -54,6 +54,8 @@ Sessions are automatically injected into all database queries by the Supabase cl
 |-------|------|-------------|
 | `audio` | file | The raw audio file recorded on device (m4a/webm) |
 | `thought_id` | string | UUID of the thought row to update with transcript |
+| `iana_timezone` | string | Optional — IANA id from the device (`Intl…timeZone`), e.g. `Europe/Zagreb`. Passed through to reminder extraction. |
+| `current_local_iso` | string | Optional — device **local** “now” as ISO 8601 with offset (e.g. `2026-03-30T14:35:00+02:00`). When set, used instead of server UTC for reminder extraction context. |
 
 **Response 200**:
 ```json
@@ -86,7 +88,9 @@ The `topics` field is present when topic assignment completes successfully insid
 ```json
 {
   "thought_id": "string — UUID of the thought",
-  "text": "string — the full thought text to analyze"
+  "text": "string — the full thought text to analyze",
+  "iana_timezone": "string — optional IANA timezone from the device",
+  "current_local_iso": "string — optional local now with offset (ISO 8601) for reminder extraction"
 }
 ```
 
@@ -100,7 +104,7 @@ The `topics` field is present when topic assignment completes successfully insid
 
 **Error codes**: `400` (missing params or empty strings), `401` (unauthenticated), `404` (thought not found or not owned by caller), `502` (OpenRouter error, unparseable response, or assignment failure), `500` (server configuration or DB write failure)
 
-**Notes**: Loads the caller’s `user_topics`, prompts the model for structured JSON (`best_existing_normalized_name`, `best_match_score` 0–1, `new_topic`). Reuses an existing topic when `best_match_score` > **0.2** and the name matches the catalog; otherwise inserts into `user_topics` and links via `thought_topics`. Syncs `thoughts.topics` (one-element array) and `tagging_status`. Model: `OPENROUTER_TOPIC_MODEL` if set, else `OPENROUTER_TAGGING_MODEL`, default `google/gemini-2.0-flash-001`.
+**Notes**: Loads the caller’s `user_topics`, prompts the model for structured JSON (`best_existing_normalized_name`, `best_match_score` 0–1, `new_topic`). Reuses an existing topic when `best_match_score` > **0.2** and the name matches the catalog; otherwise inserts into `user_topics` and links via `thought_topics`. Syncs `thoughts.topics` (one-element array) and `tagging_status`. Model: `OPENROUTER_TOPIC_MODEL` if set, else `OPENROUTER_TAGGING_MODEL`, default `google/gemini-2.0-flash-001`. Fire-and-forget reminder detection uses `iana_timezone` and `current_local_iso` when provided (same semantics as `/transcribe` multipart fields).
 
 **JWT at gateway**: `[functions.assign-topics] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
@@ -143,7 +147,8 @@ The `topics` field is present when topic assignment completes successfully insid
 {
   "thought_id": "string — UUID of the thought",
   "text": "string — the full thought text to scan for time references",
-  "current_iso_timestamp": "string — ISO 8601 datetime (optional; falls back to server clock). Pass the device time so the model can resolve relative references accurately."
+  "current_iso_timestamp": "string — ISO 8601 datetime (optional; falls back to server clock). Prefer device **local** time with explicit offset.",
+  "iana_timezone": "string — optional IANA id (e.g. Europe/Zagreb); strengthens local interpretation for the model"
 }
 ```
 
@@ -161,7 +166,7 @@ The `topics` field is present when topic assignment completes successfully insid
 - `404` — Thought not found or not owned by caller
 - `500` — Server configuration error (missing env vars)
 
-**Notes**: Sets `thoughts.reminder_detection_status` to `'pending'` → `'complete'` (or `'failed'` on error). Inserted reminders have `status = 'inactive'`; the mobile app is responsible for surfacing them for user approval and scheduling local notifications (the edge function does **not** schedule push notifications). Uses `OPENROUTER_REMINDER_MODEL` if set, then `OPENROUTER_TOPIC_MODEL`, then `google/gemini-2.0-flash-001`. The extraction prompt receives the `current_iso_timestamp` as context for resolving relative time references ("next Monday", "in 3 hours"). Structured AI logs are emitted via `console.debug` (phase: `reminders`) per ADR-003.
+**Notes**: Sets `thoughts.reminder_detection_status` to `'pending'` → `'complete'` (or `'failed'` on error). Inserted reminders have `status = 'inactive'`; the mobile app is responsible for surfacing them for user approval and scheduling local notifications (the edge function does **not** schedule push notifications). Uses `OPENROUTER_REMINDER_MODEL` if set, then `OPENROUTER_TOPIC_MODEL`, then `google/gemini-2.0-flash-001`. The extraction prompt uses `current_iso_timestamp` and optional `iana_timezone` so relative phrases resolve in the user’s locale (the mobile app sends both on typed and voice capture). Structured AI logs are emitted via `console.debug` (phase: `reminders`) per ADR-003.
 
 **JWT at gateway**: `[functions.detect-reminders] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
@@ -340,3 +345,4 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 | 2026-03-30 | Observability: nested `openrouter_request` / `openrouter_response`, `OPENROUTER_LOG_JSON_MAX_CHARS`, sanitized audio; **DEBUG** via `console.debug` |
 | 2026-03-30 | Added `POST /detect-reminders` edge function; pipeline wiring in `transcribe` and `assign-topics` (fire-and-forget); reminders direct table access patterns (task #025) |
 | 2026-03-30 | Observability: include `detect-reminders` in dashboard log navigation list |
+| 2026-03-31 | Reminder extraction: optional `iana_timezone` + local `current_local_iso` / `current_iso_timestamp` for device-accurate timezones (`transcribe`, `assign-topics`, `detect-reminders`) |

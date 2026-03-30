@@ -404,7 +404,7 @@ The shared module prompts OpenRouter for **only** valid JSON of this shape (code
 
 - `reminders`: array; empty when no future time references.
 - Each item must have non-empty `extracted_text` and a parseable ISO 8601 `scheduled_at`; invalid items are skipped.
-- The prompt includes the caller-supplied **current timestamp** so phrases like “next Tuesday” resolve consistently (`current_iso_timestamp` on `POST /detect-reminders`; server clock in the shared pipeline when not passed).
+- The prompt includes the caller-supplied **local “now”** (ISO with offset) and optional **IANA timezone** (`Europe/Zagreb`, etc.) from the mobile app so phrases like “next Tuesday” resolve in the user’s zone; voice and typed capture send `iana_timezone` + `current_local_iso` via `/transcribe` and `/assign-topics`. Standalone `POST /detect-reminders` accepts `iana_timezone` and `current_iso_timestamp`. Server UTC is only a fallback when the client omits local fields.
 - Model resolution: `OPENROUTER_REMINDER_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`.
 
 ### Reminder Lifecycle

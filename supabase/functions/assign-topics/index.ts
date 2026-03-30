@@ -63,7 +63,21 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Invalid request body" }, 400);
   }
 
-  const { thought_id, text } = body as Record<string, unknown>;
+  const {
+    thought_id,
+    text,
+    iana_timezone,
+    current_local_iso,
+  } = body as Record<string, unknown>;
+
+  const currentLocalIso =
+    typeof current_local_iso === "string" && current_local_iso.trim()
+      ? current_local_iso.trim()
+      : undefined;
+  const ianaTimezone =
+    typeof iana_timezone === "string" && iana_timezone.trim()
+      ? iana_timezone.trim()
+      : undefined;
 
   if (!thought_id || typeof thought_id !== "string" || !thought_id.trim()) {
     return jsonResponse({ error: "thought_id required" }, 400);
@@ -117,7 +131,8 @@ Deno.serve(async (req) => {
     userId: user.id,
     thoughtId: thought_id,
     text: text.trim(),
-    currentIsoTimestamp: new Date().toISOString(),
+    currentIsoTimestamp: currentLocalIso ?? new Date().toISOString(),
+    ianaTimezone,
     supabaseClient: supabase,
     openRouterApiKey: openrouterKey,
     callerFunction: "assign-topics",

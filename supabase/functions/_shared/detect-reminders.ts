@@ -9,14 +9,46 @@ export interface DetectRemindersParams {
   userId: string;
   thoughtId: string;
   text: string;
-  /** ISO 8601 timestamp — passed from caller so the model has accurate "now" context. */
+  /**
+   * ISO 8601 "now" for the user — prefer device-local with offset (e.g. `2026-03-30T14:35:00+02:00`).
+   * Server-only callers may pass UTC `Z`; pairing with `ianaTimezone` still helps the model.
+   */
   currentIsoTimestamp: string;
+  /** IANA tz database id from the device (e.g. `Europe/Zagreb`). Optional for older clients. */
+  ianaTimezone?: string;
   supabaseClient: SupabaseClient;
   openRouterApiKey: string;
   /** Defaults to OPENROUTER_REMINDER_MODEL → OPENROUTER_TOPIC_MODEL → google/gemini-2.0-flash-001. */
   model?: string;
   /** Edge function name for structured logs. */
   callerFunction?: string;
+}
+
+/** Allow only safe IANA-style ids for the prompt (no newlines / junk). */
+export function sanitizeIanaTimezone(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const t = raw.trim();
+  if (t.length === 0 || t.length > 64) return undefined;
+  if (!/^[\w+/\-]+$/.test(t)) return undefined;
+  return t;
+}
+
+function buildReminderSystemPrompt(
+  currentIsoTimestamp: string,
+  ianaTimezone: string | undefined,
+): string {
+  const tzBlock = ianaTimezone
+    ? `The user's device timezone is "${ianaTimezone}" (IANA time zone database id). `
+    : "";
+  const timeBlock = ianaTimezone
+    ? `The current local date and time for the user is ${currentIsoTimestamp} (ISO 8601; the offset matches the user's locale clock at capture time). `
+    : `The reference date and time is ${currentIsoTimestamp} (ISO 8601 — if this ends with Z, it is UTC; interpret vague local phrases carefully). `;
+
+  return `You are a reminder extraction assistant. Given a thought or note, extract any future time references that could become reminders. ${tzBlock}${timeBlock}Return ONLY valid JSON matching this schema: { "reminders": [ { "extracted_text": "string — the relevant text snippet", "scheduled_at": "ISO 8601 datetime string" } ] }. If there are no future time references, return { "reminders": [] }. Interpret vague references ("next Monday", "Wednesday afternoon", "in 3 hours") in the user's local timezone${
+    ianaTimezone ? ` (${ianaTimezone})` : ""
+  }. Use 09:00 local time for morning references, 14:00 for afternoon, 19:00 for evening when no time is specified. For each reminder, scheduled_at MUST be ISO 8601 with an explicit offset that matches the user's local civil time for that instant (account for DST rules of ${
+    ianaTimezone ?? "that timezone"
+  } when relevant).`;
 }
 
 interface ReminderModelItem {
@@ -97,11 +129,14 @@ export async function detectRemindersForThought(
     thoughtId,
     text,
     currentIsoTimestamp,
+    ianaTimezone: ianaRaw,
     supabaseClient,
     openRouterApiKey,
     model: modelOverride,
     callerFunction = "detect-reminders",
   } = params;
+
+  const ianaTimezone = sanitizeIanaTimezone(ianaRaw) ?? undefined;
 
   const model = modelOverride ?? resolveModel();
 
@@ -112,7 +147,10 @@ export async function detectRemindersForThought(
     .eq("id", thoughtId);
 
   // 2. Build prompt and call OpenRouter
-  const systemPrompt = `You are a reminder extraction assistant. Given a thought or note, extract any future time references that could become reminders. The current date and time is ${currentIsoTimestamp}. Return ONLY valid JSON matching this schema: { "reminders": [ { "extracted_text": "string — the relevant text snippet", "scheduled_at": "ISO 8601 datetime string" } ] }. If there are no future time references, return { "reminders": [] }. Interpret vague references ("next Monday", "Wednesday afternoon") relative to the provided current timestamp. Use 09:00 local time for morning references, 14:00 for afternoon, 19:00 for evening when no time is specified. Preserve the timezone offset from the provided current timestamp.`;
+  const systemPrompt = buildReminderSystemPrompt(
+    currentIsoTimestamp,
+    ianaTimezone,
+  );
 
   const requestBody = {
     model,
@@ -142,6 +180,7 @@ export async function detectRemindersForThought(
       thought_text_chars: text.trim().length,
       thought_text_preview: truncateForLog(text),
       current_timestamp: currentIsoTimestamp,
+      ...(ianaTimezone ? { iana_timezone: ianaTimezone } : {}),
     },
     openrouter_request: {
       model,

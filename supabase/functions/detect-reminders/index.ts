@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Invalid request body" }, 400);
   }
 
-  const { thought_id, text, current_iso_timestamp } = body as Record<
+  const { thought_id, text, current_iso_timestamp, iana_timezone } = body as Record<
     string,
     unknown
   >;
@@ -79,6 +79,11 @@ Deno.serve(async (req) => {
     typeof current_iso_timestamp === "string" && current_iso_timestamp.trim()
       ? current_iso_timestamp.trim()
       : new Date().toISOString();
+
+  const ianaTimezone =
+    typeof iana_timezone === "string" && iana_timezone.trim()
+      ? iana_timezone.trim()
+      : undefined;
 
   const { data: thought, error: fetchError } = await supabase
     .from("thoughts")
@@ -104,6 +109,7 @@ Deno.serve(async (req) => {
     thoughtId: thought_id,
     text: text.trim(),
     currentIsoTimestamp,
+    ianaTimezone,
     supabaseClient: supabase,
     openRouterApiKey,
     callerFunction: "detect-reminders",

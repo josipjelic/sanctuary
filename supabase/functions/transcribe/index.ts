@@ -96,6 +96,12 @@ function transcriptionUserPrompt(languageCode: string | null): string {
   return `The speech is in ${name} language. Transcribe this audio verbatim in that language using its normal writing system. Reply with only the spoken words, no commentary.`;
 }
 
+function optionalFormString(fd: FormData, key: string): string | undefined {
+  const v = fd.get(key);
+  if (typeof v !== "string" || !v.trim()) return undefined;
+  return v.trim();
+}
+
 function audioFormatFromMime(mime: string, filename: string): string {
   const m = mime.toLowerCase();
   if (m.includes("webm")) return "webm";
@@ -156,6 +162,8 @@ Deno.serve(async (req) => {
   const transcriptionLanguage = normalizeTranscriptionLanguage(
     formData.get("transcription_language"),
   );
+  const currentLocalIso = optionalFormString(formData, "current_local_iso");
+  const ianaTimezone = optionalFormString(formData, "iana_timezone");
 
   if (!thoughtId || typeof thoughtId !== "string") {
     return jsonResponse({ error: "thought_id required" }, 400);
@@ -371,7 +379,8 @@ Deno.serve(async (req) => {
     userId: user.id,
     thoughtId,
     text: transcript,
-    currentIsoTimestamp: new Date().toISOString(),
+    currentIsoTimestamp: currentLocalIso ?? new Date().toISOString(),
+    ianaTimezone,
     supabaseClient: supabase,
     openRouterApiKey: openrouterKey,
     callerFunction: "transcribe",
