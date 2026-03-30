@@ -229,7 +229,7 @@ For operators debugging `transcribe` and `assign-topics` (shared topic pipeline)
 
 1. Open the [Supabase Dashboard](https://supabase.com/dashboard) for your project.
 2. Go to **Edge Functions**.
-3. Open the function (`transcribe` or `assign-topics`) and use **Logs** (or the project **Logs** view filtered to that function, depending on dashboard layout).
+3. Open the function (`transcribe`, `assign-topics`, or `detect-reminders`) and use **Logs** (or the project **Logs** view filtered to that function, depending on dashboard layout).
 
 There is **no** separate HTTP API or Postgres table for these events in v1. Retention and search are **platform-managed** — do not rely on logs as a long-term audit archive; see ADR-003.
 
@@ -339,3 +339,4 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 | 2026-03-30 | Observability: example log JSON, PRD Security NFR vs server-side logs, clarify `phase` ordering for `/transcribe` |
 | 2026-03-30 | Observability: nested `openrouter_request` / `openrouter_response`, `OPENROUTER_LOG_JSON_MAX_CHARS`, sanitized audio; **DEBUG** via `console.debug` |
 | 2026-03-30 | Added `POST /detect-reminders` edge function; pipeline wiring in `transcribe` and `assign-topics` (fire-and-forget); reminders direct table access patterns (task #025) |
+| 2026-03-30 | Observability: include `detect-reminders` in dashboard log navigation list |

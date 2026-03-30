@@ -191,13 +191,13 @@ auth.users (managed by Supabase Auth)
 
 ### user_preferences
 
-**Purpose**: Per-user key-value store for notification and app preferences. JSONB `value` avoids adding a column for each new preference type. Anticipated keys in v1: `reminder_lead_time_minutes` (integer — minutes before `scheduled_at` to notify) and `reminder_morning_digest_time` (string HH:MM — morning digest window time).
+**Purpose**: Per-user key-value store for notification and app preferences. JSONB `value` avoids adding a column for each new preference type. **v1 keys in use**: `notification_lead_time` (JSON string — `at_time` \| `15min` \| `30min` \| `1hour` \| `morning`) and `morning_notification_time` (JSON string `"HH:MM"`, default `07:30` in app logic).
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | id | uuid | PK, NOT NULL, DEFAULT gen_random_uuid() | Primary key |
 | user_id | uuid | NOT NULL, FK -> auth.users.id ON DELETE CASCADE | Owner |
-| key | text | NOT NULL | Preference identifier, e.g. `reminder_lead_time_minutes` |
+| key | text | NOT NULL | Preference identifier, e.g. `notification_lead_time` |
 | value | jsonb | NOT NULL | Preference value; type depends on key (e.g. integer `30`, string `"07:30"`) |
 | created_at | timestamptz | NOT NULL, DEFAULT now() | |
 | updated_at | timestamptz | NOT NULL, DEFAULT now() | |
