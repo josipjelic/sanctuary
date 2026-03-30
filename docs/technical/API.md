@@ -11,7 +11,7 @@ Read by: All agents building or integrating with backend functionality.
 > **Backend**: Supabase (PostgreSQL + Auth + Storage + Edge Functions)
 > **Client**: `@supabase/supabase-js` — used directly in the mobile app and in edge functions
 > **Authentication**: Supabase JWT (managed by Supabase Auth). Pass the session token via the Supabase client — it is sent automatically as a Bearer token.
-> **Last updated**: 2026-03-30 (AI observability ops notes)
+> **Last updated**: 2026-03-30 (detect-reminders edge function; reminders direct table patterns)
 
 ---
 
@@ -20,7 +20,7 @@ Read by: All agents building or integrating with backend functionality.
 Sanctuary does not have a traditional REST API server. The mobile app interacts with Supabase directly using the Supabase JS client for:
 - **Auth**: Sign up, sign in, sign out, password reset
 - **Database**: Direct table queries (filtered by RLS — users only see their own rows)
-- **Edge Functions**: AI-powered endpoints — `transcribe` (multipart audio → transcript + topic assignment) and `assign-topics` (typed capture path). Both call OpenRouter server-side. **Voice audio is not stored in Supabase Storage** in v1; it is posted to `transcribe` and discarded after processing. **Observability**: AI-related steps emit structured lines to Edge Function logs — see [Observability (AI edge functions)](#observability-ai-edge-functions) below; policy and full contract: [ADR-003](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs) and `docs/technical/ARCHITECTURE.md` (Observability and AI I/O logging).
+- **Edge Functions**: AI-powered endpoints — `transcribe` (multipart audio → transcript + topic assignment + reminder detection), `assign-topics` (typed capture path, also triggers reminder detection), and `detect-reminders` (explicit reminder extraction endpoint). All call OpenRouter server-side. **Voice audio is not stored in Supabase Storage** in v1; it is posted to `transcribe` and discarded after processing. **Observability**: AI-related steps emit structured lines to Edge Function logs — see [Observability (AI edge functions)](#observability-ai-edge-functions) below; policy and full contract: [ADR-003](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs) and `docs/technical/ARCHITECTURE.md` (Observability and AI I/O logging).
 - **Storage**: Available from Supabase for future features; not used for voice capture in v1.
 
 This document tracks the Edge Function endpoints. Standard Supabase client patterns are documented in the Supabase docs.
@@ -129,6 +129,95 @@ The `topics` field is present when topic assignment completes successfully insid
 ```
 
 **Notes**: Does not persist to the database — returns the prompt for inline display. To be implemented as part of task #010 (thought detail screen).
+
+---
+
+### POST /detect-reminders
+
+**Auth required**: Yes (Supabase session token)
+
+**Description**: Extract future time references from a thought's text using an OpenRouter-routed model and persist them as `inactive` reminder rows in the `reminders` table. Returns the count of reminders inserted. The mobile app calls this endpoint after thought capture; the pipeline also fires it automatically (fire-and-forget) after `assign-topics` completes inside both the `transcribe` and `assign-topics` edge functions.
+
+**Request body**:
+```json
+{
+  "thought_id": "string — UUID of the thought",
+  "text": "string — the full thought text to scan for time references",
+  "current_iso_timestamp": "string — ISO 8601 datetime (optional; falls back to server clock). Pass the device time so the model can resolve relative references accurately."
+}
+```
+
+**Response 200**:
+```json
+{
+  "thought_id": "string",
+  "reminder_count": "number — count of inactive reminder rows inserted (0 when no future time references found)"
+}
+```
+
+**Error codes**:
+- `400` — Missing or invalid `thought_id` / `text`
+- `401` — Unauthenticated
+- `404` — Thought not found or not owned by caller
+- `500` — Server configuration error (missing env vars)
+
+**Notes**: Sets `thoughts.reminder_detection_status` to `'pending'` → `'complete'` (or `'failed'` on error). Inserted reminders have `status = 'inactive'`; the mobile app is responsible for surfacing them for user approval and scheduling local notifications (the edge function does **not** schedule push notifications). Uses `OPENROUTER_REMINDER_MODEL` if set, then `OPENROUTER_TOPIC_MODEL`, then `google/gemini-2.0-flash-001`. The extraction prompt receives the `current_iso_timestamp` as context for resolving relative time references ("next Monday", "in 3 hours"). Structured AI logs are emitted via `console.debug` (phase: `reminders`) per ADR-003.
+
+**JWT at gateway**: `[functions.detect-reminders] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
+
+---
+
+## Direct table access patterns (Reminders)
+
+The mobile app interacts with the `reminders` table directly via the Supabase JS client (RLS enforces `user_id = auth.uid()` on all operations — no edge function wrapper needed).
+
+### Fetch pending (inactive) reminders
+
+```typescript
+const { data, error } = await supabase
+  .from('reminders')
+  .select('id, thought_id, extracted_text, scheduled_at, status, created_at')
+  .eq('status', 'inactive')
+  .order('scheduled_at', { ascending: true });
+```
+
+Returns all reminders awaiting user approval, ordered by scheduled time.
+
+### Approve a reminder
+
+Sets `status` to `'active'` and records the Expo notification ID (populated by the mobile client after scheduling the local notification). Optionally accepts a user-edited `scheduled_at`.
+
+```typescript
+const { error } = await supabase
+  .from('reminders')
+  .update({
+    status: 'active',
+    notification_id: expoNotificationId,   // string from Expo Notifications API
+    scheduled_at: userEditedTime ?? originalScheduledAt,
+    updated_at: new Date().toISOString(),
+  })
+  .eq('id', reminderId);
+```
+
+### Dismiss a reminder
+
+```typescript
+const { error } = await supabase
+  .from('reminders')
+  .update({ status: 'dismissed', updated_at: new Date().toISOString() })
+  .eq('id', reminderId);
+```
+
+### Mark a reminder as sent (client-side, after notification fires)
+
+```typescript
+const { error } = await supabase
+  .from('reminders')
+  .update({ status: 'sent', updated_at: new Date().toISOString() })
+  .eq('id', reminderId);
+```
+
+**Security note**: All four patterns rely on RLS (`user_id = auth.uid()`). The mobile client must be authenticated; the anon key alone does not grant cross-user access.
 
 ---
 
@@ -249,3 +338,4 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 | 2026-03-30 | Observability: AI edge logging for operators (`event` types, fields, privacy); link ADR-003 |
 | 2026-03-30 | Observability: example log JSON, PRD Security NFR vs server-side logs, clarify `phase` ordering for `/transcribe` |
 | 2026-03-30 | Observability: nested `openrouter_request` / `openrouter_response`, `OPENROUTER_LOG_JSON_MAX_CHARS`, sanitized audio; **DEBUG** via `console.debug` |
+| 2026-03-30 | Added `POST /detect-reminders` edge function; pipeline wiring in `transcribe` and `assign-topics` (fire-and-forget); reminders direct table access patterns (task #025) |

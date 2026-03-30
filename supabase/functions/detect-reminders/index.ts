@@ -1,9 +1,8 @@
 /**
- * Assign-topics edge function (text capture path).
- * Shared logic in ../_shared/assign-topics.ts
+ * Detect-reminders edge function (standalone endpoint).
+ * Mirrors the assign-topics/index.ts pattern.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { assignTopicsToThought } from "../_shared/assign-topics.ts";
 import { detectRemindersForThought } from "../_shared/detect-reminders.ts";
 
 const corsHeaders: Record<string, string> = {
@@ -63,7 +62,10 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Invalid request body" }, 400);
   }
 
-  const { thought_id, text } = body as Record<string, unknown>;
+  const { thought_id, text, current_iso_timestamp } = body as Record<
+    string,
+    unknown
+  >;
 
   if (!thought_id || typeof thought_id !== "string" || !thought_id.trim()) {
     return jsonResponse({ error: "thought_id required" }, 400);
@@ -71,6 +73,12 @@ Deno.serve(async (req) => {
   if (!text || typeof text !== "string" || !text.trim()) {
     return jsonResponse({ error: "text required" }, 400);
   }
+
+  // current_iso_timestamp is optional — fall back to server clock if not provided
+  const currentIsoTimestamp =
+    typeof current_iso_timestamp === "string" && current_iso_timestamp.trim()
+      ? current_iso_timestamp.trim()
+      : new Date().toISOString();
 
   const { data: thought, error: fetchError } = await supabase
     .from("thoughts")
@@ -82,51 +90,40 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Thought not found" }, 404);
   }
 
-  const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
-  if (!openrouterKey) {
+  const openRouterApiKey = Deno.env.get("OPENROUTER_API_KEY");
+  if (!openRouterApiKey) {
     await supabase
       .from("thoughts")
-      .update({ tagging_status: "failed" })
+      .update({ reminder_detection_status: "failed" })
       .eq("id", thought_id);
     return jsonResponse({ error: "Server configuration error" }, 500);
   }
 
-  const model =
-    Deno.env.get("OPENROUTER_TOPIC_MODEL") ??
-    Deno.env.get("OPENROUTER_TAGGING_MODEL") ??
-    "google/gemini-2.0-flash-001";
-
-  const referer = Deno.env.get("OPENROUTER_HTTP_REFERER");
-
-  const result = await assignTopicsToThought({
-    supabase,
+  await detectRemindersForThought({
     userId: user.id,
     thoughtId: thought_id,
     text: text.trim(),
-    openrouterKey,
-    model,
-    httpReferer: referer ?? undefined,
+    currentIsoTimestamp,
+    supabaseClient: supabase,
+    openRouterApiKey,
+    callerFunction: "detect-reminders",
   });
 
-  if ("error" in result) {
-    return jsonResponse(result, 502);
+  // Re-read the reminders table to return the count of inserted rows
+  const { data: reminders, error: remindersErr } = await supabase
+    .from("reminders")
+    .select("id")
+    .eq("thought_id", thought_id)
+    .eq("user_id", user.id)
+    .eq("status", "inactive");
+
+  if (remindersErr) {
+    // Detection may have completed fine — return partial success
+    return jsonResponse({ thought_id, reminder_count: 0 });
   }
 
-  // Fire-and-forget — reminder detection must not block the capture response
-  detectRemindersForThought({
-    userId: user.id,
-    thoughtId: thought_id,
-    text: text.trim(),
-    currentIsoTimestamp: new Date().toISOString(),
-    supabaseClient: supabase,
-    openRouterApiKey: openrouterKey,
-    callerFunction: "assign-topics",
-  }).catch((err: unknown) => {
-    console.error(
-      "[assign-topics] detect-reminders failed (non-blocking):",
-      err instanceof Error ? err.message : err,
-    );
+  return jsonResponse({
+    thought_id,
+    reminder_count: (reminders ?? []).length,
   });
-
-  return jsonResponse(result);
 });
