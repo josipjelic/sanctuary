@@ -2,7 +2,10 @@
  * Bottom sheet for reviewing (**inactive**) or rescheduling (**active**) a single reminder.
  */
 import { Button } from "@/components/Button";
-import { addReminderToDeviceCalendar } from "@/lib/deviceCalendar";
+import {
+  addReminderToDeviceCalendar,
+  addToCalendarSuccessCopy,
+} from "@/lib/deviceCalendar";
 import {
   cancelReminder,
   computeFireDate,
@@ -236,10 +239,8 @@ export function ReminderEditSheet({
                   scheduledAt: editedDate,
                 });
                 if (result.ok) {
-                  Alert.alert(
-                    "Added to calendar",
-                    "You can edit the event anytime in your calendar app.",
-                  );
+                  const { title, message } = addToCalendarSuccessCopy(result);
+                  Alert.alert(title, message);
                 } else if (result.code === "denied") {
                   Alert.alert(
                     "Calendar access needed",
@@ -276,10 +277,8 @@ export function ReminderEditSheet({
         scheduledAt: editedDate,
       });
       if (result.ok) {
-        Alert.alert(
-          "Added to calendar",
-          "You can edit the event anytime in your calendar app.",
-        );
+        const { title, message } = addToCalendarSuccessCopy(result);
+        Alert.alert(title, message);
       } else if (result.code === "denied") {
         Alert.alert(
           "Calendar access needed",

@@ -1,5 +1,8 @@
 import { Button } from "@/components/Button";
-import { addReminderToDeviceCalendar } from "@/lib/deviceCalendar";
+import {
+  addReminderToDeviceCalendar,
+  addToCalendarSuccessCopy,
+} from "@/lib/deviceCalendar";
 import type { LeadTime } from "@/lib/notifications";
 import {
   cancelReminder,
@@ -230,11 +233,10 @@ export function ReminderApprovalSheet({
                 scheduledAt: fireDate,
               });
               if (result.ok) {
-                Alert.alert(
-                  "Added to calendar",
-                  "You can edit the event anytime in your calendar app.",
-                  [{ text: "OK", onPress: finishRemoval }],
-                );
+                const { title, message } = addToCalendarSuccessCopy(result);
+                Alert.alert(title, message, [
+                  { text: "OK", onPress: finishRemoval },
+                ]);
               } else if (result.code === "denied") {
                 Alert.alert(
                   "Calendar access needed",

@@ -132,7 +132,7 @@ Once you approve a reminder, your device will deliver a notification at the sche
 
 If Sanctuary asks for notification permission when you first approve a reminder, tap **Allow**. Without permission, no notifications will fire. You can also enable this later in your device's Settings app under Sanctuary → Notifications.
 
-If you choose to add the reminder to your **calendar app**, the system may ask for calendar access — that is separate from notification permission. The calendar event is created at the **same date and time** as the reminder itself; your lead-time setting only affects when the **notification** fires, not the calendar event.
+If you choose to add the reminder to your **calendar app**, the system may ask for calendar access — that is separate from notification permission. Your phone or tablet then opens its **calendar event editor** with the time and text already filled in; tap **Save** (or the equivalent) there to finish. On some Android devices, Sanctuary cannot tell whether you saved or cancelled — if the event is missing, use **Add to calendar** again. The event time matches the reminder’s scheduled time; your lead-time setting only affects the **notification**, not the calendar event.
 
 #### Notification settings
 

@@ -352,7 +352,7 @@ AI-related edge work (`transcribe`, `assign-topics`, reminder detection in `_sha
 
 ### Overview
 
-Sanctuary detects future time references in captured thoughts ("call mum next Monday", "dentist Wednesday at 3 pm") using AI and surfaces them as user-approvable reminders. No notification fires without explicit user approval. Scheduling uses client-side local notifications via `expo-notifications` — there is no server-side scheduler in v1. The `reminders` table in PostgreSQL is the source of truth for reminder state; the local notification is a delivery mechanism only. Optionally, the user can add the same reminder as a **native calendar event** via `expo-calendar` (`src/lib/deviceCalendar.ts`): permission is requested only when they choose **Add to calendar**; the event uses the reminder’s `scheduled_at` as the start time (not notification lead-time). Calendar events are not stored in Postgres in v1.
+Sanctuary detects future time references in captured thoughts ("call mum next Monday", "dentist Wednesday at 3 pm") using AI and surfaces them as user-approvable reminders. No notification fires without explicit user approval. Scheduling uses client-side local notifications via `expo-notifications` — there is no server-side scheduler in v1. The `reminders` table in PostgreSQL is the source of truth for reminder state; the local notification is a delivery mechanism only. Optionally, the user can add the same reminder as a **native calendar event** via `expo-calendar` (`src/lib/deviceCalendar.ts`): permission is requested when they choose **Add to calendar**, then the OS calendar **editor** opens prefilled; the user confirms with Save. The draft uses the reminder’s `scheduled_at` as the start time (not notification lead-time). Calendar events are not stored in Postgres in v1.
 
 ### Components
 
@@ -364,7 +364,7 @@ Sanctuary detects future time references in captured thoughts ("call mum next Mo
 | `user_preferences` table | `supabase/migrations/004_reminders.sql` | @database-expert | Key-value (`key` + JSONB `value`). v1 keys: `notification_lead_time` (string: `at_time` \| `15min` \| `30min` \| `1hour` \| `morning`) and `morning_notification_time` (`"HH:MM"`, default `07:30`). |
 | Reminder UI | `ReminderApprovalSheet.tsx`, `inbox/index.tsx`, `ThoughtListCard.tsx`, `inbox/[thoughtId].tsx` | @react-native-developer | Pending pill + sheet; bell on inbox cards; reminder card on thought detail. Approve schedules notification; dismiss updates row. After approve, optional prompt to add a device calendar event; **Scheduled reminder** sheet includes **Add to calendar** for active reminders. |
 | `expo-notifications` client | `src/lib/notifications.ts` | @react-native-developer | Permission, `scheduleReminder` / `cancelReminder`, `computeFireDate` from lead-time prefs. |
-| Device calendar | `src/lib/deviceCalendar.ts`, `expo-calendar` + config plugin in `app.json` | @react-native-developer | `addReminderToDeviceCalendar`: requests calendar permission on demand, writes event to default/writable calendar (iOS/Android). Web: no-op. Native rebuild required when adding the plugin. |
+| Device calendar | `src/lib/deviceCalendar.ts`, `expo-calendar` + config plugin in `app.json` | @react-native-developer | `addReminderToDeviceCalendar`: requests calendar access, then opens the **system new-event UI** (`createEventInCalendarAsync`) prefilled with title/time so the user taps Save — avoids silent insert failures and iOS permission edge cases. Web: no-op. Native rebuild required when adding the plugin. |
 
 ### AI Detection Pipeline Placement
 
@@ -449,7 +449,7 @@ When the user approves a reminder:
 
 On dismiss: cancel any scheduled notification by `notification_id`, then set `status` to `'dismissed'`. Reschedule flows cancel the old id before scheduling a new one.
 
-**Device calendar (optional):** After approve (inbox sheet or thought-detail sheet), the app may offer to create a calendar event with the same title and `scheduled_at`. Active reminders can also use **Add to calendar** from the scheduled-reminder sheet. Duplicates are possible if the user adds multiple times; no `calendar_event_id` column in v1.
+**Device calendar (optional):** After approve (inbox sheet or thought-detail sheet), the app may offer to open the OS calendar **create-event** flow prefilled with the same title and `scheduled_at`. Active reminders can also use **Add to calendar** from the scheduled-reminder sheet. The user must confirm in the system UI (Save). Duplicates are possible if the user completes that flow multiple times; no `calendar_event_id` column in v1.
 
 When the notification fires, the app may update the row to `sent` (see `docs/technical/API.md` direct-table patterns).
 
