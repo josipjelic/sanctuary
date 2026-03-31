@@ -1,8 +1,28 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 import Constants from "expo-constants";
+import { fetch as expoFetch } from "expo/fetch";
 
 import { logger } from "@/lib/logger";
+
+/** Use Expo's native fetch on iOS/Android (not the XHR polyfill) so HTTPS matches system/Safari behavior. */
+const supabaseFetch: typeof fetch = (input, init) => {
+  const url =
+    typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? input.href
+        : input.url;
+  if (init == null) {
+    return expoFetch(url);
+  }
+  const { body, signal, ...rest } = init;
+  return expoFetch(url, {
+    ...rest,
+    body: body === null ? undefined : body,
+    signal: signal === null ? undefined : signal,
+  } as Parameters<typeof expoFetch>[1]);
+};
 
 type SupabaseExtra = {
   supabaseUrl?: string;
@@ -67,6 +87,7 @@ logger.debug("Supabase client URL", {
 });
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: { fetch: supabaseFetch },
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,
