@@ -1,4 +1,4 @@
-name: Preview Build
+name: Preview Update
 
 on:
   push:
@@ -6,23 +6,16 @@ on:
       - main
 
 jobs:
-  build_ios:
-    name: Build iOS (Preview)
-    type: build
+  publish_update:
+    name: Publish Preview Update
+    type: update
     params:
-      platform: ios
-      profile: preview
-
-  build_android:
-    name: Build Android (Preview)
-    type: build
-    params:
-      platform: android
-      profile: preview
+      channel: preview
+      message: ${{ github.event.head_commit.message }}
 
   notify_slack:
     name: Notify Slack
-    needs: [build_ios, build_android]
+    needs: [publish_update]
     type: slack
     params:
       webhook_url: ${{ env.SLACK_WEBHOOK_URL }}
@@ -31,16 +24,14 @@ jobs:
           - type: header
             text:
               type: plain_text
-              text: "New Preview Build Ready"
+              text: "New Preview Update Ready"
+          - type: section
+            text:
+              type: mrkdwn
+              text: ${{ needs.publish_update.outputs.first_update_group_id && '"*' + github.event.head_commit.message + '*"' || '"A new update was published"' }}
           - type: section
             fields:
-              - type: mrkdwn
-                text: "*Version:*\n${{ needs.build_ios.outputs.app_version }}"
               - type: mrkdwn
                 text: "*Branch:*\n${{ github.ref_name }}"
-          - type: section
-            fields:
               - type: mrkdwn
-                text: "*iOS:*\nhttps://expo.dev/builds/${{ needs.build_ios.outputs.build_id }}"
-              - type: mrkdwn
-                text: "*Android:*\nhttps://expo.dev/builds/${{ needs.build_android.outputs.build_id }}"
+                text: "*Update:*\nhttps://expo.dev/accounts/context.hr/projects/sanctuary/updates/${{ needs.publish_update.outputs.first_update_group_id }}"
