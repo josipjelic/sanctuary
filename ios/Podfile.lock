@@ -1913,7 +1913,7 @@ DEPENDENCIES:
   - "EXNotifications (from `../node_modules/.pnpm/expo-notifications@0.32.16_expo@54.0.33_react-native@0.81.5_@babel+core@7.29.0_@types+r_e8813aa66a709ab411c13d8ccb1f917a/node_modules/expo-notifications/ios`)"
   - "Expo (from `../node_modules/.pnpm/expo@54.0.33_@babel+core@7.29.0_@expo+metro-runtime@6.1.2_expo-router@6.0.23_graphql@16_95d1def69744c4d211b3662c1beb133e/node_modules/expo`)"
   - "ExpoAsset (from `../node_modules/.pnpm/expo-asset@12.0.12_expo@54.0.33_react-native@0.81.5_@babel+core@7.29.0_@types+react@19.1.17_react@19.1.0__react@19.1.0/node_modules/expo-asset/ios`)"
-  - "ExpoAudio (from `../node_modules/.pnpm/expo-audio@1.1.1_patch_hash=f9a6ca7f8723de3ee9483326b7b36363c7b45cb05c65526e51e209e1e61_442c2204441de307fba69a3b1e34527f/node_modules/expo-audio/ios`)"
+  - "ExpoAudio (from `../node_modules/.pnpm/expo-audio@1.1.1_patch_hash=de110daa5789276342e843aaed3b1411ca679da440488675974bbbf4fe6_e11ef1cf33978db8c08b2a76311019fb/node_modules/expo-audio/ios`)"
   - "ExpoCalendar (from `../node_modules/.pnpm/expo-calendar@15.0.8_expo@54.0.33_react-native@0.81.5_@babel+core@7.29.0_@types+react@19.1.17_react@19.1.0_/node_modules/expo-calendar/ios`)"
   - "ExpoFileSystem (from `../node_modules/.pnpm/expo-file-system@19.0.21_expo@54.0.33_react-native@0.81.5_@babel+core@7.29.0_@types+react@19.1.17_react@19.1.0_/node_modules/expo-file-system/ios`)"
   - "ExpoFont (from `../node_modules/.pnpm/expo-font@14.0.11_expo@54.0.33_react-native@0.81.5_@babel+core@7.29.0_@types+react@19.1.17_react@19.1.0__react@19.1.0/node_modules/expo-font/ios`)"
@@ -2020,7 +2020,7 @@ EXTERNAL SOURCES:
   ExpoAsset:
     :path: "../node_modules/.pnpm/expo-asset@12.0.12_expo@54.0.33_react-native@0.81.5_@babel+core@7.29.0_@types+react@19.1.17_react@19.1.0__react@19.1.0/node_modules/expo-asset/ios"
   ExpoAudio:
-    :path: "../node_modules/.pnpm/expo-audio@1.1.1_patch_hash=f9a6ca7f8723de3ee9483326b7b36363c7b45cb05c65526e51e209e1e61_442c2204441de307fba69a3b1e34527f/node_modules/expo-audio/ios"
+    :path: "../node_modules/.pnpm/expo-audio@1.1.1_patch_hash=de110daa5789276342e843aaed3b1411ca679da440488675974bbbf4fe6_e11ef1cf33978db8c08b2a76311019fb/node_modules/expo-audio/ios"
   ExpoCalendar:
     :path: "../node_modules/.pnpm/expo-calendar@15.0.8_expo@54.0.33_react-native@0.81.5_@babel+core@7.29.0_@types+react@19.1.17_react@19.1.0_/node_modules/expo-calendar/ios"
   ExpoFileSystem:
