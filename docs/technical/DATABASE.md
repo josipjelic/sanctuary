@@ -11,7 +11,7 @@ Read by: All agents. Always read before writing queries or designing schema chan
 > **Engine**: PostgreSQL 15 (managed by Supabase)
 > **Access layer**: `@supabase/supabase-js` client (direct table queries with RLS)
 > **Connection**: Via `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` (client) and service role key (edge functions only)
-> **Last updated**: 2026-03-28 (migration `003_user_topics_rename_tags`)
+> **Last updated**: 2026-03-30 (migration `004_reminders`)
 
 ---
 
@@ -39,8 +39,12 @@ auth.users (managed by Supabase Auth)
   +--< thoughts
   |      |
   |      +--< thought_topics >-- user_topics
+  |      |
+  |      +--< reminders
   |
   +--< daily_checkins
+  |
+  +--< user_preferences
 ```
 
 **Key relationships**:
@@ -48,6 +52,8 @@ auth.users (managed by Supabase Auth)
 - `auth.users` → `user_topics`: one user, many topic labels (catalog)
 - `thoughts` ↔ `user_topics`: many-to-many via `thought_topics` (v1 assigns **one** primary topic per thought; legacy rows may have multiple links from backfill)
 - `thoughts.topics` (`text[]`): denormalized display names, kept in sync when AI assigns a topic (typically a one-element array)
+- `auth.users` → `reminders`: one user, many reminders; each reminder links back to the originating thought
+- `auth.users` → `user_preferences`: key-value store for per-user notification and app preferences
 
 ---
 
@@ -71,6 +77,7 @@ auth.users (managed by Supabase Auth)
 | has_audio | boolean | NOT NULL, DEFAULT false | Whether this thought originated from a voice recording (audio stored locally on device only) |
 | transcription_status | text | NOT NULL, DEFAULT 'none' | 'none', 'pending', 'complete', 'failed' |
 | tagging_status | text | NOT NULL, DEFAULT 'none' | Topic-assignment lifecycle: 'none', 'pending', 'complete', 'failed' |
+| reminder_detection_status | text | NOT NULL, DEFAULT 'none' | Reminder-detection pipeline lifecycle: 'none', 'pending', 'complete', 'failed' |
 | created_at | timestamptz | NOT NULL, DEFAULT now() | Capture time |
 | updated_at | timestamptz | NOT NULL, DEFAULT now() | Last edit time |
 
@@ -147,6 +154,69 @@ auth.users (managed by Supabase Auth)
 
 ---
 
+### reminders
+
+**Purpose**: Stores AI-detected time references extracted from thoughts. Each row represents a single reminder awaiting user approval or already scheduled as a local notification. A thought may produce zero or more reminders.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | uuid | PK, NOT NULL, DEFAULT gen_random_uuid() | Primary key |
+| user_id | uuid | NOT NULL, FK -> auth.users.id ON DELETE CASCADE | Owner |
+| thought_id | uuid | NOT NULL, FK -> thoughts.id ON DELETE CASCADE | The thought this reminder was extracted from |
+| extracted_text | text | NOT NULL | Raw text snippet the AI identified as a time reference |
+| scheduled_at | timestamptz | NOT NULL | Resolved future datetime for the notification fire time |
+| lead_time | integer | NULL | Minutes before `scheduled_at` to fire (NULL = use `user_preferences` default) |
+| status | text | NOT NULL, DEFAULT 'inactive' | Lifecycle: 'inactive' (awaiting approval), 'active' (approved, scheduled), 'dismissed', 'sent' |
+| notification_id | text | NULL | Expo local notification ID returned by `scheduleNotificationAsync`; set when status → 'active'; used to cancel or reschedule |
+| created_at | timestamptz | NOT NULL, DEFAULT now() | |
+| updated_at | timestamptz | NOT NULL, DEFAULT now() | |
+
+**Constraints**:
+- CHECK `reminders_status_check`: `status IN ('inactive', 'active', 'dismissed', 'sent')`
+
+**Indexes**:
+- `idx_reminders_user_id` on `(user_id)` — existence checks and full user-scoped queries
+- `idx_reminders_thought_id` on `(thought_id)` — fetch all reminders for a given thought
+- `idx_reminders_user_status` on `(user_id, status)` — primary query pattern: all reminders in a given status for a user (e.g. all 'inactive' awaiting approval)
+
+**Relationships**:
+- `user_id` → `auth.users.id` (ON DELETE CASCADE)
+- `thought_id` → `thoughts.id` (ON DELETE CASCADE)
+
+**RLS policies**: SELECT / INSERT / UPDATE / DELETE where `user_id = auth.uid()`.
+
+**Notes**: `notification_id` is NULL until the user approves a reminder and the mobile client calls `scheduleNotificationAsync`. Scheduling is client-side in v1 (ADR-004) — no server-side scheduler state machine is required; `scheduled_at` is the resolved fire time stored for audit and reschedule purposes.
+
+---
+
+### user_preferences
+
+**Purpose**: Per-user key-value store for notification and app preferences. JSONB `value` avoids adding a column for each new preference type. **v1 keys in use**: `notification_lead_time` (JSON string — `at_time` \| `15min` \| `30min` \| `1hour` \| `morning`) and `morning_notification_time` (JSON string `"HH:MM"`, default `07:30` in app logic).
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | uuid | PK, NOT NULL, DEFAULT gen_random_uuid() | Primary key |
+| user_id | uuid | NOT NULL, FK -> auth.users.id ON DELETE CASCADE | Owner |
+| key | text | NOT NULL | Preference identifier, e.g. `notification_lead_time` |
+| value | jsonb | NOT NULL | Preference value; type depends on key (e.g. integer `30`, string `"07:30"`) |
+| created_at | timestamptz | NOT NULL, DEFAULT now() | |
+| updated_at | timestamptz | NOT NULL, DEFAULT now() | |
+
+**Constraints**:
+- UNIQUE `user_preferences_user_key_unique`: `(user_id, key)` — one value per preference key per user
+
+**Indexes**:
+- `idx_user_preferences_user_id` on `(user_id)` — load all preferences for a user in one query
+
+**Relationships**:
+- `user_id` → `auth.users.id` (ON DELETE CASCADE)
+
+**RLS policies**: SELECT / INSERT / UPDATE / DELETE where `user_id = auth.uid()`.
+
+**Notes**: Application code should upsert using `ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`. JSONB is appropriate here because preference values are heterogeneous scalars (integers, time strings, booleans) and the key set grows without schema changes. This is not an EAV anti-pattern — the value types are small, known scalars, not nested entities, and there is no requirement to query across key names in a relational join.
+
+---
+
 ## Migrations Log
 
 | Migration File | Date | Description | Reversible | Deployment Risk |
@@ -154,6 +224,7 @@ auth.users (managed by Supabase Auth)
 | `001_create_thoughts.sql` | 2026-03-28 | Create thoughts table with RLS | Yes | None |
 | `002_create_daily_checkins.sql` | 2026-03-28 | Create daily_checkins table with RLS | Yes | None |
 | `003_user_topics_rename_tags.sql` | 2026-03-28 | user_topics, thought_topics, rename `tags` → `topics`, backfill | Yes | Low — additive + column rename |
+| `004_reminders.sql` | 2026-03-30 | Create reminders and user_preferences tables; add reminder_detection_status to thoughts | Yes — see rollback DDL in migration file | Low — two new tables + additive column on thoughts (no lock on large tables) |
 
 ---
 
@@ -201,6 +272,30 @@ ORDER BY created_at DESC;
 SELECT * FROM daily_checkins
 WHERE user_id = auth.uid()
   AND check_in_date = CURRENT_DATE;
+```
+
+**Fetch all inactive reminders for a user (awaiting approval)**:
+```sql
+SELECT id, thought_id, extracted_text, scheduled_at, lead_time, created_at
+FROM reminders
+WHERE user_id = auth.uid()
+  AND status = 'inactive'
+ORDER BY scheduled_at ASC;
+```
+
+**Upsert a user preference**:
+```sql
+INSERT INTO user_preferences (user_id, key, value)
+VALUES (auth.uid(), 'reminder_lead_time_minutes', '30'::jsonb)
+ON CONFLICT ON CONSTRAINT user_preferences_user_key_unique
+DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+```
+
+**Fetch all preferences for a user**:
+```sql
+SELECT key, value
+FROM user_preferences
+WHERE user_id = auth.uid();
 ```
 
 ---

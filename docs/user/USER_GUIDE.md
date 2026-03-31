@@ -8,7 +8,7 @@ Read by: End users and agents needing to understand user-facing flows.
 
 # Sanctuary — User Guide
 
-> Last updated: 2026-03-30
+> Last updated: 2026-03-31
 > Version: 0.1.0 (pre-release — features documented as they ship)
 
 ---
@@ -80,6 +80,7 @@ Opens from the inbox when you tap a thought.
 - Tap **Edit** to change the main text, then **Save** or **Cancel** in the header.
 - **Topics** appear as chips for context; they are assigned by the app (you cannot edit them on this screen yet).
 - **Delete** removes the thought after you confirm. This cannot be undone.
+- **Reminder** — if Sanctuary detected a time reference, a **Reminder** row appears below the timestamp. Tap it to open the same bottom sheet used elsewhere: review (**Approve** / **Dismiss**) if it is still pending, or **Save** / **Dismiss** to reschedule an already scheduled reminder.
 
 **Not in the app yet** on this screen: longer journal notes (`body_extended`), automatic debounced saving, AI reflection prompts, and the full “Reflection Space” layout from the design spec. See the product backlog if you are tracking upcoming work.
 
@@ -96,6 +97,52 @@ An “all thoughts” filter and daily check-in history on this screen are **not
 
 ---
 
+### Reminders
+
+When you capture a thought that mentions a future time — "call the dentist next Tuesday", "review the proposal in 3 hours", "dentist Wednesday at 3 pm" — Sanctuary quietly notices and queues it as a reminder for you to review. Nothing is scheduled without your approval.
+
+#### Reviewing reminders
+
+When one or more reminders are waiting for your decision, a pill appears at the top of the **Thoughts** tab:
+
+> **🔔 2 reminders to review**
+
+Tap it to open the Reminder sheet. Each item shows:
+
+- The text snippet Sanctuary detected as a time reference
+- A suggested date and time (tap to edit before approving)
+- **Approve** and **Dismiss** buttons
+
+**Approve** schedules a notification on your device and removes that row from the list so you can continue with any other pending reminders. Right after approving from this list, Sanctuary may ask if you also want to **add the reminder to your phone or tablet’s calendar app** — that step is optional. **Dismiss** removes the reminder without scheduling anything.
+
+Tap the **outline** bell on a thought card to open this **Reminders to review** sheet. Tap the **solid** bell to open the **Scheduled reminder** sheet for that thought (reschedule or dismiss) — not the review list, which only shows pending items.
+
+When you open a reminder from the **thought detail** screen (reminder row under the timestamp), you get one bottom sheet for that thought: **Approve** switches it to **scheduled** mode in place so you can **Save** further changes or **Dismiss**. After you approve, you may be offered the same optional **add to calendar** step. While a reminder is scheduled, use **Add to calendar** in that sheet if you want a calendar event without going through approve again.
+
+#### Bell icons
+
+A small bell icon appears on the right side of a thought's timestamp row when a reminder exists for it:
+
+- **Outline bell** — reminder is waiting for your review
+- **Solid bell** — reminder is approved and scheduled
+
+#### After approval
+
+Once you approve a reminder, your device will deliver a notification at the scheduled time (minus your chosen lead time — see below). The notification appears even if Sanctuary is closed, as long as you have granted notification permission.
+
+If Sanctuary asks for notification permission when you first approve a reminder, tap **Allow**. Without permission, no notifications will fire. You can also enable this later in your device's Settings app under Sanctuary → Notifications.
+
+If you choose to add the reminder to your **calendar app**, the system may ask for calendar access — that is separate from notification permission. Your phone or tablet then opens its **calendar event editor** with the time and text already filled in; tap **Save** (or the equivalent) there to finish. On some Android devices, Sanctuary cannot tell whether you saved or cancelled — if the event is missing, use **Add to calendar** again. The event time matches the reminder’s scheduled time; your lead-time setting only affects the **notification**, not the calendar event.
+
+#### Notification settings
+
+From the **Capture** screen, tap the **gear** icon to open **Settings**, then scroll to the **Reminders** section.
+
+- **Lead time** — how early to notify you before the reminder's scheduled time. Options: At the time, 15 minutes before (default), 30 minutes before, 1 hour before, In the morning.
+- **Morning time** — shown when you choose "In the morning". Sets the time the notification fires on the morning of (or before) the reminder day. Default is 07:30.
+
+---
+
 ### Daily Check-in
 
 **Coming in a future release.** The database supports daily check-ins, but there is no check-in screen in the app yet.
@@ -109,6 +156,7 @@ There is **no separate Settings tab**. From the **Capture** screen, tap the **ge
 In that sheet you can:
 
 - Choose **transcription language** (for voice — how the model is asked to interpret speech; options vary by build).
+- Configure **Reminders** — set the notification lead time and morning digest time (see the Reminders section above).
 - **Sign out** of Sanctuary.
 
 **Changing your password** is not done inside this modal. Use **Forgot password** on the sign-in screen to receive a reset email when your Supabase project has reset emails configured.
@@ -125,6 +173,9 @@ In that sheet you can:
 | Voice recording not working | Microphone permission not granted | System Settings → Sanctuary → allow Microphone |
 | Thought saved but no topic yet | Topic assignment runs after save | Wait a few seconds and pull to refresh on the inbox |
 | Email never arrives after sign-up | Confirmation off in dev, or spam / wrong address | Check spam; ask your host whether confirmation is required |
+| Reminder pill not appearing after capture | AI found no clear future time reference in the text | This is expected — try rephrasing with a specific date or time |
+| Notification did not fire | Notification permission was denied, or notifications are off for Sanctuary | System Settings → Sanctuary → Notifications → Allow |
+| Reminder suggests the wrong date or time | AI resolved a relative reference differently than you intended | Tap the suggested time in the Reminder sheet to edit it before approving |
 
 ### Getting Help
 

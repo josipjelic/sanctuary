@@ -11,7 +11,7 @@ Read by: All agents building or integrating with backend functionality.
 > **Backend**: Supabase (PostgreSQL + Auth + Storage + Edge Functions)
 > **Client**: `@supabase/supabase-js` — used directly in the mobile app and in edge functions
 > **Authentication**: Supabase JWT (managed by Supabase Auth). Pass the session token via the Supabase client — it is sent automatically as a Bearer token.
-> **Last updated**: 2026-03-30 (AI observability ops notes)
+> **Last updated**: 2026-03-30 (detect-reminders edge function; reminders direct table patterns)
 
 ---
 
@@ -20,7 +20,7 @@ Read by: All agents building or integrating with backend functionality.
 Sanctuary does not have a traditional REST API server. The mobile app interacts with Supabase directly using the Supabase JS client for:
 - **Auth**: Sign up, sign in, sign out, password reset
 - **Database**: Direct table queries (filtered by RLS — users only see their own rows)
-- **Edge Functions**: AI-powered endpoints — `transcribe` (multipart audio → transcript + topic assignment) and `assign-topics` (typed capture path). Both call OpenRouter server-side. **Voice audio is not stored in Supabase Storage** in v1; it is posted to `transcribe` and discarded after processing. **Observability**: AI-related steps emit structured lines to Edge Function logs — see [Observability (AI edge functions)](#observability-ai-edge-functions) below; policy and full contract: [ADR-003](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs) and `docs/technical/ARCHITECTURE.md` (Observability and AI I/O logging).
+- **Edge Functions**: AI-powered endpoints — `transcribe` (multipart audio → transcript + topic assignment + reminder detection), `assign-topics` (typed capture path, also triggers reminder detection), and `detect-reminders` (explicit reminder extraction endpoint). All call OpenRouter server-side. **Voice audio is not stored in Supabase Storage** in v1; it is posted to `transcribe` and discarded after processing. **Observability**: AI-related steps emit structured lines to Edge Function logs — see [Observability (AI edge functions)](#observability-ai-edge-functions) below; policy and full contract: [ADR-003](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs) and `docs/technical/ARCHITECTURE.md` (Observability and AI I/O logging).
 - **Storage**: Available from Supabase for future features; not used for voice capture in v1.
 
 This document tracks the Edge Function endpoints. Standard Supabase client patterns are documented in the Supabase docs.
@@ -54,6 +54,8 @@ Sessions are automatically injected into all database queries by the Supabase cl
 |-------|------|-------------|
 | `audio` | file | The raw audio file recorded on device (m4a/webm) |
 | `thought_id` | string | UUID of the thought row to update with transcript |
+| `iana_timezone` | string | Optional — IANA id from the device (`Intl…timeZone`), e.g. `Europe/Zagreb`. Passed through to reminder extraction. |
+| `current_local_iso` | string | Optional — device **local** “now” as ISO 8601 with offset (e.g. `2026-03-30T14:35:00+02:00`). When set, used instead of server UTC for reminder extraction context. |
 
 **Response 200**:
 ```json
@@ -86,7 +88,9 @@ The `topics` field is present when topic assignment completes successfully insid
 ```json
 {
   "thought_id": "string — UUID of the thought",
-  "text": "string — the full thought text to analyze"
+  "text": "string — the full thought text to analyze",
+  "iana_timezone": "string — optional IANA timezone from the device",
+  "current_local_iso": "string — optional local now with offset (ISO 8601) for reminder extraction"
 }
 ```
 
@@ -100,7 +104,7 @@ The `topics` field is present when topic assignment completes successfully insid
 
 **Error codes**: `400` (missing params or empty strings), `401` (unauthenticated), `404` (thought not found or not owned by caller), `502` (OpenRouter error, unparseable response, or assignment failure), `500` (server configuration or DB write failure)
 
-**Notes**: Loads the caller’s `user_topics`, prompts the model for structured JSON (`best_existing_normalized_name`, `best_match_score` 0–1, `new_topic`). Reuses an existing topic when `best_match_score` > **0.2** and the name matches the catalog; otherwise inserts into `user_topics` and links via `thought_topics`. Syncs `thoughts.topics` (one-element array) and `tagging_status`. Model: `OPENROUTER_TOPIC_MODEL` if set, else `OPENROUTER_TAGGING_MODEL`, default `google/gemini-2.0-flash-001`.
+**Notes**: Loads the caller’s `user_topics`, prompts the model for structured JSON (`best_existing_normalized_name`, `best_match_score` 0–1, `new_topic`). Reuses an existing topic when `best_match_score` > **0.2** and the name matches the catalog; otherwise inserts into `user_topics` and links via `thought_topics`. Syncs `thoughts.topics` (one-element array) and `tagging_status`. Model: `OPENROUTER_TOPIC_MODEL` if set, else `OPENROUTER_TAGGING_MODEL`, default `google/gemini-2.0-flash-001`. Fire-and-forget reminder detection uses `iana_timezone` and `current_local_iso` when provided (same semantics as `/transcribe` multipart fields).
 
 **JWT at gateway**: `[functions.assign-topics] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
@@ -132,6 +136,96 @@ The `topics` field is present when topic assignment completes successfully insid
 
 ---
 
+### POST /detect-reminders
+
+**Auth required**: Yes (Supabase session token)
+
+**Description**: Extract future time references from a thought's text using an OpenRouter-routed model and persist them as `inactive` reminder rows in the `reminders` table. Returns the count of reminders inserted. The mobile app calls this endpoint after thought capture; the pipeline also fires it automatically (fire-and-forget) after `assign-topics` completes inside both the `transcribe` and `assign-topics` edge functions.
+
+**Request body**:
+```json
+{
+  "thought_id": "string — UUID of the thought",
+  "text": "string — the full thought text to scan for time references",
+  "current_iso_timestamp": "string — ISO 8601 datetime (optional; falls back to server clock). Prefer device **local** time with explicit offset.",
+  "iana_timezone": "string — optional IANA id (e.g. Europe/Zagreb); strengthens local interpretation for the model"
+}
+```
+
+**Response 200**:
+```json
+{
+  "thought_id": "string",
+  "reminder_count": "number — count of inactive reminder rows inserted (0 when no future time references found)"
+}
+```
+
+**Error codes**:
+- `400` — Missing or invalid `thought_id` / `text`
+- `401` — Unauthenticated
+- `404` — Thought not found or not owned by caller
+- `500` — Server configuration error (missing env vars)
+
+**Notes**: Sets `thoughts.reminder_detection_status` to `'pending'` → `'complete'` (or `'failed'` on error). Inserted reminders have `status = 'inactive'`; the mobile app is responsible for surfacing them for user approval and scheduling local notifications (the edge function does **not** schedule push notifications). Uses `OPENROUTER_REMINDER_MODEL` if set, then `OPENROUTER_TOPIC_MODEL`, then `google/gemini-2.0-flash-001`. The extraction prompt uses `current_iso_timestamp` and optional `iana_timezone` so relative phrases resolve in the user’s locale (the mobile app sends both on typed and voice capture). When `iana_timezone` is present, if the model returns `scheduled_at` with `Z` or `±00:00` but the digits represent the user’s intended **local** wall time (a common model mistake), the server reinterprets that timestamp in the IANA zone before insert so storage matches local intent. Structured AI logs are emitted via `console.debug` (phase: `reminders`) per ADR-003.
+
+**JWT at gateway**: `[functions.detect-reminders] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
+
+---
+
+## Direct table access patterns (Reminders)
+
+The mobile app interacts with the `reminders` table directly via the Supabase JS client (RLS enforces `user_id = auth.uid()` on all operations — no edge function wrapper needed).
+
+### Fetch pending (inactive) reminders
+
+```typescript
+const { data, error } = await supabase
+  .from('reminders')
+  .select('id, thought_id, extracted_text, scheduled_at, status, created_at')
+  .eq('status', 'inactive')
+  .order('scheduled_at', { ascending: true });
+```
+
+Returns all reminders awaiting user approval, ordered by scheduled time.
+
+### Approve a reminder
+
+Sets `status` to `'active'` and records the Expo notification ID (populated by the mobile client after scheduling the local notification). Optionally accepts a user-edited `scheduled_at`.
+
+```typescript
+const { error } = await supabase
+  .from('reminders')
+  .update({
+    status: 'active',
+    notification_id: expoNotificationId,   // string from Expo Notifications API
+    scheduled_at: userEditedTime ?? originalScheduledAt,
+    updated_at: new Date().toISOString(),
+  })
+  .eq('id', reminderId);
+```
+
+### Dismiss a reminder
+
+```typescript
+const { error } = await supabase
+  .from('reminders')
+  .update({ status: 'dismissed', updated_at: new Date().toISOString() })
+  .eq('id', reminderId);
+```
+
+### Mark a reminder as sent (client-side, after notification fires)
+
+```typescript
+const { error } = await supabase
+  .from('reminders')
+  .update({ status: 'sent', updated_at: new Date().toISOString() })
+  .eq('id', reminderId);
+```
+
+**Security note**: All four patterns rely on RLS (`user_id = auth.uid()`). The mobile client must be authenticated; the anon key alone does not grant cross-user access.
+
+---
+
 ## Observability (AI edge functions)
 
 For operators debugging `transcribe` and `assign-topics` (shared topic pipeline): structured AI events are written as **single-line JSON** via **`console.debug`** (DEBUG level in the dashboard) and include `"log_level":"debug"` in the payload. Filter logs by **DEBUG** to see OpenRouter request/response detail; `console.error` elsewhere in edge code remains for non-AI infrastructure failures.
@@ -140,7 +234,7 @@ For operators debugging `transcribe` and `assign-topics` (shared topic pipeline)
 
 1. Open the [Supabase Dashboard](https://supabase.com/dashboard) for your project.
 2. Go to **Edge Functions**.
-3. Open the function (`transcribe` or `assign-topics`) and use **Logs** (or the project **Logs** view filtered to that function, depending on dashboard layout).
+3. Open the function (`transcribe`, `assign-topics`, or `detect-reminders`) and use **Logs** (or the project **Logs** view filtered to that function, depending on dashboard layout).
 
 There is **no** separate HTTP API or Postgres table for these events in v1. Retention and search are **platform-managed** — do not rely on logs as a long-term audit archive; see ADR-003.
 
@@ -249,3 +343,7 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 | 2026-03-30 | Observability: AI edge logging for operators (`event` types, fields, privacy); link ADR-003 |
 | 2026-03-30 | Observability: example log JSON, PRD Security NFR vs server-side logs, clarify `phase` ordering for `/transcribe` |
 | 2026-03-30 | Observability: nested `openrouter_request` / `openrouter_response`, `OPENROUTER_LOG_JSON_MAX_CHARS`, sanitized audio; **DEBUG** via `console.debug` |
+| 2026-03-30 | Added `POST /detect-reminders` edge function; pipeline wiring in `transcribe` and `assign-topics` (fire-and-forget); reminders direct table access patterns (task #025) |
+| 2026-03-30 | Observability: include `detect-reminders` in dashboard log navigation list |
+| 2026-03-31 | Reminder extraction: optional `iana_timezone` + local `current_local_iso` / `current_iso_timestamp` for device-accurate timezones (`transcribe`, `assign-topics`, `detect-reminders`) |
+| 2026-03-31 | Reminder `scheduled_at`: normalize UTC-stamped local wall times using `iana_timezone` before insert (`_shared/reminder-scheduled-at-normalize.ts`) |

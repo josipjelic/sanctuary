@@ -8,9 +8,9 @@ import {
   logAiInfo,
   sanitizeOpenRouterRequestForLog,
   truncateForLog,
-  truncateJsonForLog,
 } from "../_shared/ai-log.ts";
 import { assignTopicsToThought } from "../_shared/assign-topics.ts";
+import { detectRemindersForThought } from "../_shared/detect-reminders.ts";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -96,6 +96,12 @@ function transcriptionUserPrompt(languageCode: string | null): string {
   return `The speech is in ${name} language. Transcribe this audio verbatim in that language using its normal writing system. Reply with only the spoken words, no commentary.`;
 }
 
+function optionalFormString(fd: FormData, key: string): string | undefined {
+  const v = fd.get(key);
+  if (typeof v !== "string" || !v.trim()) return undefined;
+  return v.trim();
+}
+
 function audioFormatFromMime(mime: string, filename: string): string {
   const m = mime.toLowerCase();
   if (m.includes("webm")) return "webm";
@@ -156,6 +162,8 @@ Deno.serve(async (req) => {
   const transcriptionLanguage = normalizeTranscriptionLanguage(
     formData.get("transcription_language"),
   );
+  const currentLocalIso = optionalFormString(formData, "current_local_iso");
+  const ianaTimezone = optionalFormString(formData, "iana_timezone");
 
   if (!thoughtId || typeof thoughtId !== "string") {
     return jsonResponse({ error: "thought_id required" }, 400);
@@ -250,9 +258,7 @@ Deno.serve(async (req) => {
       transcription_language: transcriptionLanguage ?? "auto",
       prompt_preview: truncateForLog(transcribePrompt),
     },
-    openrouter_request_json: truncateJsonForLog(
-      JSON.stringify(transcribeRequestForLog),
-    ),
+    openrouter_request: transcribeRequestForLog,
   });
 
   const transcribeStarted = Date.now();
@@ -279,9 +285,10 @@ Deno.serve(async (req) => {
       response_summary: {
         body_preview: truncateForLog(errText, 400),
       },
-      openrouter_response_json: truncateJsonForLog(
-        JSON.stringify({ http_status: orRes.status, body: errText }),
-      ),
+      openrouter_response: {
+        http_status: orRes.status,
+        body: errText,
+      },
     });
     await supabase
       .from("thoughts")
@@ -310,7 +317,7 @@ Deno.serve(async (req) => {
       response_summary: {
         latency_ms: Date.now() - transcribeStarted,
       },
-      openrouter_response_json: truncateJsonForLog(JSON.stringify(orData)),
+      openrouter_response: orData,
     });
     await supabase
       .from("thoughts")
@@ -331,7 +338,7 @@ Deno.serve(async (req) => {
       transcript_preview: truncateForLog(transcript),
       latency_ms: Date.now() - transcribeStarted,
     },
-    openrouter_response_json: truncateJsonForLog(JSON.stringify(orData)),
+    openrouter_response: orData,
   });
 
   const { error: updateError } = await supabase
@@ -366,6 +373,23 @@ Deno.serve(async (req) => {
   });
 
   const topics = "topics" in topicResult ? topicResult.topics : undefined;
+
+  // Fire-and-forget — reminder detection must not block the capture response
+  detectRemindersForThought({
+    userId: user.id,
+    thoughtId,
+    text: transcript,
+    currentIsoTimestamp: currentLocalIso ?? new Date().toISOString(),
+    ianaTimezone,
+    supabaseClient: supabase,
+    openRouterApiKey: openrouterKey,
+    callerFunction: "transcribe",
+  }).catch((err: unknown) => {
+    console.error(
+      "[transcribe] detect-reminders failed (non-blocking):",
+      err instanceof Error ? err.message : err,
+    );
+  });
 
   return jsonResponse({
     transcript,

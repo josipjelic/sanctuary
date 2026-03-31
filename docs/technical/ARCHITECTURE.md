@@ -12,7 +12,7 @@ Read by: All agents. Always read before making implementation decisions.
 
 # System Architecture
 
-> Last updated: 2026-03-30 (AI I/O observability: ADR-003, Edge log contract)
+> Last updated: 2026-03-30 (Reminders subsystem: ADR-004; AI I/O observability: ADR-003)
 > Version: 0.1.0
 
 ---
@@ -25,6 +25,7 @@ PRD v1.1 documents user-scoped topics and the transcribe/assign-topics pipeline.
 - Topic assignment reuses an existing topic only when the model reports `best_match_score` **>** **0.2**; otherwise a new catalog row is created (see ADR-002).
 - **Voice**: `/transcribe` writes the transcript then runs topic assignment in the same edge invocation (no separate client call).
 - **Text**: `/assign-topics` runs the same shared logic after insert.
+- **Reminders** (ADR-004): AI detects future time references in thought text after topic assignment (fire-and-forget, non-blocking). Detected reminders are stored as **`inactive`** rows in `reminders` until the user approves or dismisses. Approved rows become **`active`** with a client-scheduled local notification via `expo-notifications` — no server-side scheduler in v1. PRD v1.0 section 7 listed reminders as out-of-scope; the product owner explicitly directed this addition.
 
 ---
 
@@ -52,6 +53,7 @@ The architecture prioritizes simplicity and fast iteration: there is no custom A
 |  Edge Functions                           |
 |    +-- transcribe (voice -> text + topics)|
 |    +-- assign-topics (text -> topics)     |
+|    +-- detect-reminders (fire-and-forget) |
 +------------------+-----------------------+
                    |
                    |  OpenRouter API
@@ -79,6 +81,7 @@ The architecture prioritizes simplicity and fast iteration: there is no custom A
 | Language | TypeScript | 5.x | Type safety across app and shared types |
 | Navigation | Expo Router | 6.x | File-based routing, deep linking support |
 | Voice recording | expo-audio | SDK-bundled | Quick Capture microphone recording (`expo-av` removed; SDK 54 deprecates AV) |
+| Local notifications | expo-notifications | SDK-bundled | Reminder scheduling via `scheduleNotificationAsync`; handles APNs/FCM registration (ADR-004) |
 | Backend-as-a-service | Supabase | Latest | Auth, PostgreSQL, storage, edge functions — no custom server needed |
 | Database | PostgreSQL | 15 (managed by Supabase) | Relational, RLS support, well-understood |
 | AI proxy | OpenRouter | Latest | Model-flexible — swap transcription/tagging models without code changes |
@@ -132,6 +135,30 @@ Exports `colors`, `typography`, `shadows`, `spacing`, `radius`, and `animation` 
 **Barrel export**: `src/components/index.ts` — import any component with `import { Button, Card, TextInput, ThoughtListCard, Topic, TopicFolderCard } from '@/components'`.
 
 **Fonts**: Manrope (400/600/700) and Plus Jakarta Sans (400/600) loaded via `@expo-google-fonts/manrope` and `@expo-google-fonts/plus-jakarta-sans`. Font loading and splash screen management live in `src/app/_layout.tsx`.
+
+### Reminders feature surfaces (task #023, @ui-ux-designer)
+
+Full spec: `.assets/reminders-ux-spec.md`. Summary of new and modified surfaces:
+
+**Modified components**:
+
+| Component | File | Change |
+|-----------|------|--------|
+| `ThoughtListCard` | `ThoughtListCard.tsx` | New optional props: `hasPendingReminder`, `hasApprovedReminder`, `onBellPress`. Bell icon (`Ionicons notifications-outline` / `notifications`, 16pt) added to timestamp row trailing edge. Pending = `colors.primary`; approved = `colors.outlineVariant`; dismissed = no icon. |
+
+**New components**:
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `ReminderApprovalSheet` | `ReminderApprovalSheet.tsx` | Bottom sheet `Modal` (`radius.xl` top corners, `surfaceContainerLowest` background, `maxHeight: "85%"`). Contains scrollable list of pending reminders; each item shows extracted snippet (italic `bodyLg` on `surfaceContainerHigh` tinted block), editable date+time row (taps native DateTimePicker), and Approve / Dismiss `Button` pair. Empty state: checkmark icon + "All caught up" heading + Close button. |
+| Pending-reminders pill | Inline in `inbox/index.tsx` | `Pressable` pill above `FlatList`. Background `colors.primaryContainer`, text `colors.onPrimaryContainer`, `radius.full`. Hidden when count = 0. Opens `ReminderApprovalSheet`. |
+
+**Settings additions** (in existing Settings `Modal` in `src/app/(app)/index.tsx`):
+- "Reminders" section label (`labelMd`, `outlineVariant`, `accessibilityRole="header"`) with a `surfaceContainerHigh` hairline separator above it.
+- Lead-time selector row (matches `settingsLanguageRow` pattern): options "At the time", "15 minutes before" (default), "30 minutes before", "1 hour before", "In the morning". Opens a picker sheet matching the language picker pattern.
+- Morning time row (conditional, shown only when "In the morning" is selected): taps native time picker. Default `07:30`. Animated show/hide via `LayoutAnimation` (300ms); instant when `prefers-reduced-motion` is enabled.
+
+**No new design tokens** are introduced by this feature. All values are drawn from the existing `src/lib/theme.ts` token set.
 
 ---
 
@@ -223,6 +250,7 @@ All edge functions are deployed to Supabase and live under `supabase/functions/`
 |----------|--------|-------------|--------|
 | `transcribe` | POST | Multipart audio → OpenRouter transcription → `thoughts.body`, then shared topic assignment (`_shared/assign-topics.ts`) | Implemented |
 | `assign-topics` | POST | JSON `thought_id` + `text` → same shared topic assignment (typed capture) | Implemented |
+| `detect-reminders` | POST | JSON `thought_id` + `text` (+ optional `current_iso_timestamp`) → AI extraction → zero or more `inactive` `reminders` rows | Implemented — shared `_shared/detect-reminders.ts` invoked fire-and-forget from `transcribe` and `assign-topics`; same module backs this standalone endpoint |
 | `reflection-prompt` | POST | Receives thought text, returns an AI-generated reflection question — does not persist to DB | Planned — task #010 |
 
 All edge functions:
@@ -286,7 +314,7 @@ Auth is handled entirely by Supabase Auth (email + password). There is no custom
 
 > **ADR**: ADR-003. **Implementation**: task #019 (@backend-developer) — this section is the contract only.
 
-AI-related edge work (`transcribe`, `assign-topics`, shared OpenRouter/topic modules) is observable via **Supabase Edge Function logs** (Deno `console` output surfaced in the Supabase project dashboard). There is **no** v1 Postgres table for AI audit trails; durable user content lives in the database as today.
+AI-related edge work (`transcribe`, `assign-topics`, reminder detection in `_shared/detect-reminders.ts`, shared OpenRouter modules) is observable via **Supabase Edge Function logs** (Deno `console` output surfaced in the Supabase project dashboard). There is **no** v1 Postgres table for AI audit trails; durable user content lives in the database as today.
 
 **PRD alignment (Security NFR):** PRD requires *no user data in **device** logs or **analytics** payloads*. That constraint does **not** forbid **server-side** Edge logs used to operate and debug the AI pipeline, as long as redaction rules below are respected. The mobile app must continue to avoid logging thought bodies, transcripts, or tokens in client-side logs or analytics.
 
@@ -297,11 +325,11 @@ AI-related edge work (`transcribe`, `assign-topics`, shared OpenRouter/topic mod
 - Emit **JSON-serializable** objects; prefer **one log line per event** as **single-line JSON** via **`console.debug`** (DEBUG level) with `"log_level":"debug"` in the payload so operators can filter AI/OpenRouter noise separately from `console.error` infrastructure failures.
 - Recommended fields (use when applicable; omit nullable fields rather than sending `null` noise):
   - `event` — stable event name (e.g. `ai.request.start`, `ai.response.complete`, `ai.error`)
-  - `function` — edge function name (`transcribe`, `assign-topics`)
+  - `function` — edge function name (`transcribe`, `assign-topics`, `detect-reminders`, …)
   - `thought_id` — UUID string when a thought row is known
   - `user_id` — UUID string (`auth` subject) for correlation; still subject to redaction policy if product stance tightens
   - `model` — OpenRouter/model id used for the call
-  - `phase` — `"transcribe"` | `"topics"` (and future phases if the pipeline splits further)
+  - `phase` — `"transcribe"` | `"topics"` | `"reminders"` (and future phases if the pipeline splits further)
   - `request_summary` / `response_summary` — non-secret metadata and **short previews** (e.g. byte length, topic count, latency, truncated text for quick scanning)
   - `log_summary` / `log_level` — human skimming line and always `"debug"` for these events (transport is **`console.debug`**).
   - `openrouter_request` / `openrouter_response` — **nested objects** for the OpenRouter `chat/completions` request (sanitized: no API key in body; voice `input_audio.data` → **base64 length placeholder**) and response JSON. **Hosted Supabase allows ≤10,000 characters per log line**; the logger **re-trims** oversized nested blobs (`_truncated` preview). Optional env **`OPENROUTER_LOG_JSON_MAX_CHARS`** lowers the per-field budget (capped ~9k).
@@ -313,7 +341,149 @@ AI-related edge work (`transcribe`, `assign-topics`, shared OpenRouter/topic mod
 - **Full multipart bodies** or complete file payloads
 - For voice **input**, log **metadata only** when needed: e.g. MIME type, size in bytes, duration in ms **if available** from client metadata or headers — never content of the recording
 
-**Handoff (#019):** Implement logging in `supabase/functions/transcribe`, `supabase/functions/assign-topics`, and shared helpers under `supabase/functions/_shared/` per this contract; keep the device and any analytics SDK payloads free of user content (unchanged PRD rule).
+**Implementation (#019+):** Logging lives in `supabase/functions/transcribe`, `supabase/functions/assign-topics`, `supabase/functions/detect-reminders`, and shared helpers under `supabase/functions/_shared/` per this contract; the device and any analytics SDK payloads remain free of user content (unchanged PRD rule).
+
+---
+
+## Reminders Subsystem
+
+> **ADR**: ADR-004. **Tasks**: #022–#028 (shipped 2026-03-30).
+> Added: 2026-03-30
+
+### Overview
+
+Sanctuary detects future time references in captured thoughts ("call mum next Monday", "dentist Wednesday at 3 pm") using AI and surfaces them as user-approvable reminders. No notification fires without explicit user approval. Scheduling uses client-side local notifications via `expo-notifications` — there is no server-side scheduler in v1. The `reminders` table in PostgreSQL is the source of truth for reminder state; the local notification is a delivery mechanism only. Optionally, the user can add the same reminder as a **native calendar event** via `expo-calendar` (`src/lib/deviceCalendar.ts`): permission is requested when they choose **Add to calendar**, then the OS calendar **editor** opens prefilled; the user confirms with Save. The draft uses the reminder’s `scheduled_at` as the start time (not notification lead-time). Calendar events are not stored in Postgres in v1.
+
+### Components
+
+| Component | Location | Owner | Description |
+|-----------|----------|-------|-------------|
+| `detect-reminders` (shared module) | `supabase/functions/_shared/detect-reminders.ts` | @backend-developer | AI extraction: OpenRouter returns `{ "reminders": [ { "extracted_text", "scheduled_at" } ] }`. Inserts one or more rows with `status: 'inactive'`. |
+| `detect-reminders` (edge function) | `supabase/functions/detect-reminders/index.ts` | @backend-developer | Standalone `POST` for on-demand detection (optional `current_iso_timestamp` for relative phrases). Same shared module as the pipeline. |
+| `reminders` table | `supabase/migrations/004_reminders.sql` | @database-expert | `extracted_text`, `scheduled_at`, optional `lead_time` (integer minutes — reserved), `status`, `notification_id`. RLS: `user_id = auth.uid()`. |
+| `user_preferences` table | `supabase/migrations/004_reminders.sql` | @database-expert | Key-value (`key` + JSONB `value`). v1 keys: `notification_lead_time` (string: `at_time` \| `15min` \| `30min` \| `1hour` \| `morning`) and `morning_notification_time` (`"HH:MM"`, default `07:30`). |
+| Reminder UI | `ReminderApprovalSheet.tsx`, `inbox/index.tsx`, `ThoughtListCard.tsx`, `inbox/[thoughtId].tsx` | @react-native-developer | Pending pill + sheet; bell on inbox cards; reminder card on thought detail. Approve schedules notification; dismiss updates row. After approve, optional prompt to add a device calendar event; **Scheduled reminder** sheet includes **Add to calendar** for active reminders. |
+| `expo-notifications` client | `src/lib/notifications.ts` | @react-native-developer | Permission, `scheduleReminder` / `cancelReminder`, `computeFireDate` from lead-time prefs. |
+| Device calendar | `src/lib/deviceCalendar.ts`, `expo-calendar` + config plugin in `app.json` | @react-native-developer | `addReminderToDeviceCalendar`: requests calendar access, then opens the **system new-event UI** (`createEventInCalendarAsync`) prefilled with title/time so the user taps Save — avoids silent insert failures and iOS permission edge cases. Web: no-op. Native rebuild required when adding the plugin. |
+
+### AI Detection Pipeline Placement
+
+Reminder detection runs **after** topic assignment in both capture paths. It is **fire-and-forget** -- the capture response is never delayed or failed by reminder detection.
+
+```
+[Voice path]
+  transcribe (OpenRouter) -> thoughts.body written
+    -> assignTopicsToThought(...) [awaited]
+    -> detectReminders(...).catch(() => {}) [fire-and-forget]
+    -> HTTP response returned to client (transcript + topics)
+
+[Text path]
+  assign-topics edge function
+    -> assignTopicsToThought(...) [awaited]
+    -> detectReminders(...).catch(() => {}) [fire-and-forget]
+    -> HTTP response returned to client (topics)
+```
+
+**Non-blocking contract**: `detectRemindersForThought` is invoked without `await` on the hot path where applicable. If detection fails, `thoughts.reminder_detection_status` is set to `'failed'` and the failure is logged via ADR-003. The capture response is unaffected.
+
+**`reminder_detection_status`** on `thoughts` (CHECK-constrained): `'none'` (default) | `'pending'` | `'complete'` | `'failed'`. Tracks the detection pipeline only, not each reminder row’s lifecycle.
+
+### Detection Model Contract
+
+The shared module prompts OpenRouter for **only** valid JSON of this shape (code fences stripped if present):
+
+```json
+{
+  "reminders": [
+    {
+      "extracted_text": "Call mum",
+      "scheduled_at": "2026-04-06T14:00:00+01:00"
+    }
+  ]
+}
+```
+
+- `reminders`: array; empty when no future time references.
+- Each item must have non-empty `extracted_text` and a parseable ISO 8601 `scheduled_at`; invalid items are skipped.
+- The prompt includes the caller-supplied **local “now”** (ISO with offset) and optional **IANA timezone** (`Europe/Zagreb`, etc.) from the mobile app so phrases like “next Tuesday” resolve in the user’s zone; voice and typed capture send `iana_timezone` + `current_local_iso` via `/transcribe` and `/assign-topics`. Standalone `POST /detect-reminders` accepts `iana_timezone` and `current_iso_timestamp`. Server UTC is only a fallback when the client omits local fields.
+- Model resolution: `OPENROUTER_REMINDER_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`.
+
+### Reminder Lifecycle
+
+```
+              AI extracts ≥1 time reference
+                            |
+                            v
+                   +------------------+
+                   |     inactive      |  (row(s) inserted by edge code)
+                   +--------+---------+
+                            |
+              +-------------+-------------+
+              |                           |
+         user approves              user dismisses
+              |                           |
+              v                           v
+     +--------+---------+       +---------+--------+
+     |      active       |       |    dismissed      |
+     +--------+---------+       +------------------+
+              |
+   client schedules local notification;
+   stores notification_id on row
+              |
+              v
+     +--------+---------+
+     |       sent        |  (client may set after notification fires / handling)
+     +------------------+
+```
+
+**`reminders.status` values** (CHECK): `inactive` | `active` | `dismissed` | `sent`.
+
+### Notification Scheduling (Client-Side)
+
+When the user approves a reminder:
+
+1. Client loads `notification_lead_time` and `morning_notification_time` from `user_preferences` (defaults: `15min`, `07:30`).
+2. Computes fire time with `computeFireDate({ scheduledAt, leadTime, morningTime })` in `src/lib/notifications.ts` (`at_time`, offsets, or morning window).
+3. Calls `scheduleReminder({ title, body, fireDate })` (wraps `scheduleNotificationAsync`).
+4. Persists `notification_id` and sets `status` to `'active'` (and may adjust `scheduled_at` if the user edited the datetime).
+
+On dismiss: cancel any scheduled notification by `notification_id`, then set `status` to `'dismissed'`. Reschedule flows cancel the old id before scheduling a new one.
+
+**Device calendar (optional):** After approve (inbox sheet or thought-detail sheet), the app may offer to open the OS calendar **create-event** flow prefilled with the same title and `scheduled_at`. Active reminders can also use **Add to calendar** from the scheduled-reminder sheet. The user must confirm in the system UI (Save). Duplicates are possible if the user completes that flow multiple times; no `calendar_event_id` column in v1.
+
+When the notification fires, the app may update the row to `sent` (see `docs/technical/API.md` direct-table patterns).
+
+### Notification Permission
+
+`expo-notifications` requires the user to grant notification permission. The permission request should be triggered at a contextually appropriate moment -- not on first launch. Recommended: prompt when the first reminder is detected and shown to the user for approval. Flag for @ui-ux-designer to design the permission flow UX.
+
+### Schema summary
+
+Canonical columns and constraints: **`docs/technical/DATABASE.md`** (`004_reminders.sql`).
+
+**Highlights**:
+
+- **`reminders`**: `extracted_text`, `scheduled_at`, `lead_time` (optional integer, reserved), `status` default `'inactive'`, `notification_id` nullable.
+- **`user_preferences`**: one row per `(user_id, key)`; v1 keys `notification_lead_time`, `morning_notification_time`.
+- **`thoughts.reminder_detection_status`**: `'none'` | `'pending'` | `'complete'` | `'failed'`.
+
+### Observability
+
+Reminder detection follows the ADR-003 structured logging contract. Events use `phase: "reminders"` and the same `event` vocabulary (`ai.request.start`, `ai.response.complete`, `ai.error`). Logged via `console.debug` at DEBUG level. No thought body content in logs beyond truncated previews per the existing redaction rules.
+
+### Upgrade Path (v2: Server-Side Scheduling)
+
+If multi-device sync or higher delivery reliability is needed, a future ADR can introduce server-side scheduling:
+
+1. Add an `expo_push_tokens` table (user_id, token, platform, updated_at).
+2. Add a `pg_cron` job (requires Supabase Pro) or external cron that queries **`reminders`** where `status = 'active'` and the computed notify time (from `scheduled_at` and user lead-time prefs) is due.
+3. The job calls an edge function that sends push via the [Expo Push API](https://docs.expo.dev/push-notifications/sending-notifications/).
+4. The client stops calling `scheduleNotificationAsync` for approved reminders and instead registers its push token on login.
+5. `status` and `scheduled_at` on `reminders` remain the primary scheduler-facing fields; lead-time rules may move server-side in that ADR.
+
+### Cross-agent handoffs (v1 — complete)
+
+Shipped work: migration `004_reminders`, `_shared/detect-reminders.ts`, `transcribe` / `assign-topics` fire-and-forget hooks, `detect-reminders` edge function, mobile UI and `src/lib/notifications.ts`, tests (#027), USER_GUIDE (#028). Future changes should update **DATABASE.md**, **API.md**, and this section together.
 
 ---
 
@@ -329,10 +499,13 @@ User taps "Capture" -> TextInput or VoiceRecorder
      -> OpenRouter transcribes audio -> returns transcript text
      -> `thoughts.body` updated, transcription_status: 'complete'
      -> Shared `assign-topics` runs: user_topics + thought_topics + thoughts.topics, tagging_status: 'complete' or 'failed'
+     -> `detect-reminders` fires (non-blocking, fire-and-forget): if time ref found, reminders row created
      -> Audio file discarded (never stored server-side)
   -> [Text path] Thought row inserted with body text
   -> Edge function `assign-topics` called with thought text
   -> OpenRouter returns structured topic JSON (threshold 0.2 for reuse vs new topic)
   -> `thoughts.topics` updated (one-element array), tagging_status: 'complete' or 'failed'
+  -> `detect-reminders` fires (non-blocking, fire-and-forget): if time ref found, reminders row created
   -> Inbox refreshes to show new thought with topic chip
+  -> [If reminder detected] User sees reminder prompt on thought -> approves -> client schedules local notification
 ```

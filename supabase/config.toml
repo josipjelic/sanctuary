@@ -123,6 +123,9 @@ verify_jwt = false
 [functions.assign-topics]
 verify_jwt = false
 
+[functions.detect-reminders]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 policy = "oneshot"

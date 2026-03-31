@@ -1,8 +1,10 @@
-import { Topic } from "@/components";
+import { ReminderEditSheet, Topic } from "@/components";
 import { formatRelativeTime } from "@/lib/formatRelativeTime";
 import { supabase } from "@/lib/supabase";
-import { colors, spacing, typography } from "@/lib/theme";
+import { colors, radius, spacing, typography } from "@/lib/theme";
+import type { Reminder } from "@/types/reminder";
 import type { Thought } from "@/types/thought";
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
@@ -41,6 +43,21 @@ async function fetchThought(thoughtId: string): Promise<ThoughtDetail | null> {
   return data as ThoughtDetail;
 }
 
+async function fetchReminder(thoughtId: string): Promise<Reminder | null> {
+  const { data } = await supabase
+    .from("reminders")
+    .select(
+      "id, user_id, thought_id, extracted_text, scheduled_at, status, notification_id, lead_time, created_at, updated_at",
+    )
+    .eq("thought_id", thoughtId)
+    .in("status", ["inactive", "active"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return (data as Reminder | null) ?? null;
+}
+
 export default function ThoughtDetailScreen() {
   const rawThoughtId = useLocalSearchParams<{
     thoughtId?: string | string[];
@@ -58,13 +75,21 @@ export default function ThoughtDetailScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const [reminder, setReminder] = useState<Reminder | null>(null);
+  const [reminderSheetVisible, setReminderSheetVisible] = useState(false);
+
   const loadThought = useCallback(async () => {
     if (!thoughtId) return;
     setLoading(true);
     try {
-      const data = await fetchThought(thoughtId);
-      setThought(data);
-      if (data) setDraftBody(data.body);
+      const [thoughtData, reminderData] = await Promise.all([
+        fetchThought(thoughtId),
+        fetchReminder(thoughtId),
+      ]);
+      setThought(thoughtData);
+      if (thoughtData) setDraftBody(thoughtData.body);
+      setReminder(reminderData);
+      if (!reminderData) setReminderSheetVisible(false);
     } finally {
       setLoading(false);
     }
@@ -234,6 +259,10 @@ export default function ThoughtDetailScreen() {
     handleDeletePress,
   ]);
 
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={["bottom"]}>
@@ -285,7 +314,55 @@ export default function ThoughtDetailScreen() {
         <Text style={styles.timestampText}>
           {formatRelativeTime(thought.created_at)}
         </Text>
+
+        {reminder !== null && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.reminderPromptRow,
+              pressed && styles.reminderPromptRowPressed,
+            ]}
+            onPress={() => setReminderSheetVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              reminder.status === "inactive"
+                ? "Reminder awaiting your review. Opens reminder sheet."
+                : "Scheduled reminder. Opens sheet to reschedule or dismiss."
+            }
+            accessibilityHint="Opens reminder sheet"
+          >
+            <Ionicons
+              name={
+                reminder.status === "inactive"
+                  ? "notifications-outline"
+                  : "notifications"
+              }
+              size={18}
+              color={
+                reminder.status === "inactive"
+                  ? colors.primary
+                  : colors.outlineVariant
+              }
+            />
+            <Text style={styles.reminderPromptText}>
+              {reminder.status === "inactive"
+                ? "Reminder · review in sheet"
+                : "Reminder · tap to reschedule"}
+            </Text>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={colors.outlineVariant}
+            />
+          </Pressable>
+        )}
       </ScrollView>
+
+      <ReminderEditSheet
+        visible={reminderSheetVisible}
+        reminder={reminder}
+        onClose={() => setReminderSheetVisible(false)}
+        onReminderChanged={() => void loadThought()}
+      />
     </SafeAreaView>
   );
 }
@@ -351,5 +428,24 @@ const styles = StyleSheet.create({
   },
   headerButtonDelete: {
     color: colors.error,
+  },
+  reminderPromptRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.s2,
+    minHeight: 48,
+    paddingVertical: spacing.s2,
+    paddingHorizontal: spacing.s2,
+    marginTop: spacing.s2,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceContainerHigh,
+  },
+  reminderPromptRowPressed: {
+    opacity: 0.85,
+  },
+  reminderPromptText: {
+    ...typography.bodyLg,
+    color: colors.onSurface,
+    flex: 1,
   },
 });

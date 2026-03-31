@@ -4,7 +4,7 @@
  * OpenRouter payloads are nested objects (not JSON strings) for readable parsing after `event_message` decode.
  */
 
-export type AiLogPhase = "transcribe" | "topics";
+export type AiLogPhase = "transcribe" | "topics" | "reminders";
 
 export type AiLogEvent =
   | "ai.request.start"

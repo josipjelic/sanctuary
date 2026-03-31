@@ -23,6 +23,7 @@ Read by: All agents. Check this file before proposing changes that may conflict 
 | ADR-001 | Expo + Supabase + OpenRouter stack selection | Accepted | 2026-03-28 |
 | ADR-002 | User-scoped topics, match threshold, transcribe pipeline | Accepted | 2026-03-28 |
 | ADR-003 | AI I/O observability via Supabase Edge Function logs | Accepted | 2026-03-30 |
+| ADR-004 | AI reminder detection and client-side local notification scheduling | Accepted | 2026-03-30 |
 
 ---
 
@@ -136,3 +137,62 @@ Use **Supabase Edge Function logging only** for AI I/O observability in v1: stru
 - **Positive**: Single place for operators to tail AI operations (Supabase dashboard); no migration or RLS policy set for a new audit table; implementation stays inside existing edge functions.
 - **Negative**: Log retention, indexing, and export behavior follow Supabase platform limits and changes — document that we **do not** rely on logs as a durable compliance archive; use DB state for authoritative user data.
 - **Neutral**: If v1 outgrows dashboard logs, a follow-up ADR may add export or a vendor without changing the core “no raw audio / no secrets” rules.
+
+---
+
+## ADR-004: AI Reminder Detection and Client-Side Local Notification Scheduling
+
+**Date**: 2026-03-30
+**Status**: Accepted
+**Deciders**: Josip / @systems-architect
+
+### Context
+
+Users frequently capture thoughts that contain future time references (“call mum next Monday”, “dentist Wednesday at 3 pm”, “submit report by Friday”). These implicit reminders are currently lost -- Sanctuary captures the text but never surfaces the time-sensitive intent back to the user.
+
+The product owner has directed adding a reminders subsystem even though PRD v1.0 section 7 listed “push notifications / reminders” as out of scope. The goal is an AI-detected, user-approved reminder workflow: the system detects temporal references in captured thoughts, proposes a reminder, and -- only after the user explicitly approves -- schedules a notification.
+
+**Constraints that shape the design:**
+
+- **Expo managed workflow (SDK 54)**: Rules out direct APNs/FCM registration; the standard path is `expo-notifications`.
+- **Solo developer, beta phase**: Infrastructure complexity must stay minimal. Supabase is the only backend; there is no custom API server.
+- **Non-blocking pipeline**: Reminder detection must not slow down or risk failing the capture response the user sees (thought save + topic assignment). A failed reminder detection must be invisible to the capture flow.
+- **User approval required**: No notification may fire without the user explicitly approving the proposed reminder. This is a product requirement, not just a UX preference -- unsolicited notifications would violate the “calm, intentional” brand.
+- **Single device for beta**: Multi-device sync is a v2 concern. The beta user base is small and single-device usage is the norm.
+
+### Options Considered
+
+1. **Client-side local notifications via `expo-notifications` (`scheduleNotificationAsync`)** -- At approval time, the mobile app computes the fire time (reminder `scheduled_at` minus the user's preferred lead time) and schedules a local notification on the device. No server-side scheduling infrastructure required.
+   - **Pros**: Zero additional infrastructure. Works offline once scheduled. Native to Expo managed workflow -- `expo-notifications` handles APNs/FCM registration, permission prompts, and local scheduling in one package. Simple to implement: one `scheduleNotificationAsync` call per approved reminder. The scheduled notification survives app termination (OS-managed). Lead-time computation is trivial client-side arithmetic. No new secrets, no cron jobs, no external services.
+   - **Cons**: Notifications are device-local -- if the user switches devices or reinstalls, scheduled reminders are lost (acceptable for a single-device beta). iOS may throttle or defer local notifications under battery optimization in rare edge cases. No server-side record of whether the notification actually fired. Rescheduling (if the user edits the reminder time) requires canceling the old notification identifier and scheduling a new one -- manageable but the client must track the `notificationId`.
+
+2. **Server-side scheduling with `pg_cron` + Expo Push API** -- A PostgreSQL cron job (via Supabase `pg_cron` extension) polls the `reminders` table periodically (e.g. every minute), finds reminders due within the next window, and calls an edge function that sends push notifications via the Expo Push API using stored push tokens.
+   - **Pros**: Notifications are server-authoritative -- survives device changes if the push token is refreshed. Centralized scheduling logic; the client does not need to manage local notification identifiers. Enables multi-device delivery in the future.
+   - **Cons**: Requires Supabase Pro plan for `pg_cron` (not available on free tier). Requires storing Expo push tokens in a new table and managing token lifecycle (expiry, refresh, revocation). Requires a new edge function to send push notifications. Adds a polling loop that runs continuously even when no reminders are due -- wasteful at beta scale. Significant implementation complexity for a solo developer: push token table, cron schedule, edge function, error handling for invalid tokens, Expo Push API receipts. Introduces a server-side dependency for a feature that is not yet validated with users.
+
+3. **External cron (e.g. GitHub Actions scheduled workflow) + Supabase Edge Function + Expo Push API** -- An external scheduler triggers a Supabase edge function on a fixed interval; that function queries due reminders and sends push notifications via the Expo Push API.
+   - **Pros**: Does not require `pg_cron` or Supabase Pro. Can use any external cron provider (GitHub Actions, Cloudflare Workers Cron Triggers, etc.).
+   - **Cons**: All the same push-token and edge-function complexity as Option 2, plus an external service dependency. GitHub Actions cron has minimum 5-minute granularity and is not guaranteed to run on time. Adds a secret (Supabase service role key or function invoke key) to the external cron environment. More moving parts than either other option for less reliability.
+
+### Decision
+
+**Option 1: Client-side local notifications via `expo-notifications`.**
+
+For a single-device beta with a solo developer, this is the correct trade-off. It adds zero infrastructure, works within the Expo managed workflow, and delivers the core user value (a notification fires at the right time on the user's device) without the operational burden of server-side scheduling. The reminder row in PostgreSQL is the source of truth for reminder state (detected, approved, dismissed, fired); the local notification is a delivery mechanism only.
+
+**Push notification provider**: `expo-notifications` (the standard Expo managed-workflow package). It handles APNs (iOS) and FCM (Android) registration transparently, supports both local and remote push notifications, and provides `scheduleNotificationAsync` for time-based local scheduling. No direct APNs/FCM integration is needed.
+
+**AI detection pipeline placement**: A new shared module `supabase/functions/_shared/detect-reminders.ts` runs **after** `assign-topics` completes (or fails) in both the `transcribe` and `assign-topics` edge functions. It is invoked with a **fire-and-forget** pattern: `detectReminders(...).catch(() => {})` -- the promise is not awaited in the response path. This means:
+- The HTTP response to the client is returned as soon as topic assignment finishes (same as today).
+- Reminder detection runs in the background of the same Deno isolate invocation. If it fails, the capture response is unaffected.
+- `reminder_detection_status` on the `thoughts` row tracks the outcome (`none`, `pending`, `detected`, `no_reminder`, `failed`).
+
+**Notification lead time**: The user sets a global preference stored in a `user_preferences` table (or a `notification_lead_time` column on an existing user-settings surface): `15min`, `30min`, `1hour`, or `morning` (with a configurable morning time, default 08:00 local). At approval time, the client computes: fire time = `scheduled_at - lead_time` (or morning-of for `morning` preset). The `notificationId` returned by `scheduleNotificationAsync` is stored on the `reminders` row so the client can cancel or reschedule.
+
+**Upgrade path to server-side (v2)**: If multi-device sync or higher reliability is needed, a future ADR can add Expo Push API delivery from a server-side scheduler (Option 2 or 3) without changing the data model. The `reminders` table already stores `scheduled_at` and status -- a server-side job would query the same table. The client would stop calling `scheduleNotificationAsync` and instead register its push token. The `expo-notifications` package supports both local and remote notifications, so the client-side permission and display code remains unchanged.
+
+### Consequences
+
+- **Positive**: No new infrastructure, secrets, or external services. Implementation is contained to: one shared Deno module (AI detection), one migration (two tables), and client-side scheduling logic using a well-supported Expo package. The capture pipeline is not slowed or made less reliable. The data model supports a future server-side upgrade without schema changes.
+- **Negative**: Scheduled notifications are device-local and will be lost on reinstall or device switch. There is no server-side confirmation that a notification actually fired. iOS battery optimization may in rare cases delay a local notification by a few minutes. The fire-and-forget pattern for detection means a detection failure is only visible in edge function logs (ADR-003), not in the client response -- operators must monitor logs to catch systemic detection failures.
+- **Neutral**: The `reminders` table and `user_preferences` table are new schema additions that will need RLS policies following the existing pattern. The `expo-notifications` package must be added to the Expo project and notification permissions must be requested at an appropriate UX moment (flag for @ui-ux-designer).
