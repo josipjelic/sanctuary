@@ -26,6 +26,31 @@ function readExpoPublicSupabaseFromEnvFile(projectRoot) {
   };
 }
 
+/**
+ * Bare package name "expo-audio" is resolved via resolve-from(projectRoot, …), which can fail
+ * under pnpm (PLUGIN_NOT_FOUND). Pointing at the real app.plugin.js avoids that.
+ */
+function resolveExpoAudioConfigPlugin(plugins) {
+  if (!Array.isArray(plugins)) {
+    return plugins;
+  }
+  let audioPluginPath;
+  try {
+    audioPluginPath = require.resolve("expo-audio/app.plugin.js");
+  } catch {
+    return plugins;
+  }
+  return plugins.map((entry) => {
+    if (entry === "expo-audio") {
+      return audioPluginPath;
+    }
+    if (Array.isArray(entry) && entry[0] === "expo-audio") {
+      return [audioPluginPath, entry[1]];
+    }
+    return entry;
+  });
+}
+
 module.exports = ({ config }) => {
   const file = readExpoPublicSupabaseFromEnvFile(__dirname);
   const supabaseUrl = file.supabaseUrl ?? process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -34,6 +59,7 @@ module.exports = ({ config }) => {
 
   return {
     ...config,
+    plugins: resolveExpoAudioConfigPlugin(config.plugins),
     extra: {
       ...config.extra,
       supabaseUrl,
