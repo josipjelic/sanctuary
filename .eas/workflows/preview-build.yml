@@ -34,4 +34,4 @@ jobs:
               - type: mrkdwn
                 text: "*Branch:*\n${{ github.ref_name }}"
               - type: mrkdwn
-                text: "*Update:*\nhttps://expo.dev/accounts/context.hr/projects/sanctuary/updates/${{ needs.publish_update.outputs.first_update_group_id }}"
+                text: "*Update:*\nexp://u.expo.dev/cd70b552-8a0a-4d7e-9587-e43e30776839/group/${{ needs.publish_update.outputs.first_update_group_id }}"
