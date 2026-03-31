@@ -157,3 +157,7 @@ refactor/<description>
 @docs/technical/API.md
 @docs/technical/DATABASE.md
 @docs/user/USER_GUIDE.md
+
+## External References
+
+- **ClickUp project description**: https://app.clickup.com/90151962783/v/dc/2kyqkj4z-2035/2kyqkj4z-1855 — Keep updated with the general project description when significant features ship or direction changes.
