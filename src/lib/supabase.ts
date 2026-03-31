@@ -2,6 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
 import Constants from "expo-constants";
 
+import { logger } from "@/lib/logger";
+
 type SupabaseExtra = {
   supabaseUrl?: string;
   supabaseAnonKey?: string;
@@ -58,6 +60,11 @@ try {
     `Invalid EXPO_PUBLIC_SUPABASE_URL. Expected a full URL (e.g. https://your-project.supabase.co), got: ${supabaseUrl.slice(0, 80)}${supabaseUrl.length > 80 ? "…" : ""}`,
   );
 }
+
+logger.debug("Supabase client URL", {
+  url: supabaseUrl,
+  fromAppConfigExtra: Boolean(fromConfig.url),
+});
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
