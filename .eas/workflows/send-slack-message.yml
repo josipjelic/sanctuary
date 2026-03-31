@@ -1,0 +1,9 @@
+name: Send message
+
+jobs:
+  send_slack_message:
+    name: Send Slack message
+    type: slack
+    params:
+      webhook_url: ${{ env.SLACK_WEBHOOK_URL }}
+      message: "Hello Slack! 🎉"
