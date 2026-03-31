@@ -17,6 +17,7 @@ jobs:
     name: Notify Slack
     needs: [publish_update]
     type: slack
+    environment: preview
     params:
       webhook_url: ${{ env.SLACK_WEBHOOK_URL }}
       message: "New Preview Update | ${{ github.event.head_commit.message }} | exp://u.expo.dev/cd70b552-8a0a-4d7e-9587-e43e30776839/group/${{ needs.publish_update.outputs.first_update_group_id }}"
