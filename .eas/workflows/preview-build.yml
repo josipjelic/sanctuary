@@ -28,7 +28,7 @@ jobs:
           - type: section
             text:
               type: mrkdwn
-              text: ${{ needs.publish_update.outputs.first_update_group_id && '"*' + github.event.head_commit.message + '*"' || '"A new update was published"' }}
+              text: "${{ github.event.head_commit.message }}"
           - type: section
             fields:
               - type: mrkdwn
