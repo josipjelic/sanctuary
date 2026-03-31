@@ -62,11 +62,15 @@ type RecordingState =
   | "recording"
   | "processing";
 
-/** Voice-optimized options (16 kHz mono) for transcription; matches prior expo-av setup. */
+/**
+ * Voice capture: mono AAC in m4a. Android uses 16 kHz for smaller files.
+ * iOS uses 44.1 kHz — at 16 kHz, AVAudioRecorder often hits AudioCodecInitialize
+ * failures (seen as "Failed to prepare recorder") on simulator and some devices.
+ */
 const VOICE_RECORDING_OPTIONS: RecordingOptions = {
   ...RecordingPresets.HIGH_QUALITY,
   extension: ".m4a",
-  sampleRate: 16000,
+  sampleRate: Platform.OS === "ios" ? 44100 : 16000,
   numberOfChannels: 1,
   bitRate: 128000,
   android: {
