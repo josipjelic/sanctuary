@@ -24,6 +24,14 @@
 - [ ] #013 — E2E tests for authentication flow [area: qa] → [.tasks/013-e2e-auth-tests.md](.tasks/013-e2e-auth-tests.md)
 - [ ] #014 — E2E tests for thought capture flow [area: qa] → [.tasks/014-e2e-capture-tests.md](.tasks/014-e2e-capture-tests.md)
 - [ ] #015 — CI/CD pipeline for Expo builds (GitHub Actions) [area: infra] → [.tasks/015-cicd-pipeline.md](.tasks/015-cicd-pipeline.md)
+- [ ] #029 — Lists detection subsystem: architecture + ADR (pipeline placement, continuation detection, schema guidelines) [area: infra] → [.tasks/029-lists-architecture.md](.tasks/029-lists-architecture.md)
+- [ ] #030 — UX design for lists feature (inbox card variant, checkboxes, list detail, continuation indicator) [area: design] → [.tasks/030-lists-ux-design.md](.tasks/030-lists-ux-design.md)
+- [ ] #031 — Database schema: user_lists + list_items tables + migration 005 [area: database] → [.tasks/031-lists-database-schema.md](.tasks/031-lists-database-schema.md)
+- [ ] #032 — Backend: detect-list edge function + pipeline wiring into transcribe + assign-topics [area: backend] → [.tasks/032-lists-backend.md](.tasks/032-lists-backend.md)
+- [ ] #033 — Shared components: ListCard, ListItemRow, list status pill [area: frontend] → [.tasks/033-lists-components.md](.tasks/033-lists-components.md)
+- [ ] #034 — Mobile screens: list inbox card, list detail, item completion wiring [area: mobile] → [.tasks/034-lists-mobile.md](.tasks/034-lists-mobile.md)
+- [ ] #035 — Tests: list detection, item completion, continuation matching, RLS [area: qa] → [.tasks/035-lists-tests.md](.tasks/035-lists-tests.md)
+- [ ] #036 — Docs: USER_GUIDE.md Lists section [area: docs] → [.tasks/036-lists-docs.md](.tasks/036-lists-docs.md)
 
 ---
 

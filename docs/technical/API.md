@@ -11,7 +11,7 @@ Read by: All agents building or integrating with backend functionality.
 > **Backend**: Supabase (PostgreSQL + Auth + Storage + Edge Functions)
 > **Client**: `@supabase/supabase-js` — used directly in the mobile app and in edge functions
 > **Authentication**: Supabase JWT (managed by Supabase Auth). Pass the session token via the Supabase client — it is sent automatically as a Bearer token.
-> **Last updated**: 2026-03-30 (detect-reminders edge function; reminders direct table patterns)
+> **Last updated**: 2026-03-31 (detect-list planned endpoint documented; lists subsystem tasks #029–#036)
 
 ---
 
@@ -169,6 +169,43 @@ The `topics` field is present when topic assignment completes successfully insid
 **Notes**: Sets `thoughts.reminder_detection_status` to `'pending'` → `'complete'` (or `'failed'` on error). Inserted reminders have `status = 'inactive'`; the mobile app is responsible for surfacing them for user approval and scheduling local notifications (the edge function does **not** schedule push notifications). Uses `OPENROUTER_REMINDER_MODEL` if set, then `OPENROUTER_TOPIC_MODEL`, then `google/gemini-2.0-flash-001`. The extraction prompt uses `current_iso_timestamp` and optional `iana_timezone` so relative phrases resolve in the user’s locale (the mobile app sends both on typed and voice capture). When `iana_timezone` is present, if the model returns `scheduled_at` with `Z` or `±00:00` but the digits represent the user’s intended **local** wall time (a common model mistake), the server reinterprets that timestamp in the IANA zone before insert so storage matches local intent. Structured AI logs are emitted via `console.debug` (phase: `reminders`) per ADR-003.
 
 **JWT at gateway**: `[functions.detect-reminders] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
+
+---
+
+### POST /detect-list ⚠️ PLANNED
+
+**Auth required**: Yes (Supabase session token)
+
+**Description**: Detect whether a captured thought is primarily a list (shopping, tasks, ideas, etc.), extract its title and items, and detect whether it is a continuation of an existing list. Creates `user_lists` + `list_items` rows on detection, or appends items to an existing list on continuation. Invoked fire-and-forget from `transcribe` and `assign-topics` after topic assignment — same pattern as `detect-reminders`.
+
+**Request body**:
+```json
+{
+  "thought_id": "string — UUID of the thought",
+  "text": "string — the full thought text to scan"
+}
+```
+
+**Response 200**:
+```json
+{
+  "thought_id": "string",
+  "is_list": "boolean",
+  "list_id": "string | null — UUID of the created or updated user_lists row",
+  "is_continuation": "boolean — true when items were appended to an existing list",
+  "item_count": "number — items inserted or appended (0 when not a list)"
+}
+```
+
+**Error codes**:
+- `400` — Missing or invalid `thought_id` / `text`
+- `401` — Unauthenticated
+- `404` — Thought not found or not owned by caller
+- `500` — Server configuration error
+
+**Notes**: The shared module `_shared/detect-list.ts` loads the caller's existing `user_lists` titles and passes them to the model so continuation can be detected. When `is_continuation` is true, new items are appended to the matching existing list rather than creating a duplicate. Sets `thoughts.list_detection_status` to `'pending'` → `'complete'` (or `'failed'` on error). Uses `OPENROUTER_LIST_MODEL` if set, then `OPENROUTER_TOPIC_MODEL`, then `google/gemini-2.0-flash-001`. AI logs follow the ADR-003 contract with `phase: "lists"`.
+
+**JWT at gateway**: `[functions.detect-list] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
 ---
 
@@ -347,3 +384,4 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 | 2026-03-30 | Observability: include `detect-reminders` in dashboard log navigation list |
 | 2026-03-31 | Reminder extraction: optional `iana_timezone` + local `current_local_iso` / `current_iso_timestamp` for device-accurate timezones (`transcribe`, `assign-topics`, `detect-reminders`) |
 | 2026-03-31 | Reminder `scheduled_at`: normalize UTC-stamped local wall times using `iana_timezone` before insert (`_shared/reminder-scheduled-at-normalize.ts`) |
+| 2026-03-31 | Added planned `POST /detect-list` endpoint spec; lists subsystem tasks #029–#036 |

@@ -12,7 +12,7 @@ Read by: All agents. Always read before making implementation decisions.
 
 # System Architecture
 
-> Last updated: 2026-03-30 (Reminders subsystem: ADR-004; AI I/O observability: ADR-003)
+> Last updated: 2026-03-31 (Lists subsystem planned: tasks #029–#036; Reminders subsystem: ADR-004; AI I/O observability: ADR-003)
 > Version: 0.1.0
 
 ---
@@ -26,6 +26,7 @@ PRD v1.1 documents user-scoped topics and the transcribe/assign-topics pipeline.
 - **Voice**: `/transcribe` writes the transcript then runs topic assignment in the same edge invocation (no separate client call).
 - **Text**: `/assign-topics` runs the same shared logic after insert.
 - **Reminders** (ADR-004): AI detects future time references in thought text after topic assignment (fire-and-forget, non-blocking). Detected reminders are stored as **`inactive`** rows in `reminders` until the user approves or dismisses. Approved rows become **`active`** with a client-scheduled local notification via `expo-notifications` — no server-side scheduler in v1. PRD v1.0 section 7 listed reminders as out-of-scope; the product owner explicitly directed this addition.
+- **Lists** (tasks #029–#036, planned): AI detects whether a captured thought is primarily a list (shopping, tasks, ideas, etc.) — fire-and-forget after topic assignment, same pattern as reminders. Detected lists create `user_lists` + `list_items` rows. The AI also detects **continuation** — when a new thought references an existing list title, new items are appended rather than creating a duplicate list. Each item can be marked done in the UI; marking all items done closes the list. ADR-005 pending architecture wave.
 
 ---
 
@@ -54,6 +55,7 @@ The architecture prioritizes simplicity and fast iteration: there is no custom A
 |    +-- transcribe (voice -> text + topics)|
 |    +-- assign-topics (text -> topics)     |
 |    +-- detect-reminders (fire-and-forget) |
+|    +-- detect-list (fire-and-forget, planned)|
 +------------------+-----------------------+
                    |
                    |  OpenRouter API
@@ -251,6 +253,7 @@ All edge functions are deployed to Supabase and live under `supabase/functions/`
 | `transcribe` | POST | Multipart audio → OpenRouter transcription → `thoughts.body`, then shared topic assignment (`_shared/assign-topics.ts`) | Implemented |
 | `assign-topics` | POST | JSON `thought_id` + `text` → same shared topic assignment (typed capture) | Implemented |
 | `detect-reminders` | POST | JSON `thought_id` + `text` (+ optional `current_iso_timestamp`) → AI extraction → zero or more `inactive` `reminders` rows | Implemented — shared `_shared/detect-reminders.ts` invoked fire-and-forget from `transcribe` and `assign-topics`; same module backs this standalone endpoint |
+| `detect-list` | POST | JSON `thought_id` + `text` → AI detection of list intent + item extraction + continuation matching against existing `user_lists` titles → `user_lists` + `list_items` rows | Planned — tasks #029–#036; shared `_shared/detect-list.ts` invoked fire-and-forget from `transcribe` and `assign-topics` |
 | `reflection-prompt` | POST | Receives thought text, returns an AI-generated reflection question — does not persist to DB | Planned — task #010 |
 
 All edge functions:
@@ -502,12 +505,15 @@ User taps "Capture" -> TextInput or VoiceRecorder
      -> `thoughts.body` updated, transcription_status: 'complete'
      -> Shared `assign-topics` runs: user_topics + thought_topics + thoughts.topics, tagging_status: 'complete' or 'failed'
      -> `detect-reminders` fires (non-blocking, fire-and-forget): if time ref found, reminders row created
+     -> `detect-list` fires (non-blocking, fire-and-forget, planned): if list detected, user_lists + list_items rows created; if continuation, items appended to existing list
      -> Audio file discarded (never stored server-side)
   -> [Text path] Thought row inserted with body text
   -> Edge function `assign-topics` called with thought text
   -> OpenRouter returns structured topic JSON (threshold 0.2 for reuse vs new topic)
   -> `thoughts.topics` updated (one-element array), tagging_status: 'complete' or 'failed'
   -> `detect-reminders` fires (non-blocking, fire-and-forget): if time ref found, reminders row created
+  -> `detect-list` fires (non-blocking, fire-and-forget, planned): if list detected, user_lists + list_items rows created; if continuation, items appended to existing list
   -> Inbox refreshes to show new thought with topic chip
   -> [If reminder detected] User sees reminder prompt on thought -> approves -> client schedules local notification
+  -> [If list detected] Thought card shows as interactive list with checkboxes; tapping an item marks it done
 ```

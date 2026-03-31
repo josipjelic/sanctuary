@@ -120,6 +120,30 @@ Voice transcription has become fast and affordable via APIs. AI-assisted labelin
 - **FR-042**: Daily check-in history must be accessible and browsable in the library view
 - **FR-043**: Only one check-in per calendar day is permitted; opening the check-in screen on an existing day loads the existing entry for editing
 
+### 5.6 Journal Analysis & User Profiling _(paid tier — v2)_
+
+> This section defines the AI-powered journaling layer planned for the paid tier. None of these requirements are in scope for the v1 beta. They are documented here to establish the product direction and allow architecture decisions to remain compatible.
+
+#### Per-entry analysis
+
+- **FR-050**: Every journal recording must be analysed across the following dimensions after transcription: mood (label + intensity), energy level, key insights, named entities (people, places, themes), and sentiment trajectory (improving / declining / stable / mixed)
+- **FR-051**: Per-entry analysis must return a structured result suitable for display in the app and storage in the database — not raw model output
+- **FR-052**: Analysis must be strictly grounded in what the user expressed — the system must not project, assume, or moralize
+
+#### Memory layer (longitudinal)
+
+- **FR-060**: The app must build and maintain a persistent user profile derived from journal entries over time. This profile consists of durable third-person observations — not raw transcripts — such as recurring concerns, relationships and their emotional weight, personal values, goals and progress, and positive patterns
+- **FR-061**: The memory layer must be updated incrementally after each new journal analysis — not rebuilt from scratch
+- **FR-062**: Observations in the memory layer must be written to remain meaningful weeks later (time-resistant, not ephemeral)
+- **FR-063**: The user must be able to view their memory layer (transparency requirement — final UX TBD; see §9)
+
+#### Morning insight
+
+- **FR-070**: Each morning, the app must deliver one personalised insight to the user — short, grounded in their own words and patterns, never generic
+- **FR-071**: The morning insight must feel like a mirror, not motivational advice — it reflects the user's own thoughts back at them in a way that encourages self-awareness
+- **FR-072**: The insight must only be delivered when there is something genuinely worth surfacing (cadence TBD; see §9)
+- **FR-073**: The insight delivery mechanism must use the existing `expo-notifications` infrastructure
+
 ---
 
 ## 6. Non-Functional Requirements
@@ -156,8 +180,8 @@ Voice transcription has become fast and affordable via APIs. AI-assisted labelin
 The following will **not** be built in the initial version:
 
 - **Social / sharing features** — no sharing thoughts with others, no community feed
-- **Paid subscription / billing** — no paywall, no in-app purchases
-- **Push notifications / reminders** — no scheduled nudges or streaks
+- **Paid subscription / billing** — no paywall in v1 beta; paid tier (Journal) is planned for v2 (see §5.6)
+- **Journal AI analysis & user profiling** — per-entry mood/energy/insight analysis, longitudinal memory layer, and morning insights are v2 paid-tier features (FR-050–073); basic journaling field (`body_extended`) is v1 (FR-030)
 - **Web app** — mobile only; no browser version
 - **Apple Sign-In / Google Sign-In** — email + password auth only
 - **Team or multi-user spaces** — single-user only
@@ -189,8 +213,12 @@ The following will **not** be built in the initial version:
 | Daily check-in (mood, intention, one per day, history in library) | FR-040–043 | **Not started** | `daily_checkins` table and RLS exist; no check-in screen or library history section |
 | Automated E2E tests | — | **Not started** | Framework choice still open (see §9) |
 | PR CI (lint, typecheck, unit tests) | — | **Not started** | Backlog |
+| Lists detection (AI-detected lists, item completion, continuation) | — | **Not started** | Planned — tasks #029–#036; fire-and-forget pipeline after topic assignment |
+| Journal per-entry analysis (mood, energy, insights, entities) | FR-050–052 | **Not started (v2 paid)** | AI analysis layer; basic journaling field (`body_extended`) is v1 FR-030 |
+| Memory layer / user profiling (longitudinal observations) | FR-060–063 | **Not started (v2 paid)** | Persistent user profile built from journal entries over time |
+| Morning insight (personalised daily nudge) | FR-070–073 | **Not started (v2 paid)** | Delivered via `expo-notifications`; requires memory layer |
 
-**Summary**: Core **capture → inbox → library by topic** is usable. Remaining v1 gaps for a PRD-complete beta: thought detail parity (extended journal, topic edit, reflection prompt), inbox search and topic filter (or an explicit product decision to meet FR-021/022 only via library patterns), daily check-in UI + library history, and quality gates (CI, E2E).
+**Summary**: Core **capture → inbox → library by topic** is usable. Remaining v1 gaps for a PRD-complete beta: thought detail parity (extended journal, topic edit, reflection prompt), inbox search and topic filter (or an explicit product decision to meet FR-021/022 only via library patterns), daily check-in UI + library history, lists detection, and quality gates (CI, E2E). Journal AI analysis and user profiling are v2 paid-tier scope.
 
 ---
 
@@ -204,6 +232,11 @@ The following will **not** be built in the initial version:
 | 2 | Which OpenRouter model(s) for topic assignment and (future) reflection prompts? | Josip | **Default in code**: `OPENROUTER_TOPIC_MODEL` or `OPENROUTER_TAGGING_MODEL`, fallback `google/gemini-2.0-flash-001`. Reflection-prompt endpoint not deployed yet. |
 | 3 | E2E test framework: Detox or Maestro? | Josip | Open |
 | 4 | Should voice audio files be stored in Supabase Storage, or only the transcript? | Josip | **Resolved: transcripts only — audio stored locally on device, never uploaded** |
+| 5 | How many journal entries does the memory layer need before producing meaningful insights? | Josip | Open — hypothesis: ~7–10 entries |
+| 6 | What is the right cadence for the morning insight — daily, or only when something genuinely worth surfacing? | Josip | Open |
+| 7 | Should the user be able to view and edit their memory layer (transparency), or is it intentionally opaque? | Josip | Open |
+| 8 | What model handles longitudinal journal analysis — same OpenRouter proxy, or a dedicated summarisation step? | Josip | Open |
+| 9 | Where does the memory layer live — Postgres (structured rows per observation) or a vector store for semantic retrieval? | Josip | Open |
 
 ---
 
@@ -216,3 +249,4 @@ The following will **not** be built in the initial version:
 | 2026-03-28 | Josip | Initial draft — onboarding complete |
 | 2026-03-28 | Josip | v1.1 — FR-013/016/021/023/033 and reliability: user-scoped **topics** (one per thought), reuse-vs-create behavior, pipeline notes; executive summary and open questions aligned |
 | 2026-03-30 | Josip | v1.2 — §8 implementation status vs repo; executive summary and §3.1 aligned with shipped vs pending; §9 open questions updated for documented model defaults; §6 platform note on CI |
+| 2026-03-31 | Josip | v1.3 — §5.6 Journal Analysis & User Profiling (paid, v2): FR-050–073 for per-entry analysis, memory layer, morning insight; §7 updated (paid tier planned v2, journal AI out of v1 scope); §8 lists + journal rows added; §9 open questions #5–9 for journal |
