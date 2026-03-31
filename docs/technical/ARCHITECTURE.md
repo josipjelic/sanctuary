@@ -80,7 +80,7 @@ The architecture prioritizes simplicity and fast iteration: there is no custom A
 | Mobile framework | Expo | SDK 54 (stable) | Cross-platform React Native with managed workflow; aligns with store Expo Go |
 | Language | TypeScript | 5.x | Type safety across app and shared types |
 | Navigation | Expo Router | 6.x | File-based routing, deep linking support |
-| Voice recording | expo-audio | SDK-bundled | Quick Capture microphone recording (`expo-av` removed; SDK 54 deprecates AV) |
+| Voice recording | expo-audio | SDK-bundled | Quick Capture microphone recording (`expo-av` removed; SDK 54 deprecates AV). `patches/expo-audio@1.1.1.patch` adjusts iOS permission checks and drops `AVEncoderBitRateKey` for AAC so `prepareToRecord` does not hit `AudioCodecInitialize` failures when quality is also set. |
 | Local notifications | expo-notifications | SDK-bundled | Reminder scheduling via `scheduleNotificationAsync`; handles APNs/FCM registration (ADR-004) |
 | Backend-as-a-service | Supabase | Latest | Auth, PostgreSQL, storage, edge functions — no custom server needed |
 | Database | PostgreSQL | 15 (managed by Supabase) | Relational, RLS support, well-understood |

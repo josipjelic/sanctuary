@@ -31,3 +31,29 @@ diff --git a/ios/AudioModule.swift b/ios/AudioModule.swift
      }
      #endif
    }
+diff --git a/ios/AudioUtils.swift b/ios/AudioUtils.swift
+--- a/ios/AudioUtils.swift
++++ b/ios/AudioUtils.swift
+@@ -1,3 +1,4 @@
++import AudioToolbox
+ import AVFoundation
+ import ExpoModulesCore
+ 
+@@ -152,8 +153,15 @@
+     if let linearPCMIsFloat = options.linearPCMIsFloat {
+       settings[AVLinearPCMIsFloatKey] = linearPCMIsFloat
+     }
+-    if let formatKey = options.outputFormat {
+-      settings[AVFormatIDKey] = getFormatIDFromString(typeString: formatKey)
++    if let formatKey = options.outputFormat,
++      let formatID = getFormatIDFromString(typeString: formatKey)
++    {
++      settings[AVFormatIDKey] = formatID
++      // AAC: AVEncoderBitRateKey + AVEncoderAudioQualityKey together often breaks
++      // AudioCodecInitialize / prepareToRecord (notably on Simulator).
++      if formatID == kAudioFormatMPEG4AAC || formatID == kAudioFormatMPEG4AAC_HE {
++        settings.removeValue(forKey: AVEncoderBitRateKey)
++      }
+     }
+ 
+     return settings
