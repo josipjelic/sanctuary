@@ -14,9 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "runtimeVersion": {
-        "policy": "appVersion"
-      },
+      "runtimeVersion": "1.0.1",
       "bundleIdentifier": "com.context.hr.sanctuary"
     },
     "android": {
