@@ -2,12 +2,7 @@
  * Shared topic assignment: OpenRouter + user_topics / thought_topics + thoughts.topics sync.
  */
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import {
-  logAiError,
-  logAiInfo,
-  truncateForLog,
-  truncateJsonForLog,
-} from "./ai-log.ts";
+import { logAiError, logAiInfo, truncateForLog } from "./ai-log.ts";
 
 /** Reuse scores above this threshold to pick an existing user topic (model-reported 0–1). */
 export const TOPIC_MATCH_THRESHOLD = 0.2;
@@ -119,9 +114,10 @@ async function callOpenRouter(
       response_summary: {
         body_preview: truncateForLog(errText, 400),
       },
-      openrouter_response_json: truncateJsonForLog(
-        JSON.stringify({ http_status: orRes.status, body: errText }),
-      ),
+      openrouter_response: {
+        http_status: orRes.status,
+        body: errText,
+      },
     });
     throw new Error("OpenRouter request failed");
   }
@@ -142,7 +138,7 @@ async function callOpenRouter(
       content_chars: content.length,
       content_preview: truncateForLog(content),
     },
-    openrouter_response_json: truncateJsonForLog(JSON.stringify(orData)),
+    openrouter_response: orData,
   });
 
   return content;
@@ -237,9 +233,7 @@ Rules:
       thought_text_preview: truncateForLog(text),
       prompt_chars: prompt.length,
     },
-    openrouter_request_json: truncateJsonForLog(
-      JSON.stringify(topicOpenRouterBody),
-    ),
+    openrouter_request: topicOpenRouterBody,
   });
 
   let rawContent: string;
@@ -277,9 +271,9 @@ Rules:
         message: err instanceof Error ? err.message : "Topic JSON parse failed",
         kind: "topic_json_parse",
       },
-      openrouter_response_json: truncateJsonForLog(
-        JSON.stringify({ assistant_message_text: rawContent }),
-      ),
+      openrouter_response: {
+        assistant_message_text: rawContent,
+      },
       response_summary: {
         raw_preview: truncateForLog(rawContent),
         raw_chars: rawContent.length,
