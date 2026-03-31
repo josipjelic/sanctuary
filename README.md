@@ -66,6 +66,12 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 OPENROUTER_API_KEY=your-openrouter-key
 ```
 
+**Hosted Supabase (production / real project):** The app reads only the two `EXPO_PUBLIC_*` variables above. `supabase/config.toml` applies to **local** `supabase start` — it does not change where the Expo app connects.
+
+- **Manual:** Dashboard → **Project Settings** → **API** → copy **Project URL** and **anon public** key into `.env`.
+- **CLI sync:** After `npx supabase@2.84.4 login` and `npx supabase@2.84.4 link --project-ref <ref>`, run **`pnpm run env:supabase`** to rewrite those two lines from the linked hosted project.
+- **EAS builds:** Define the same `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` in your [Expo project environment variables](https://docs.expo.dev/eas/environment-variables/) for each build profile; otherwise release binaries may ship without a valid API target.
+
 > `OPENROUTER_API_KEY` is used only in Supabase Edge Functions — never expose it client-side.
 
 ### Supabase auth redirect URLs (email confirm & password reset)
