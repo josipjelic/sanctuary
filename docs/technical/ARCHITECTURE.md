@@ -308,6 +308,8 @@ Auth is handled entirely by Supabase Auth (email + password). There is no custom
 **Required environment variables** (see `.env.example`):
 - `EXPO_PUBLIC_SUPABASE_URL` — Supabase project URL (client-side, safe to expose)
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key (client-side, safe to expose; RLS enforces access control)
+
+The app resolves these from `expo-constants` `extra` (`supabaseUrl`, `supabaseAnonKey`), which `app.config.js` fills by reading `.env` first and otherwise falling back to `process.env`. That matches local expectations when a stale `EXPO_PUBLIC_*` value is already set in the shell, because Expo’s default dotenv loader does not override existing environment variables.
 - `OPENROUTER_API_KEY` — OpenRouter API key (server-side only; stored as a Supabase project secret, never in the app bundle)
 
 ### Observability and AI I/O logging

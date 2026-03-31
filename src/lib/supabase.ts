@@ -1,5 +1,22 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
+import Constants from "expo-constants";
+
+type SupabaseExtra = {
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
+};
+
+function supabaseFromAppConfig(): {
+  url: string | undefined;
+  anonKey: string | undefined;
+} {
+  const extra = Constants.expoConfig?.extra as SupabaseExtra | undefined;
+  return {
+    url: extra?.supabaseUrl,
+    anonKey: extra?.supabaseAnonKey,
+  };
+}
 
 /** Trim and strip a single pair of surrounding quotes (common .env copy-paste mistakes). */
 function normalizeExpoEnv(value: string | undefined): string {
@@ -14,9 +31,12 @@ function normalizeExpoEnv(value: string | undefined): string {
   return v;
 }
 
-const supabaseUrl = normalizeExpoEnv(process.env.EXPO_PUBLIC_SUPABASE_URL);
+const fromConfig = supabaseFromAppConfig();
+const supabaseUrl = normalizeExpoEnv(
+  fromConfig.url ?? process.env.EXPO_PUBLIC_SUPABASE_URL,
+);
 const supabaseAnonKey = normalizeExpoEnv(
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+  fromConfig.anonKey ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
 );
 
 if (!supabaseUrl || !supabaseAnonKey) {
