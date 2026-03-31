@@ -86,6 +86,8 @@ logger.debug("Supabase client URL", {
   fromAppConfigExtra: Boolean(fromConfig.url),
 });
 
+export { supabaseUrl, supabaseAnonKey };
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   global: { fetch: supabaseFetch },
   auth: {

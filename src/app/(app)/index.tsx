@@ -13,7 +13,7 @@ import {
   labelForLeadTime,
 } from "@/lib/notifications";
 import { getReminderTimeContext } from "@/lib/reminderTimeContext";
-import { supabase } from "@/lib/supabase";
+import { supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import {
   TRANSCRIPTION_LANGUAGE_OPTIONS,
@@ -376,7 +376,8 @@ export default function QuickCaptureScreen() {
     triggerSuccessAnimation();
     setRecordingState("idle");
 
-    sendAudioForTranscription(uri, inserted.id).catch(() => {
+    sendAudioForTranscription(uri, inserted.id).catch((err) => {
+      logger.error("sendAudioForTranscription failed", err);
       supabase
         .from("thoughts")
         .update({ transcription_status: "failed" })
@@ -391,6 +392,7 @@ export default function QuickCaptureScreen() {
   ): Promise<void> {
     const filename = uri.split("/").pop()?.split("?")[0] ?? "recording.m4a";
     const mimeType = Platform.OS === "web" ? "audio/webm" : "audio/mp4";
+
     const formData = new FormData();
     if (Platform.OS === "web") {
       const res = await fetch(uri);
@@ -400,21 +402,51 @@ export default function QuickCaptureScreen() {
         new File([blob], filename, { type: blob.type || mimeType }),
       );
     } else {
-      formData.append("audio", {
-        uri,
-        name: filename,
-        type: mimeType,
-      } as unknown as Blob);
+      // XHR (used below) handles the RN { uri, name, type } pattern natively
+      formData.append("audio", { uri, name: filename, type: mimeType } as unknown as Blob);
     }
     formData.append("thought_id", thoughtId);
     formData.append("transcription_language", transcriptionLanguageCode);
     const reminderCtx = getReminderTimeContext();
     formData.append("iana_timezone", reminderCtx.ianaTimezone);
     formData.append("current_local_iso", reminderCtx.currentLocalIso);
-    const { error } = await supabase.functions.invoke("transcribe", {
-      body: formData,
-    });
-    if (error) throw error;
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    const endpoint = `${supabaseUrl}/functions/v1/transcribe`;
+
+    if (Platform.OS === "web") {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken ?? supabaseAnonKey}`,
+          apikey: supabaseAnonKey,
+        },
+        body: formData,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Transcribe function returned ${res.status}: ${text}`);
+      }
+    } else {
+      // expo/fetch doesn't support { uri, name, type } FormData parts on native.
+      // XHR handles them natively via the RN FormData bridge.
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", endpoint);
+        xhr.setRequestHeader("Authorization", `Bearer ${accessToken ?? supabaseAnonKey}`);
+        xhr.setRequestHeader("apikey", supabaseAnonKey);
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error(`Transcribe function returned ${xhr.status}: ${xhr.responseText}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Network error sending audio"));
+        xhr.send(formData);
+      });
+    }
   }
 
   const isRecording = recordingState === "recording";
