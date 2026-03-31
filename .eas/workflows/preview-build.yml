@@ -19,19 +19,9 @@ jobs:
     type: slack
     params:
       webhook_url: ${{ env.SLACK_WEBHOOK_URL }}
-      payload:
-        blocks:
-          - type: header
-            text:
-              type: plain_text
-              text: "New Preview Update Ready"
-          - type: section
-            text:
-              type: mrkdwn
-              text: "${{ github.event.head_commit.message }}"
-          - type: section
-            fields:
-              - type: mrkdwn
-                text: "*Branch:*\n${{ github.ref_name }}"
-              - type: mrkdwn
-                text: "*Update:*\nexp://u.expo.dev/cd70b552-8a0a-4d7e-9587-e43e30776839/group/${{ needs.publish_update.outputs.first_update_group_id }}"
+      message: |
+        *New Preview Update Ready*
+        ${{ github.event.head_commit.message }}
+
+        Branch: `${{ github.ref_name }}`
+        exp://u.expo.dev/cd70b552-8a0a-4d7e-9587-e43e30776839/group/${{ needs.publish_update.outputs.first_update_group_id }}
