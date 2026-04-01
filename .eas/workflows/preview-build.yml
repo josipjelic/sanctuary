@@ -11,7 +11,7 @@ jobs:
     type: update
     params:
       environment: preview
-      channel: preview
+      branch: preview
       message: ${{ github.event.head_commit.message }}
 
   notify_slack:
