@@ -9,10 +9,11 @@ jobs:
   publish_update:
     name: Publish Preview Update
     type: update
+    environment: preview
     params:
-      environment: preview
-      branch: preview
+      channel: preview
       message: ${{ github.event.head_commit.message }}
+      upload_sentry_sourcemaps: false
 
   notify_slack:
     name: Notify Slack
