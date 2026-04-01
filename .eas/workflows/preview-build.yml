@@ -36,12 +36,14 @@ jobs:
                 text: "*Branch*\n`${{ github.ref_name }}`"
               - type: mrkdwn
                 text: "*Channel*\n`preview`"
+              - type: mrkdwn
+                text: "*SHA*\n`${{ substring(github.sha, 0, 7) }}`"
           - type: section
             text:
               type: mrkdwn
-              # slug=sanctuary targets the dev client (not Expo Go); default slug=exp breaks with our runtimeVersion + native modules.
-              text: '<https://qr.expo.dev/eas-update?projectId=cd70b552-8a0a-4d7e-9587-e43e30776839&groupId=${{ needs.publish_update.outputs.first_update_group_id }}&slug=sanctuary|Open preview (QR)>\n<https://expo.dev/accounts/context.hr/projects/sanctuary/updates|View updates on expo.dev>\n*Dev build required* (`eas build --profile development`, install on device). *Expo Go* will open but stay on the loading screen — runtime / native code does not match this OTA.'
+              # Tap-to-open on phone (Slack desktop often cannot handle exp://).
+              text: '<exp://u.expo.dev/cd70b552-8a0a-4d7e-9587-e43e30776839/group/${{ needs.publish_update.outputs.first_update_group_id }}|Open preview>\n`exp://u.expo.dev/cd70b552-8a0a-4d7e-9587-e43e30776839/group/${{ needs.publish_update.outputs.first_update_group_id }}`\n<https://expo.dev/accounts/context.hr/projects/sanctuary/updates|expo.dev — Updates> (HTTPS if exp:// is not clickable)'
           - type: context
             elements:
               - type: mrkdwn
-                text: Internal preview profile installs can skip the QR; open the installed app and it pulls channel preview on launch.
+                text: If one group link works and another hangs, compare Runtime version and platforms on expo.dev for both groups — or a bad JS bundle on that commit. Desktop Slack usually needs the raw exp URL copied to the device.
