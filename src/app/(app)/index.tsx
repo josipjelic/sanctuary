@@ -744,13 +744,37 @@ export default function QuickCaptureScreen() {
             style={styles.settingsModalSheet}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text style={styles.settingsModalTitle}>Settings</Text>
+            <View style={styles.settingsModalHeader}>
+              <Text style={styles.settingsModalTitle}>Settings</Text>
+              <TouchableOpacity
+                onPress={() => void handleSignOut()}
+                disabled={signingOut}
+                style={[
+                  styles.signOutButtonSmall,
+                  signingOut && styles.signOutButtonDisabled,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Sign out"
+                accessibilityState={{ disabled: signingOut }}
+                testID="settings-sign-out"
+                activeOpacity={0.9}
+              >
+                {signingOut ? (
+                  <ActivityIndicator color={colors.onError} size="small" />
+                ) : (
+                  <Text style={styles.signOutLabelSmall}>Sign out</Text>
+                )}
+              </TouchableOpacity>
+            </View>
             <Pressable
               style={({ pressed }) => [
                 styles.settingsLanguageRow,
                 pressed && styles.settingsLanguageRowPressed,
               ]}
-              onPress={() => setLanguagePickerVisible(true)}
+              onPress={() => {
+                setSettingsVisible(false);
+                setLanguagePickerVisible(true);
+              }}
               accessibilityRole="button"
               accessibilityLabel="Transcription language"
               testID="settings-transcription-language"
@@ -791,7 +815,10 @@ export default function QuickCaptureScreen() {
                 styles.settingsLanguageRow,
                 pressed && styles.settingsLanguageRowPressed,
               ]}
-              onPress={() => setLeadTimePickerVisible(true)}
+              onPress={() => {
+                setSettingsVisible(false);
+                setLeadTimePickerVisible(true);
+              }}
               accessibilityRole="button"
               accessibilityLabel={`Reminder lead time: ${labelForLeadTime(leadTime)}. Tap to change.`}
               accessibilityHint="Opens options for how far in advance you receive reminders"
@@ -863,38 +890,12 @@ export default function QuickCaptureScreen() {
               />
             )}
 
-            <Text style={styles.settingsModalHint}>
-              Sign out on this device. Your captures stay in your account until
-              you delete them.
-            </Text>
-            <View style={styles.settingsModalActions}>
-              <Button
-                label="Cancel"
-                variant="secondary"
-                onPress={() => setSettingsVisible(false)}
-                disabled={signingOut}
-                testID="settings-cancel"
-              />
-              <TouchableOpacity
-                onPress={() => void handleSignOut()}
-                disabled={signingOut}
-                style={[
-                  styles.signOutButton,
-                  signingOut && styles.signOutButtonDisabled,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Sign out"
-                accessibilityState={{ disabled: signingOut }}
-                testID="settings-sign-out"
-                activeOpacity={0.9}
-              >
-                {signingOut ? (
-                  <ActivityIndicator color={colors.onError} />
-                ) : (
-                  <Text style={styles.signOutLabel}>Sign out</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+            <Button
+              label="Apply"
+              variant="primary"
+              onPress={() => setSettingsVisible(false)}
+              testID="settings-apply"
+            />
           </Pressable>
         </Pressable>
       </Modal>
@@ -903,11 +904,17 @@ export default function QuickCaptureScreen() {
         visible={languagePickerVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setLanguagePickerVisible(false)}
+        onRequestClose={() => {
+          setLanguagePickerVisible(false);
+          setSettingsVisible(true);
+        }}
       >
         <Pressable
           style={styles.settingsModalBackdrop}
-          onPress={() => setLanguagePickerVisible(false)}
+          onPress={() => {
+            setLanguagePickerVisible(false);
+            setSettingsVisible(true);
+          }}
           accessibilityLabel="Close language list"
         >
           <Pressable
@@ -936,6 +943,7 @@ export default function QuickCaptureScreen() {
                       setTranscriptionLanguageCode(opt.code);
                       void setTranscriptionLanguage(opt.code);
                       setLanguagePickerVisible(false);
+                      setSettingsVisible(true);
                     }}
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
@@ -964,7 +972,10 @@ export default function QuickCaptureScreen() {
             <Button
               label="Done"
               variant="secondary"
-              onPress={() => setLanguagePickerVisible(false)}
+              onPress={() => {
+                setLanguagePickerVisible(false);
+                setSettingsVisible(true);
+              }}
               testID="transcription-lang-done"
             />
           </Pressable>
@@ -976,11 +987,17 @@ export default function QuickCaptureScreen() {
         visible={leadTimePickerVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setLeadTimePickerVisible(false)}
+        onRequestClose={() => {
+          setLeadTimePickerVisible(false);
+          setSettingsVisible(true);
+        }}
       >
         <Pressable
           style={styles.settingsModalBackdrop}
-          onPress={() => setLeadTimePickerVisible(false)}
+          onPress={() => {
+            setLeadTimePickerVisible(false);
+            setSettingsVisible(true);
+          }}
           accessibilityLabel="Close lead time options"
         >
           <Pressable
@@ -1006,6 +1023,7 @@ export default function QuickCaptureScreen() {
                     onPress={() => {
                       void saveLeadTime(opt.value);
                       setLeadTimePickerVisible(false);
+                      setSettingsVisible(true);
                     }}
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
@@ -1042,7 +1060,10 @@ export default function QuickCaptureScreen() {
             <Button
               label="Done"
               variant="secondary"
-              onPress={() => setLeadTimePickerVisible(false)}
+              onPress={() => {
+                setLeadTimePickerVisible(false);
+                setSettingsVisible(true);
+              }}
               testID="lead-time-done"
             />
           </Pressable>
@@ -1143,9 +1164,28 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.s12,
     gap: spacing.s4,
   },
+  settingsModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   settingsModalTitle: {
     ...typography.headlineMd,
     color: colors.onSurface,
+  },
+  signOutButtonSmall: {
+    paddingVertical: 6,
+    paddingHorizontal: spacing.s4,
+    borderRadius: radius.full,
+    backgroundColor: colors.error,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  signOutLabelSmall: {
+    ...typography.bodyLg,
+    fontSize: 13,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: colors.onError,
   },
   settingsSectionDivider: {
     height: 1,
@@ -1237,11 +1277,6 @@ const styles = StyleSheet.create({
     fontFamily: "PlusJakartaSans_600SemiBold",
     color: colors.primary,
   },
-  settingsModalHint: {
-    ...typography.bodyLg,
-    color: colors.secondary,
-    marginBottom: spacing.s2,
-  },
   settingsModalActions: {
     flexDirection: "row",
     justifyContent: "flex-end",
@@ -1249,22 +1284,8 @@ const styles = StyleSheet.create({
     gap: spacing.s4,
     marginTop: spacing.s6,
   },
-  signOutButton: {
-    paddingVertical: spacing.s4,
-    paddingHorizontal: spacing.s8,
-    borderRadius: radius.full,
-    backgroundColor: colors.error,
-    minWidth: 120,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   signOutButtonDisabled: {
     opacity: 0.4,
-  },
-  signOutLabel: {
-    ...typography.bodyLg,
-    fontFamily: "PlusJakartaSans_600SemiBold",
-    color: colors.onError,
   },
   avatarWrap: {
     width: 40,
