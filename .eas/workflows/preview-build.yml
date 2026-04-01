@@ -39,9 +39,9 @@ jobs:
           - type: section
             text:
               type: mrkdwn
-              # HTTPS qr.expo.dev link works in Slack; exp:// is often not clickable in desktop/web Slack.
-              text: '<https://qr.expo.dev/eas-update?projectId=cd70b552-8a0a-4d7e-9587-e43e30776839&groupId=${{ needs.publish_update.outputs.first_update_group_id }}|Open preview (QR)>\nOn a phone with Expo Go you can paste:\n`exp://u.expo.dev/cd70b552-8a0a-4d7e-9587-e43e30776839/group/${{ needs.publish_update.outputs.first_update_group_id }}`'
+              # slug=sanctuary targets the dev client (not Expo Go); default slug=exp breaks with our runtimeVersion + native modules.
+              text: '<https://qr.expo.dev/eas-update?projectId=cd70b552-8a0a-4d7e-9587-e43e30776839&groupId=${{ needs.publish_update.outputs.first_update_group_id }}&slug=sanctuary|Open preview (QR)>\n<https://expo.dev/accounts/context.hr/projects/sanctuary/updates|View updates on expo.dev>\n*Dev build required* (`eas build --profile development`, install on device). *Expo Go* will open but stay on the loading screen — runtime / native code does not match this OTA.'
           - type: context
             elements:
               - type: mrkdwn
-                text: Scan the QR from the preview page, or paste the exp link on device. Slack often cannot open exp:// directly.
+                text: Internal preview profile installs can skip the QR; open the installed app and it pulls channel preview on launch.

@@ -72,6 +72,8 @@ OPENROUTER_API_KEY=your-openrouter-key
 - **CLI sync:** After `npx supabase@2.84.4 login` and `npx supabase@2.84.4 link --project-ref <ref>`, run **`pnpm run env:supabase`** to rewrite those two lines from the linked hosted project.
 - **EAS builds:** Define the same `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` in your [Expo project environment variables](https://docs.expo.dev/eas/environment-variables/) for each build profile; otherwise release binaries may ship without a valid API target.
 
+**EAS Update previews (Slack / CI):** Pushes to `main` publish to the `preview` channel (see `.eas/workflows/preview-build.yml`). Those bundles are **not** meant for **Expo Go**: this app sets `runtimeVersion` and uses native modules, so Expo Go often hangs on the splash screen after opening the link. Use a [development build](https://docs.expo.dev/develop/development-builds/introduction/) (`eas build --profile development`) and the Slack QR (`slug=sanctuary`), or install an internal build with the `preview` profile and open the app normally so it pulls the `preview` channel.
+
 > `OPENROUTER_API_KEY` is used only in Supabase Edge Functions — never expose it client-side.
 
 ### Supabase auth redirect URLs (email confirm & password reset)
