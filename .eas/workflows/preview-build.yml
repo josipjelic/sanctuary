@@ -39,8 +39,9 @@ jobs:
           - type: section
             text:
               type: mrkdwn
-              text: "<exp://u.expo.dev/cd70b552-8a0a-4d7e-9587-e43e30776839/group/${{ needs.publish_update.outputs.first_update_group_id }}|Open in Expo Go>\n`exp://u.expo.dev/cd70b552-8a0a-4d7e-9587-e43e30776839/group/${{ needs.publish_update.outputs.first_update_group_id }}`"
+              # HTTPS qr.expo.dev link works in Slack; exp:// is often not clickable in desktop/web Slack.
+              text: '<https://qr.expo.dev/eas-update?projectId=cd70b552-8a0a-4d7e-9587-e43e30776839&groupId=${{ needs.publish_update.outputs.first_update_group_id }}|Open preview (QR)>\nOn a phone with Expo Go you can paste:\n`exp://u.expo.dev/cd70b552-8a0a-4d7e-9587-e43e30776839/group/${{ needs.publish_update.outputs.first_update_group_id }}`'
           - type: context
             elements:
               - type: mrkdwn
-                text: Beta testers can open the link on a device with Expo Go or your dev client.
+                text: Scan the QR from the preview page, or paste the exp link on device. Slack often cannot open exp:// directly.
