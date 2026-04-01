@@ -1,6 +1,7 @@
 import "react-native-url-polyfill/auto";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { useAuth } from "@/hooks/useAuth";
+import { prefetchNotificationHandler } from "@/lib/notifications";
 import { colors } from "@/lib/theme";
 import {
   Manrope_400Regular,
@@ -21,6 +22,10 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  useEffect(() => {
+    prefetchNotificationHandler();
+  }, []);
+
   const [fontsLoaded, error] = useFonts({
     Manrope_400Regular,
     Manrope_600SemiBold,

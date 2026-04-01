@@ -1,18 +1,46 @@
-import * as Notifications from "expo-notifications";
+import { isRunningInExpoGo } from "expo";
+import { Platform } from "react-native";
 
-// Show notifications when the app is in the foreground (banner + sound).
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+/** Remote push + auto token registration are unavailable in Expo Go on Android (SDK 53+). */
+const isExpoGoAndroid = isRunningInExpoGo() && Platform.OS === "android";
+
+type NotificationsModule = typeof import("expo-notifications");
+
+let notificationsLoad: Promise<NotificationsModule | null> | null = null;
+
+/**
+ * Loads expo-notifications and registers the foreground handler. Skipped on
+ * Expo Go Android so the module (and its side effects) are never imported there.
+ */
+function loadNotificationsModule(): Promise<NotificationsModule | null> {
+  if (isExpoGoAndroid) return Promise.resolve(null);
+  if (!notificationsLoad) {
+    notificationsLoad = import("expo-notifications").then((Notifications) => {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        }),
+      });
+      return Notifications;
+    });
+  }
+  return notificationsLoad;
+}
+
+/** Register foreground notification behavior; call once from root layout (not at module scope — Jest cannot load dynamic import there). */
+export function prefetchNotificationHandler(): void {
+  if (!isExpoGoAndroid) void loadNotificationsModule();
+}
 
 /** Request notification permission from the OS. Returns true when granted. */
 export async function requestNotificationPermission(): Promise<boolean> {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) return false;
+
   const { status: existing } = await Notifications.getPermissionsAsync();
   if (existing === "granted") return true;
 
@@ -29,6 +57,12 @@ export async function scheduleReminder(params: {
   body: string;
   fireDate: Date;
 }): Promise<string> {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    throw new Error(
+      "Local notifications are not available in Expo Go on Android. Use a development build.",
+    );
+  }
   const id = await Notifications.scheduleNotificationAsync({
     content: {
       title: params.title,
@@ -44,6 +78,8 @@ export async function scheduleReminder(params: {
 
 /** Cancel a previously scheduled notification by its identifier. */
 export async function cancelReminder(notificationId: string): Promise<void> {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) return;
   await Notifications.cancelScheduledNotificationAsync(notificationId);
 }
 
