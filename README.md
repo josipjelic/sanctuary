@@ -130,6 +130,8 @@ Repository secrets (Settings → Secrets and variables → Actions):
 | `SUPABASE_PROJECT_ID` | Project **Settings → General → Reference ID** (same as `https://supabase.com/dashboard/project/<ref>`) |
 | `SUPABASE_DB_PASSWORD` | Project **Settings → Database → Database password** (the Postgres password) |
 
+**All three** must be present for a green run — the workflow stops with a clear error if any are missing (`gh secret list` to verify names only).
+
 After **`npx supabase@2.84.4 login`** (or with **`SUPABASE_ACCESS_TOKEN`** exported), run **`pnpm run supabase:ci-hints`** to print your **project Reference ID** from `supabase projects list` and copy-paste **`gh secret set`** lines for GitHub. The database password is not exposed by the CLI (set it from the Supabase dashboard if needed).
 
 With [GitHub CLI](https://cli.github.com/) authenticated (`gh auth login`), run from this repo (or pass `-R owner/repo`):
