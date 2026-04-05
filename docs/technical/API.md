@@ -386,3 +386,4 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 | 2026-03-31 | Reminder `scheduled_at`: normalize UTC-stamped local wall times using `iana_timezone` before insert (`_shared/reminder-scheduled-at-normalize.ts`) |
 | 2026-03-31 | Added planned `POST /detect-list` endpoint spec; lists subsystem tasks #029–#036 |
 | 2026-04-05 | Reminder extraction: `extracted_text` is prompted as a concise title (`_shared/detect-reminders.ts`) |
+| 2026-04-05 | CI: `.github/workflows/deploy-supabase.yml` pushes migrations and deploys edge functions on `main` when `supabase/**` changes |

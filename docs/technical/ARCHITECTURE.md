@@ -12,7 +12,7 @@ Read by: All agents. Always read before making implementation decisions.
 
 # System Architecture
 
-> Last updated: 2026-03-31 (Lists subsystem planned: tasks #029–#036; Reminders subsystem: ADR-004; AI I/O observability: ADR-003)
+> Last updated: 2026-04-05 (Supabase deploy GitHub Action; Lists subsystem planned: tasks #029–#036; Reminders subsystem: ADR-004; AI I/O observability: ADR-003)
 > Version: 0.1.0
 
 ---
@@ -307,6 +307,7 @@ Auth is handled entirely by Supabase Auth (email + password). There is no custom
 | Edge functions | `supabase functions serve` (local) | `supabase functions deploy <name>` |
 | Secrets | `.env.local` for edge function dev; `supabase secrets set` for local Docker stack | `supabase secrets set` against production project |
 | Config file | `supabase/config.toml` controls all local services | Cloud project settings managed via Supabase dashboard |
+| CI deploy | — | [`.github/workflows/deploy-supabase.yml`](../../.github/workflows/deploy-supabase.yml): on `push` to `main` when `supabase/**` changes — `supabase link`, `db push`, `functions deploy`. Repository secrets: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` (see README). |
 
 **Required environment variables** (see `.env.example`):
 - `EXPO_PUBLIC_SUPABASE_URL` — Supabase project URL (client-side, safe to expose)

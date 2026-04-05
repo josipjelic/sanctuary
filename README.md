@@ -118,6 +118,28 @@ Scan the QR code with Expo Go to run on your physical device.
 | `pnpm run typecheck` | TypeScript type check |
 | `pnpm run db:push` | Push `supabase/migrations/` to the linked remote database (requires [Supabase CLI](https://supabase.com/docs/guides/cli) `login` + `link`) |
 
+### CI: deploy Supabase on push
+
+Pushes to `main` that change files under `supabase/` run [`.github/workflows/deploy-supabase.yml`](.github/workflows/deploy-supabase.yml): link the project, `supabase db push`, then `supabase functions deploy`. Other commits skip the job. Use **Actions → Deploy Supabase → Run workflow** to deploy manually.
+
+Repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Source |
+|--------|--------|
+| `SUPABASE_ACCESS_TOKEN` | [Supabase Account → Access Tokens](https://supabase.com/dashboard/account/tokens) |
+| `SUPABASE_PROJECT_ID` | Project **Settings → General → Reference ID** (same as `https://supabase.com/dashboard/project/<ref>`) |
+| `SUPABASE_DB_PASSWORD` | Project **Settings → Database → Database password** (the Postgres password) |
+
+With [GitHub CLI](https://cli.github.com/) authenticated (`gh auth login`), run from this repo (or pass `-R owner/repo`):
+
+```bash
+gh secret set SUPABASE_ACCESS_TOKEN
+gh secret set SUPABASE_PROJECT_ID
+gh secret set SUPABASE_DB_PASSWORD
+```
+
+Each command prompts for the value. Non-interactive: `printf '%s' 'your-token' | gh secret set SUPABASE_ACCESS_TOKEN` (avoid shell history for real secrets).
+
 ---
 
 ## Documentation
