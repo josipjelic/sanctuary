@@ -11,7 +11,7 @@ Read by: All agents. Always read before writing queries or designing schema chan
 > **Engine**: PostgreSQL 15 (managed by Supabase)
 > **Access layer**: `@supabase/supabase-js` client (direct table queries with RLS)
 > **Connection**: Via `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` (client) and service role key (edge functions only)
-> **Last updated**: 2026-03-30 (migration `004_reminders`)
+> **Last updated**: 2026-04-05 (migration `004_reminders`; reminder title semantics)
 
 ---
 
@@ -163,7 +163,7 @@ auth.users (managed by Supabase Auth)
 | id | uuid | PK, NOT NULL, DEFAULT gen_random_uuid() | Primary key |
 | user_id | uuid | NOT NULL, FK -> auth.users.id ON DELETE CASCADE | Owner |
 | thought_id | uuid | NOT NULL, FK -> thoughts.id ON DELETE CASCADE | The thought this reminder was extracted from |
-| extracted_text | text | NOT NULL | Raw text snippet the AI identified as a time reference |
+| extracted_text | text | NOT NULL | Short AI-generated display title for the reminder (not a verbatim quote of the thought) |
 | scheduled_at | timestamptz | NOT NULL | Resolved future datetime for the notification fire time |
 | lead_time | integer | NULL | Minutes before `scheduled_at` to fire (NULL = use `user_preferences` default) |
 | status | text | NOT NULL, DEFAULT 'inactive' | Lifecycle: 'inactive' (awaiting approval), 'active' (approved, scheduled), 'dismissed', 'sent' |

@@ -152,7 +152,7 @@ Full spec: `.assets/reminders-ux-spec.md`. Summary of new and modified surfaces:
 
 | Component | File | Description |
 |-----------|------|-------------|
-| `ReminderApprovalSheet` | `ReminderApprovalSheet.tsx` | Bottom sheet `Modal` (`radius.xl` top corners, `surfaceContainerLowest` background, `maxHeight: "85%"`). Contains scrollable list of pending reminders; each item shows extracted snippet (italic `bodyLg` on `surfaceContainerHigh` tinted block), editable date+time row (taps native DateTimePicker), and Approve / Dismiss `Button` pair. Empty state: checkmark icon + "All caught up" heading + Close button. |
+| `ReminderApprovalSheet` | `ReminderApprovalSheet.tsx` | Bottom sheet `Modal` (`radius.xl` top corners, `surfaceContainerLowest` background, `maxHeight: "85%"`). Contains scrollable list of pending reminders; each item shows extracted title (italic `bodyLg` on `surfaceContainerHigh` tinted block), editable date+time row (taps native DateTimePicker), and Approve / Dismiss `Button` pair. Empty state: checkmark icon + "All caught up" heading + Close button. |
 | Pending-reminders pill | Inline in `inbox/index.tsx` | `Pressable` pill above `FlatList`. Background `colors.primaryContainer`, text `colors.onPrimaryContainer`, `radius.full`. Hidden when count = 0. Opens `ReminderApprovalSheet`. |
 
 **Settings additions** (in existing Settings `Modal` in `src/app/(app)/index.tsx`):
@@ -363,7 +363,7 @@ Sanctuary detects future time references in captured thoughts ("call mum next Mo
 
 | Component | Location | Owner | Description |
 |-----------|----------|-------|-------------|
-| `detect-reminders` (shared module) | `supabase/functions/_shared/detect-reminders.ts` | @backend-developer | AI extraction: OpenRouter returns `{ "reminders": [ { "extracted_text", "scheduled_at" } ] }`. Inserts one or more rows with `status: 'inactive'`. |
+| `detect-reminders` (shared module) | `supabase/functions/_shared/detect-reminders.ts` | @backend-developer | AI extraction: OpenRouter returns `{ "reminders": [ { "extracted_text" (short title), "scheduled_at" } ] }`. Inserts one or more rows with `status: 'inactive'`. |
 | `detect-reminders` (edge function) | `supabase/functions/detect-reminders/index.ts` | @backend-developer | Standalone `POST` for on-demand detection (optional `current_iso_timestamp` for relative phrases). Same shared module as the pipeline. |
 | `reminders` table | `supabase/migrations/004_reminders.sql` | @database-expert | `extracted_text`, `scheduled_at`, optional `lead_time` (integer minutes — reserved), `status`, `notification_id`. RLS: `user_id = auth.uid()`. |
 | `user_preferences` table | `supabase/migrations/004_reminders.sql` | @database-expert | Key-value (`key` + JSONB `value`). v1 keys: `notification_lead_time` (string: `at_time` \| `15min` \| `30min` \| `1hour` \| `morning`) and `morning_notification_time` (`"HH:MM"`, default `07:30`). |
@@ -409,7 +409,7 @@ The shared module prompts OpenRouter for **only** valid JSON of this shape (code
 ```
 
 - `reminders`: array; empty when no future time references.
-- Each item must have non-empty `extracted_text` and a parseable ISO 8601 `scheduled_at`; invalid items are skipped.
+- Each item must have non-empty `extracted_text` (concise reminder title) and a parseable ISO 8601 `scheduled_at`; invalid items are skipped.
 - The prompt includes the caller-supplied **local “now”** (ISO with offset) and optional **IANA timezone** (`Europe/Zagreb`, etc.) from the mobile app so phrases like “next Tuesday” resolve in the user’s zone; voice and typed capture send `iana_timezone` + `current_local_iso` via `/transcribe` and `/assign-topics`. Standalone `POST /detect-reminders` accepts `iana_timezone` and `current_iso_timestamp`. Server UTC is only a fallback when the client omits local fields.
 - Model resolution: `OPENROUTER_REMINDER_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`.
 
