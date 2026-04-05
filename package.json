@@ -12,6 +12,7 @@
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
     "db:push": "npx supabase@2.84.4 db push",
+    "supabase:ci-hints": "node scripts/supabase-ci-hints.js",
     "env:supabase": "node scripts/sync-expo-supabase-env.js",
     "update:publish": "eas update --channel preview --non-interactive -m \"Preview\""
   },
