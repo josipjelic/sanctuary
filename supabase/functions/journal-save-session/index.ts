@@ -382,10 +382,7 @@ Deno.serve(async (req) => {
     .eq("user_id", user.id);
 
   if (updateError) {
-    console.error(
-      "[journal-save-session] session update error",
-      updateError,
-    );
+    console.error("[journal-save-session] session update error", updateError);
     return jsonResponse({ error: "Failed to complete session" }, 500);
   }
 
