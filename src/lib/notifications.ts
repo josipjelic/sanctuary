@@ -161,3 +161,33 @@ export function labelForLeadTime(value: LeadTime): string {
     "15 minutes before"
   );
 }
+
+/**
+ * Schedule a repeating daily local notification at a fixed hour and minute.
+ * @returns Expo notification identifier — persist this to cancel/reschedule.
+ */
+export async function scheduleDailyMorningNotification(params: {
+  title: string;
+  body: string;
+  hour: number;
+  minute: number;
+}): Promise<string> {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    throw new Error(
+      "Local notifications are not available in Expo Go on Android. Use a development build.",
+    );
+  }
+  const id = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: params.title,
+      body: params.body,
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      hour: params.hour,
+      minute: params.minute,
+    },
+  });
+  return id;
+}

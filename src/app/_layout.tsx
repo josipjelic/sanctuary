@@ -1,7 +1,12 @@
 import "react-native-url-polyfill/auto";
 import { AuthProvider } from "@/contexts/AuthContext";
+import {
+  OnboardingProvider,
+  useOnboardingContext,
+} from "@/contexts/OnboardingContext";
 import { useAuth } from "@/hooks/useAuth";
 import { prefetchNotificationHandler } from "@/lib/notifications";
+import { checkOnboardingComplete } from "@/lib/oceanOnboarding";
 import { colors } from "@/lib/theme";
 import {
   Manrope_400Regular,
@@ -37,22 +42,40 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <RootLayoutInner fontsReady={fontsLoaded || !!error} />
+        <OnboardingProvider>
+          <RootLayoutInner fontsReady={fontsLoaded || !!error} />
+        </OnboardingProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
 }
 
 function RootLayoutInner({ fontsReady }: { fontsReady: boolean }) {
-  const { isLoading: authIsLoading } = useAuth();
+  const { session, isLoading: authIsLoading } = useAuth();
+  const { onboardingChecked, setCheckedState } = useOnboardingContext();
 
   useEffect(() => {
-    if (fontsReady && !authIsLoading) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsReady, authIsLoading]);
+    if (authIsLoading) return;
 
-  if (!fontsReady || authIsLoading) {
+    if (!session) {
+      setCheckedState(true, false);
+      return;
+    }
+
+    checkOnboardingComplete(session.user.id).then((complete) => {
+      setCheckedState(true, complete);
+    });
+  }, [session, authIsLoading, setCheckedState]);
+
+  const isReady = fontsReady && !authIsLoading && onboardingChecked;
+
+  useEffect(() => {
+    if (isReady) {
+      void SplashScreen.hideAsync();
+    }
+  }, [isReady]);
+
+  if (!isReady) {
     return (
       <View
         style={{
