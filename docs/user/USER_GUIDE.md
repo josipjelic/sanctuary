@@ -8,7 +8,7 @@ Read by: End users and agents needing to understand user-facing flows.
 
 # Sanctuary — User Guide
 
-> Last updated: 2026-03-31
+> Last updated: 2026-04-11
 > Version: 0.1.0 (pre-release — features documented as they ship)
 
 ---
@@ -49,6 +49,39 @@ An account with this email already exists. Tap **Log In** instead, or use **Forg
 
 ---
 
+### Setting Up Your Profile
+
+Sanctuary can learn a little about how you think and feel — so the app's morning messages and reflections feel more personal to you. To do this, it asks you a handful of open-ended questions. There are no right or wrong answers.
+
+**This is entirely optional.** You can use everything in Sanctuary without completing it.
+
+#### How to start
+
+Look for the **person icon** in the top-right corner of the Capture screen, next to the gear icon. A small dot on the icon means you haven't set up your profile yet. Tap it to begin.
+
+You can tap the profile icon at any time — to start, to finish where you left off, or just to revisit the questions.
+
+#### Answering the questions
+
+You'll move through 5 questions one at a time. Each asks something open-ended about how you think, feel, or see the world. For each one you can:
+
+- **Type** your answer in the text field below the question
+- **Speak** your answer — tap the **mic button**, say what comes to mind, then tap it again to stop. Your words are transcribed automatically.
+
+Tap **Continue** to move to the next question. Tap the back arrow to revisit a previous one.
+
+After the 5 questions, Sanctuary offers 2 optional extras. Tap **Share more** to answer them, or **Skip to my sanctuary** to finish.
+
+#### Building your profile
+
+When you finish, Sanctuary takes a moment — usually just a second or two — to put your profile together. When it's ready, you'll see "Your sanctuary is ready."
+
+Your reflections are private and never shared.
+
+Once complete, the profile icon changes from an outline to a filled person icon.
+
+---
+
 ## Features
 
 ### Quick Capture (Capture tab)
@@ -61,6 +94,40 @@ The home tab is where you record or type thoughts.
 - **Recent thoughts**: Use the row that links toward your inbox to jump to recent items.
 
 Grant **microphone** permission when prompted, or enable it in the system Settings app for Sanctuary, or voice capture will not work.
+
+---
+
+### Morning Messages
+
+A short, personal note that appears at the top of your Capture screen each morning. It's written for you based on your profile — the answers you gave during setup.
+
+Morning messages require completing your profile. A new message is prepared for each day.
+
+#### When they appear
+
+The card appears on the Capture screen from your morning time (default: **07:30**) until **noon**. Sanctuary also sends a notification at your morning time to nudge you to open the app.
+
+If the message takes a moment to load, a gentle shimmer shows it is on its way.
+
+#### How to dismiss
+
+Tap the **×** button in the top-right corner of the card. The message goes away for the rest of the day.
+
+#### Changing your morning time
+
+1. On the Capture screen, tap the **gear icon** to open Settings.
+2. Under **Reminders**, tap **Reminder lead time** and select **In the morning**.
+3. A **Morning time** row appears — tap it to choose your preferred time.
+
+The notification and the message window both follow this setting.
+
+#### Common Issues
+
+**Morning message card not showing**  
+The card only appears between your set morning time and noon. Outside that window, it won't show. If you've completed your profile and it still doesn't appear during morning hours, try closing and reopening the app.
+
+**"Your morning message couldn't load"**  
+This is usually a brief network issue. Tap **Try again** to reload it.
 
 ---
 

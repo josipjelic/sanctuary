@@ -1,14 +1,14 @@
 ---
 id: "042"
 title: "OCEAN onboarding: USER_GUIDE.md update"
-status: "todo"
+status: "completed"
 area: "docs"
 agent: "@documentation-writer"
 priority: "normal"
 created_at: "2026-04-11"
 due_date: null
-started_at: null
-completed_at: null
+started_at: "2026-04-11"
+completed_at: "2026-04-11"
 prd_refs: ["FR-060", "FR-070"]
 blocks: []
 blocked_by: ["041"]
@@ -22,10 +22,10 @@ Update docs/user/USER_GUIDE.md with:
 
 ## Acceptance Criteria
 
-- [ ] "Getting Started" section added to USER_GUIDE.md
-- [ ] "Morning Messages" section added to USER_GUIDE.md
-- [ ] Content is written for non-technical users
-- [ ] Sanctuary brand voice maintained (calm, supportive, not clinical)
+- [x] "Getting Started" section added to USER_GUIDE.md
+- [x] "Morning Messages" section added to USER_GUIDE.md
+- [x] Content is written for non-technical users
+- [x] Sanctuary brand voice maintained (calm, supportive, not clinical)
 
 ## Technical Notes
 
@@ -37,3 +37,4 @@ Update docs/user/USER_GUIDE.md with:
 | Date | Agent / Human | Event |
 |------|--------------|-------|
 | 2026-04-11 | human | Task created via orchestration |
+| 2026-04-11 | @documentation-writer | Added "Setting Up Your Profile" and "Morning Messages" sections to USER_GUIDE.md; verified against implementation |
