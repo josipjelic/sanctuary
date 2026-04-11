@@ -813,6 +813,30 @@ Emitted via `console.debug` at DEBUG level; filter by `phase` field in the Supab
 | @qa-engineer | E2E and unit test strategy for session flow, resume, and user state update (task #048) |
 | @documentation-writer | USER_GUIDE update: journal feature, evening reminder, "Your profile" screen (task #049) |
 
+### UX Spec (task #044, @ui-ux-designer)
+
+Full spec: `.assets/journal-ux-spec.md`. Summary of new and modified surfaces:
+
+**New screens**:
+
+| Screen | File | Description |
+|--------|------|-------------|
+| Journal Home | `src/app/(app)/journal/index.tsx` | Two states: State A (no pending session) shows hero headline "Your daily reflection" + "Begin today's journal" CTA + "Past entries" row; State B (pending session within 24h) shows an elevated `Card` (radius.xl) with session date, opening-answer preview, and "Continue" / "Start fresh" button pair. `useFocusEffect` re-queries on every tab focus. |
+| Journal Session | `src/app/(app)/journal/session.tsx` | Full-screen stack push (no tab bar). Header: back arrow + "Journal" title + progress indicator ("1 / 3" etc.). Scrollable question `Card` (radius.lg, elevated, padding spacing.s8) + `TextInput` answer area (multiline, minHeight 120pt, surfaceContainerLow background, radius.lg) + action area pinned to bottom above keyboard. "Next" disabled until ≥10 characters. "Skip this question" available on turns 2–3 only. "Save journal" on final turn or early `done` signal. Skeleton shimmer (surfaceContainerHigh bars, 0.4↔0.8 opacity, 1200ms) during AI fetch. Inline error + "Try again" on AI fetch failure; bottom toast on save failure. Exit confirmation bottom sheet on back-arrow tap. |
+| Journal Complete | `src/app/(app)/journal/complete.tsx` | Checkmark icon (Ionicons checkmark-circle-outline, 64pt, colors.primary) + "Reflection saved." headline + "Well done for taking the time." subtitle + "Back to journal" (primary) and "View your profile" (secondary) buttons + 5-second auto-redirect countdown. |
+| Journal History | `src/app/(app)/journal/history.tsx` | FlatList of completed sessions, newest first. Each flat `Card` (radius.lg, surfaceContainerLow, no elevation) shows: date (labelMd, outlineVariant), 2-line opening-answer preview (bodyLg, onSurface), "N questions answered" chip + forward arrow (detail view is v2 — arrow opacity 0.4 in v1). Empty state: book icon (48pt, outlineVariant) + "No journal entries yet." + "Begin your first journal" secondary button. |
+| Journal Profile | `src/app/(app)/journal/profile.tsx` | Accessible from complete screen and Settings. Introduction text (bodyLg, secondary). Elevated `Card` (radius.xl): shows `user_state.content` (bodyLg, onSurface) or placeholder (bodyLg, secondary, italic). "Last updated {relativeTime}" row (labelMd, outlineVariant). Privacy note (labelMd, outlineVariant, italic). |
+
+**Modified screens / files**:
+
+| File | Change |
+|------|--------|
+| `src/app/(app)/_layout.tsx` | Add 4th Journal tab: `Ionicons book-outline` (idle) / `book` (active), label "Journal" |
+| `src/app/(app)/index.tsx` (Settings modal) | New "Journal" section after "Reminders": section label + hairline separator; evening reminder `Switch` row (trackColor: surfaceContainerHigh/primary); conditional evening time row (LayoutAnimation 300ms show/hide; instant under prefers-reduced-motion) tapping native time picker, default 21:00; "Your journal profile" row with chevron → opens profile screen |
+| `src/lib/notifications.ts` | Add `scheduleEveningReminder(hour, minute)` and `cancelEveningReminder()` following the ADR-005 morning notification pattern (`DailyTriggerInput`); persist identifier in `user_preferences.evening_notification_id` |
+
+**No new design tokens** are introduced by this feature. All values are drawn from the existing `src/lib/theme.ts` token set.
+
 ---
 
 ## Data Flow
