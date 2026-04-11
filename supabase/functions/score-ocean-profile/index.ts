@@ -144,8 +144,7 @@ Deno.serve(async (req) => {
     ) {
       return jsonResponse(
         {
-          error:
-            "Each answer must have non-empty question and answer strings",
+          error: "Each answer must have non-empty question and answer strings",
         },
         400,
       );
@@ -210,7 +209,9 @@ Deno.serve(async (req) => {
     request_summary: {
       answer_count: validatedAnswers.length,
       question_set_version: questionSetVersion,
-      answer_previews: validatedAnswers.map((a) => truncateForLog(a.answer, 80)),
+      answer_previews: validatedAnswers.map((a) =>
+        truncateForLog(a.answer, 80),
+      ),
     },
     openrouter_request: sanitizedRequestForLog,
   });
@@ -226,14 +227,11 @@ Deno.serve(async (req) => {
 
   let rawContent: string;
   try {
-    const orRes = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: orHeaders,
-        body: JSON.stringify(requestBody),
-      },
-    );
+    const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: orHeaders,
+      body: JSON.stringify(requestBody),
+    });
 
     if (!orRes.ok) {
       const errText = await orRes.text();
@@ -284,8 +282,7 @@ Deno.serve(async (req) => {
       model,
       user_id: user.id,
       error: {
-        message:
-          err instanceof Error ? err.message : "OpenRouter fetch failed",
+        message: err instanceof Error ? err.message : "OpenRouter fetch failed",
         kind: "openrouter_fetch",
       },
     });
@@ -306,8 +303,7 @@ Deno.serve(async (req) => {
       model,
       user_id: user.id,
       error: {
-        message:
-          err instanceof Error ? err.message : "OCEAN JSON parse failed",
+        message: err instanceof Error ? err.message : "OCEAN JSON parse failed",
         kind: "ocean_json_parse",
       },
       // ADR-003: don't log scores; log only structural metadata
@@ -322,23 +318,21 @@ Deno.serve(async (req) => {
     );
   }
 
-  const { error: upsertError } = await supabase
-    .from("ocean_profiles")
-    .upsert(
-      {
-        user_id: user.id,
-        openness: scores.openness,
-        conscientiousness: scores.conscientiousness,
-        extraversion: scores.extraversion,
-        agreeableness: scores.agreeableness,
-        neuroticism: scores.neuroticism,
-        answers: validatedAnswers,
-        question_set_version: questionSetVersion,
-        scored_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
+  const { error: upsertError } = await supabase.from("ocean_profiles").upsert(
+    {
+      user_id: user.id,
+      openness: scores.openness,
+      conscientiousness: scores.conscientiousness,
+      extraversion: scores.extraversion,
+      agreeableness: scores.agreeableness,
+      neuroticism: scores.neuroticism,
+      answers: validatedAnswers,
+      question_set_version: questionSetVersion,
+      scored_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" },
+  );
 
   if (upsertError) {
     console.error(

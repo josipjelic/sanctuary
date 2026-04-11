@@ -167,14 +167,11 @@ Deno.serve(async (req) => {
 
   let message: string;
   try {
-    const orRes = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: orHeaders,
-        body: JSON.stringify(requestBody),
-      },
-    );
+    const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: orHeaders,
+      body: JSON.stringify(requestBody),
+    });
 
     if (!orRes.ok) {
       const errText = await orRes.text();
@@ -248,8 +245,7 @@ Deno.serve(async (req) => {
       model,
       user_id: user.id,
       error: {
-        message:
-          err instanceof Error ? err.message : "OpenRouter fetch failed",
+        message: err instanceof Error ? err.message : "OpenRouter fetch failed",
         kind: "openrouter_fetch",
       },
     });

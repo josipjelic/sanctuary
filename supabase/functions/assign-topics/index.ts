@@ -63,12 +63,10 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Invalid request body" }, 400);
   }
 
-  const {
-    thought_id,
-    text,
-    iana_timezone,
-    current_local_iso,
-  } = body as Record<string, unknown>;
+  const { thought_id, text, iana_timezone, current_local_iso } = body as Record<
+    string,
+    unknown
+  >;
 
   const currentLocalIso =
     typeof current_local_iso === "string" && current_local_iso.trim()

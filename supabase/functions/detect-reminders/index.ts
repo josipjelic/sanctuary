@@ -62,10 +62,8 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Invalid request body" }, 400);
   }
 
-  const { thought_id, text, current_iso_timestamp, iana_timezone } = body as Record<
-    string,
-    unknown
-  >;
+  const { thought_id, text, current_iso_timestamp, iana_timezone } =
+    body as Record<string, unknown>;
 
   if (!thought_id || typeof thought_id !== "string" || !thought_id.trim()) {
     return jsonResponse({ error: "thought_id required" }, 400);
