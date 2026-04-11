@@ -165,6 +165,20 @@ Full spec: `.assets/reminders-ux-spec.md`. Summary of new and modified surfaces:
 
 **No new design tokens** are introduced by this feature. All values are drawn from the existing `src/lib/theme.ts` token set.
 
+### OCEAN onboarding & morning messages (task #038, @ui-ux-designer)
+
+Full spec: `.assets/onboarding-ocean-ux-spec.md`. Summary of new surfaces:
+
+**New components**:
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `OnboardingProgressStepper` | Inline in `(onboarding)/questions.tsx` | Horizontal row of 7 dots (5 primary + 2 optional). Active dot: `24×8pt` pill, `colors.primary`. Completed dot: `8×8pt` circle, `colors.primary` at 50% opacity. Upcoming dot: `8×8pt` circle, `colors.outlineVariant`. Optional dots (6–7): same sizing as upcoming/completed but `opacity: 0.4`. Active dot morphs from circle to pill via `LayoutAnimation` (150ms ease-out; `prefers-reduced-motion`: instant). The stepper row carries a single `accessibilityLabel` announcing current position (e.g. `"Question 2 of 5"`); individual dots are `accessibilityElementsHidden={true}`. |
+| `QuestionCard` | Inline in `(onboarding)/questions.tsx` | `Card` component (`variant="elevated"`, `radius.lg` / 24pt, `padding: spacing.s8`, ambient `shadows.card`). Contains: (1) question number label (`typography.labelMd`, `colors.outlineVariant`), (2) question text (`typography.headlineMd`, `colors.onSurface`), (3) hint text `"Write as much or as little as feels right."` (`typography.labelMd`, `colors.secondary`). Slides in/out horizontally on question advance (250ms, `cubic-bezier(0.4,0,0.2,1)`; cross-fade under `prefers-reduced-motion`). Question text `TextInput` rendered adjacent (not inside card): `multiline`, `minHeight: 120pt`, `maxHeight: 240pt`, `colors.surfaceContainerLow` background, `radius.lg`. Character count hint shown when focused (`typography.labelMd`, `colors.outlineVariant`). |
+| `MorningMessageCard` | `src/components/MorningMessageCard.tsx` | `Card` component (`variant="elevated"`, `radius.xl` / 32pt, `padding: spacing.s6`, ambient `shadows.card`). Rendered on Quick Capture screen between the header row and hero copy, during morning window only (`morning_notification_time ≤ local time < 12:00`). Top row: `"This morning"` label (`typography.labelMd`, `colors.outlineVariant`) + dismiss icon (`Ionicons close-outline`, 18pt, `colors.outlineVariant`, 36×36pt `Pressable`). Message body: `typography.bodyLg`, `colors.onSurface`; content above `maxHeight: 200pt` fades with a `LinearGradient` overlay. Bottom accent: 2pt × 40pt sage strip (`colors.primaryContainer`, `radius.full`). **Loading state**: skeleton bars (two `View` blocks, `colors.surfaceContainerHigh`, shimmer opacity 0.4↔0.8 loop at 1200ms; `prefers-reduced-motion`: static). **Error state**: `"Your morning message couldn't load."` copy + `"Try again"` text pressable (`colors.primary`). **Dismiss**: `translateY(0→-24pt)` + `opacity(1→0)`, 250ms ease-in, session-only (not persisted). Props: `messageText?: string`, `isLoading: boolean`, `hasError: boolean`, `onDismiss: () => void`, `onRetry: () => void`. |
+
+**No new design tokens** are introduced by this feature. All values are drawn from the existing `src/lib/theme.ts` token set.
+
 ---
 
 ## Mobile Architecture
