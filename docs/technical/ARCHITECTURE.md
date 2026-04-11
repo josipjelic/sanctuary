@@ -12,7 +12,7 @@ Read by: All agents. Always read before making implementation decisions.
 
 # System Architecture
 
-> Last updated: 2026-04-11 (OCEAN onboarding & morning messages: ADR-005; Supabase deploy GitHub Action; Lists subsystem planned: tasks #029–#036; Reminders subsystem: ADR-004; AI I/O observability: ADR-003)
+> Last updated: 2026-04-11 (Journal subsystem: ADR-006; OCEAN onboarding & morning messages: ADR-005; Supabase deploy GitHub Action; Lists subsystem planned: tasks #029–#036; Reminders subsystem: ADR-004; AI I/O observability: ADR-003)
 > Version: 0.1.0
 
 ---
@@ -28,6 +28,7 @@ PRD v1.1 documents user-scoped topics and the transcribe/assign-topics pipeline.
 - **Reminders** (ADR-004): AI detects future time references in thought text after topic assignment (fire-and-forget, non-blocking). Detected reminders are stored as **`inactive`** rows in `reminders` until the user approves or dismisses. Approved rows become **`active`** with a client-scheduled local notification via `expo-notifications` — no server-side scheduler in v1. PRD v1.0 section 7 listed reminders as out-of-scope; the product owner explicitly directed this addition.
 - **OCEAN onboarding & morning messages** (ADR-005): After sign-up, users answer 5–7 reflective questions. A `score-ocean-profile` edge function scores their answers against the OCEAN (Big Five) model via OpenRouter and stores the profile in `ocean_profiles`. Each morning, a `generate-morning-message` edge function produces a personalised message from the profile; a recurring daily local notification nudges the user to open the app; an in-app card on the Quick Capture screen shows the generated message. Onboarding completion is gated via a route guard in the root layout, held behind the Expo splash screen to avoid flash.
 - **Lists** (tasks #029–#036, planned): AI detects whether a captured thought is primarily a list (shopping, tasks, ideas, etc.) — fire-and-forget after topic assignment, same pattern as reminders. Detected lists create `user_lists` + `list_items` rows. The AI also detects **continuation** — when a new thought references an existing list title, new items are appended rather than creating a duplicate list. Each item can be marked done in the UI; marking all items done closes the list. ADR-005 pending architecture wave.
+- **AI-Guided Journal** (ADR-006, tasks #043–#049, planned): A conversational reflection session (up to 3 turns) with a fixed opening question and up to 2 AI-generated follow-ups. Session data persists incrementally to `journal_sessions` + `journal_entries`. A fire-and-forget user state update after each session maintains a ~200-word analysis (`user_state`) used as context for future sessions. Evening reminder follows the ADR-005 morning notification pattern (`DailyTriggerInput`, default 21:00). Journal history is a separate screen from the Thoughts inbox.
 
 ---
 
@@ -59,6 +60,8 @@ The architecture prioritizes simplicity and fast iteration: there is no custom A
 |    +-- detect-list (fire-and-forget, planned)|
 |    +-- score-ocean-profile (onboarding)   |
 |    +-- generate-morning-message (daily)   |
+|    +-- journal-next-question (journal AI) |
+|    +-- journal-save-session (journal save)|
 +------------------+-----------------------+
                    |
                    |  OpenRouter API
@@ -274,6 +277,8 @@ All edge functions are deployed to Supabase and live under `supabase/functions/`
 | `reflection-prompt` | POST | Receives thought text, returns an AI-generated reflection question — does not persist to DB | Planned — task #010 |
 | `score-ocean-profile` | POST | JSON `{ answers: [{ question, answer }] }` → OpenRouter OCEAN scoring → `ocean_profiles` upsert | Planned — tasks #038–#039 (ADR-005) |
 | `generate-morning-message` | POST | No body (reads caller's `ocean_profiles` row) → OpenRouter message generation → `morning_messages` insert → returns `message_text` | Planned — tasks #040–#041 (ADR-005) |
+| `journal-next-question` | POST | JSON `{ session_id, turns, user_state_snapshot? }` → OpenRouter generates next question or `{ done: true }` signal; enforces 3-turn max server-side → returns `{ question, turn_index }` or `{ done: true }` | Planned — tasks #044–#046 (ADR-006) |
+| `journal-save-session` | POST | JSON `{ session_id }` → marks session `completed`; fire-and-forget incremental merge of new session into `user_state` via OpenRouter → returns `{ session_id, saved_at }` | Planned — tasks #044–#046 (ADR-006) |
 
 All edge functions:
 - Require a valid Supabase session token on `POST` (`getUser()` with anon client + user JWT)
@@ -640,6 +645,173 @@ Both edge functions follow the ADR-003 structured logging contract. Events use `
 | @backend-developer | `score-ocean-profile` and `generate-morning-message` edge functions; ADR-003 logging; OpenRouter prompt design |
 | @react-native-developer | `(onboarding)` route group screens; root layout route guard; morning message card on Quick Capture; daily notification scheduling in `src/lib/notifications.ts` |
 | @ui-ux-designer | Onboarding UX spec: question flow, scoring loading state, completion screen, morning message card design |
+
+---
+
+## Journal Subsystem
+
+> **ADR**: ADR-006. **Tasks**: #043 (architecture), #044–#049 (implementation — planned).
+> Added: 2026-04-11
+
+### Overview
+
+The Journal is a daily AI-guided reflection session accessible via a dedicated fourth tab in the bottom nav. Each session presents a fixed opening question (`JOURNAL_OPENING_QUESTION_V1`) followed by up to two AI-generated follow-up questions — three turns total. The AI contextualises each follow-up using the user's answers in the current session and their living `user_state`: a ~200-word third-person analysis that accumulates patterns, recurring themes, and things the user has mentioned across all sessions, without assumptions about anything they have not explicitly shared. After each completed session, the analysis is incrementally merged with the new session content via a fire-and-forget edge function call.
+
+An evening reminder — a configurable daily local notification, default 21:00 — nudges the user to reflect each day. Like the ADR-005 morning notification, it is a client-scheduled recurring local notification via `expo-notifications` using `DailyTriggerInput`; no server-side scheduler is required.
+
+If the user leaves mid-session (app backgrounded, killed), the next Journal tab open detects the incomplete session and offers: "Continue your earlier session or start fresh?" This is enabled by incremental persistence: every Q&A pair is written to the DB as it is answered, not only on final save.
+
+### Components
+
+| Component | Location | Owner | Description |
+|-----------|----------|-------|-------------|
+| `journal-next-question` (edge function) | `supabase/functions/journal-next-question/index.ts` | @backend-developer | `POST` — accepts session ID, completed turn history, and optional `user_state` snapshot; returns `{ "question": "...", "turn_index": N }` or `{ "done": true }`. Enforces 3-turn max server-side (returns `done` unconditionally if `turns.length >= 3`). Model: `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`. |
+| `journal-save-session` (edge function) | `supabase/functions/journal-save-session/index.ts` | @backend-developer | `POST` — accepts session ID; validates ownership and at least one answered entry; marks session `completed`; returns save confirmation. Fires-and-forgets `updateUserState()`: reads current `user_state.content` + new session Q&A pairs → OpenRouter incremental merge → upserts `user_state`. |
+| `journal_sessions` table | `supabase/migrations/006_journal.sql` | @database-expert | One row per session. `status`: `'pending'` (in-progress) \| `'completed'` \| `'abandoned'`. `opening_question_version` tracks which `JOURNAL_OPENING_QUESTION_V*` constant was used. RLS: `user_id = auth.uid()`. |
+| `journal_entries` table | `supabase/migrations/006_journal.sql` | @database-expert | One row per turn within a session. Columns: `turn_index` (0–2), `question` text (set when displayed), `answer` (NULL until submitted), `answered_at`. UNIQUE `(session_id, turn_index)`. RLS via `user_id` column. |
+| `user_state` table | `supabase/migrations/006_journal.sql` | @database-expert | One row per user (UNIQUE `user_id`). `content` text (~200-word analysis), `contributing_session_count`, `last_session_id` FK. Updated fire-and-forget by `journal-save-session` after every completed session. RLS: `user_id = auth.uid()`. |
+| Journal tab screens | `src/app/(app)/journal/` | @react-native-developer | New `(app)` tab group: `journal/index.tsx` (session home — resume prompt or active session flow), `journal/history.tsx` (past sessions list), `journal/[sessionId].tsx` (session detail, read-only). History accessible via header button on the journal home. |
+| Evening reminder | `src/lib/notifications.ts` | @react-native-developer | `scheduleEveningReminder(hour, minute)`: schedules a repeating `DailyTriggerInput` local notification. Toggle (on/off) and time picker in Settings. Cancels and reschedules when preference changes. |
+| `user_preferences` new keys | Existing `user_preferences` table | — | `evening_notification_id` (text) — the `expo-notifications` identifier for the daily evening notification, enabling cancellation and rescheduling. `evening_notification_time` (string `"HH:MM"`, default `"21:00"`) — user-configured evening reminder time. |
+
+### Session State Machine
+
+```
+[pending]  — session created; opening question shown; answering in progress
+    |
+    +--- user taps "Save Journal"  -----------> [completed]
+    |                                           (completed_at set; user_state update queued)
+    +--- user taps "Start fresh"   -----------> [abandoned]
+         (new pending session created; old session marked abandoned)
+```
+
+**Resume detection**: on Journal tab open, query `journal_sessions WHERE user_id = auth.uid() AND status = 'pending' AND created_at > now() - interval '24 hours'`. If found: show the "Continue or start fresh?" prompt. Sessions outside the 24-hour window are not offered for resume (no automatic state transition — a future cleanup job could mark them abandoned).
+
+**`journal_sessions.completed_at`** is NULL for `pending` and `abandoned` rows; it is set by `journal-save-session` when a session transitions to `completed`.
+
+### Session Flow Diagram
+
+```
+[Journal tab opens]
+  -> Query pending sessions (created_at > now() - 24h AND status = 'pending')
+       |--- pending session found ---> Prompt: "Continue or start fresh?"
+       |      |--- Continue ----> Load entries; resume from first unanswered turn
+       |      |--- Start fresh -> Mark old session 'abandoned'; create new session row
+       |--- no pending session ---> Insert journal_sessions row (status: 'pending')
+  -> Display JOURNAL_OPENING_QUESTION_V1 (client constant — not AI-generated)
+       -> Insert journal_entries row (turn_index: 0, question: <constant>, answer: NULL)
+  -> User types answer -> Update journal_entries[turn_index=0].answer + answered_at
+
+  -> POST /journal-next-question
+     { session_id, turns: [{turn_index:0, q, a}], user_state_snapshot? }
+       |--- { question: "...", turn_index: 1 } --->
+       |      Insert journal_entries[turn_index=1]; user answers; update entry row
+       |      -> POST /journal-next-question
+       |         { session_id, turns: [turn0, turn1], user_state_snapshot? }
+       |               |--- { question: "...", turn_index: 2 } --->
+       |               |      Insert journal_entries[turn_index=2]; user answers; update entry row
+       |               |      -> Show "Save Journal" button (max turns reached)
+       |               |--- { done: true } -> Show "Save Journal" button (AI judged complete)
+       |--- { done: true } -> Show "Save Journal" button (AI judged complete after turn 0)
+
+  -> User taps "Save Journal"
+       -> POST /journal-save-session { session_id }
+            -> Validate: session belongs to caller; status = 'pending'; ≥1 answered entry
+            -> journal_sessions.status = 'completed'; completed_at = now()
+            -> updateUserState(userId, sessionId).catch(() => {}) [fire-and-forget]
+                 -> Read user_state.content (or NULL if first session)
+                 -> Read new session's journal_entries (q+a pairs)
+                 -> OpenRouter: incremental merge -> updated ~200-word analysis
+                 -> Upsert user_state row
+            -> Return { session_id, saved_at }
+       -> Navigate to Journal tab home (or history screen)
+```
+
+### Schema Summary
+
+Canonical DDL: `supabase/migrations/006_journal.sql` (planned — see @database-expert task #045).
+
+**`journal_sessions`**:
+- `id` uuid PK, `user_id` uuid FK → `auth.users` (ON DELETE CASCADE)
+- `status` text NOT NULL DEFAULT `'pending'`, CHECK (`status IN ('pending', 'completed', 'abandoned')`)
+- `opening_question_version` text NOT NULL DEFAULT `'v1'`
+- `completed_at` timestamptz NULL (set when status → `'completed'`)
+- `created_at`, `updated_at` timestamptz
+- Index: `(user_id, created_at DESC)` — primary query pattern (resume detection, history)
+
+**`journal_entries`**:
+- `id` uuid PK, `user_id` uuid FK → `auth.users` (ON DELETE CASCADE) — denormalized for RLS
+- `session_id` uuid FK → `journal_sessions.id` (ON DELETE CASCADE)
+- `turn_index` integer NOT NULL, CHECK (0 ≤ `turn_index` ≤ 2)
+- `question` text NOT NULL (set when question is displayed)
+- `answer` text NULL (populated when user submits their answer)
+- `answered_at` timestamptz NULL
+- `created_at` timestamptz
+- UNIQUE `(session_id, turn_index)` — prevents duplicate turns within a session
+- Index: `(session_id)` — load all entries for a session
+
+**`user_state`**:
+- `id` uuid PK, `user_id` uuid UNIQUE FK → `auth.users` (ON DELETE CASCADE)
+- `content` text NOT NULL — the ~200-word third-person analysis
+- `contributing_session_count` integer NOT NULL DEFAULT 0 — incremented on every successful update
+- `last_session_id` uuid NULL FK → `journal_sessions.id` — correlation for debugging
+- `updated_at` timestamptz NOT NULL, `created_at` timestamptz NOT NULL
+- The UNIQUE constraint on `user_id` enables efficient upsert: `ON CONFLICT (user_id) DO UPDATE`
+
+All three tables: RLS CRUD policies where `user_id = auth.uid()`.
+
+### Edge Function Contracts
+
+**`journal-next-question`**:
+- Input: `POST` with user JWT + `{ "session_id": "uuid", "turns": [{ "turn_index": 0, "question": "string", "answer": "string" }], "user_state_snapshot": "optional string — the ~200-word user_state.content" }`
+- `turns` contains only fully answered turns (non-NULL answer). The function returns `{ "done": true }` unconditionally if `turns.length >= 3` (server cap), regardless of the AI response.
+- Output — next question: `{ "question": "string", "turn_index": 1 }` where `turn_index` is 0-based index of the question about to be asked (1 or 2)
+- Output — session complete: `{ "done": true }`
+- Error codes: `400` (invalid payload), `401` (unauthenticated), `404` (session not found or not owned), `500` (config/DB error), `502` (OpenRouter error)
+- Logging: ADR-003, `phase: "journal_question"`; logs model, session ID, turn count, response shape. Raw answer text is **never** logged — only `answer_char_count` per turn.
+
+**`journal-save-session`**:
+- Input: `POST` with user JWT + `{ "session_id": "uuid" }`
+- Validates: session exists, `user_id` matches JWT, `status = 'pending'`, at least one answered entry exists
+- Sets `journal_sessions.status = 'completed'`, `completed_at = now()`
+- Fire-and-forget: reads `user_state.content` (may be NULL for first session) + new session entries → OpenRouter incremental merge → upserts `user_state`; failure is logged (ADR-003) but does not affect the response
+- Output: `{ "session_id": "uuid", "saved_at": "ISO 8601" }`
+- Error codes: `400` (invalid payload or no answered entries), `401` (unauthenticated), `404` (session not found or not owned), `409` (session already completed), `500` (DB error)
+- Logging: ADR-003, `phase: "journal_state_update"` for the user state update step; raw answer text and state content are **never** logged — only `answer_count`, `prior_state_char_count`, `updated_state_char_count`.
+
+### Evening Reminder
+
+Follows the exact same pattern as the ADR-005 morning notification.
+
+1. In Settings, the user sees a toggle (evening reminder on/off) and a time picker (default `21:00`).
+2. On enable (or time change), the client calls `scheduleEveningReminder(hour, minute)` in `src/lib/notifications.ts`, which calls `scheduleNotificationAsync` with `{ type: SchedulableTriggerInputTypes.DAILY, hour, minute, repeats: true }`.
+3. The returned identifier is written to `user_preferences` under key `evening_notification_id`.
+4. On disable, the old identifier is cancelled via `cancelScheduledNotificationAsync(id)` and the `user_preferences` row is cleared.
+5. On time change, the old notification is cancelled before scheduling the new one.
+6. Notification body: `"Time to reflect — your journal is waiting."` (generic, not AI-personalised in the push body — same trade-off as ADR-005 morning notification).
+
+### Journal History
+
+Journal history is separate from the Thoughts inbox. The `journal/history.tsx` screen lists past `journal_sessions` in reverse chronological order. Each row shows: session date, opening answer preview (first 100 characters of `journal_entries[turn_index=0].answer`), and the number of questions answered. Tapping a row navigates to `journal/[sessionId].tsx` (read-only view of the full Q&A).
+
+### Observability
+
+Both edge functions follow the ADR-003 structured logging contract:
+- `journal-next-question`: `phase: "journal_question"` — logs `session_id`, `turn_count`, model, response type (`question` vs `done`), latency. Raw answer text is **never** logged; only `answer_char_count` per turn.
+- `journal-save-session` / user state update: `phase: "journal_state_update"` — logs `session_id`, model, `prior_state_char_count`, `new_session_turn_count`, outcome. Raw answer text and state content are **never** logged.
+
+Emitted via `console.debug` at DEBUG level; filter by `phase` field in the Supabase dashboard. Failure of the fire-and-forget user state update is an `ai.error` event in the same phase and does not surface to the user.
+
+### Cross-Agent Handoffs
+
+| Agent | Tasks |
+|-------|-------|
+| @database-expert | Migration `006_journal.sql`: `journal_sessions`, `journal_entries`, `user_state` tables, RLS policies, indexes (task #045) |
+| @backend-developer | `journal-next-question` and `journal-save-session` edge functions; prompt design (non-presumptuous questions, user_state as silent context); ADR-003 logging; user state incremental merge logic (task #046) |
+| @react-native-developer | Journal tab screens (`src/app/(app)/journal/`); session state machine in client; resume/start-fresh flow; evening notification scheduling and Settings UI additions in `src/lib/notifications.ts` (task #047) |
+| @ui-ux-designer | Journal tab UX spec: session screen, history screen, resume prompt, evening notification Settings additions (task #044) |
+| @qa-engineer | E2E and unit test strategy for session flow, resume, and user state update (task #048) |
+| @documentation-writer | USER_GUIDE update: journal feature, evening reminder, "Your profile" screen (task #049) |
 
 ---
 

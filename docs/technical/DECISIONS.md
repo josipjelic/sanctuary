@@ -25,6 +25,7 @@ Read by: All agents. Check this file before proposing changes that may conflict 
 | ADR-003 | AI I/O observability via Supabase Edge Function logs | Accepted | 2026-03-30 |
 | ADR-004 | AI reminder detection and client-side local notification scheduling | Accepted | 2026-03-30 |
 | ADR-005 | OCEAN personality onboarding and morning messages architecture | Accepted | 2026-04-11 |
+| ADR-006 | AI-guided journal, user state memory, and evening reminder | Accepted | 2026-04-11 |
 
 ---
 
@@ -337,3 +338,160 @@ The question set is stored as a versioned constant in the client and edge functi
 - **Positive**: OCEAN scoring reuses the existing OpenRouter infrastructure (one edge function, same auth and logging patterns as ADR-003). Morning message delivery satisfies FR-073 using the ADR-004 client-side local notification pattern — no new scheduling infrastructure required. The route guard eliminates onboarding flash by piggybacking on the existing Expo splash-screen hold. Reflective questions are brand-consistent with the existing capture UX and require no third-party survey licensing.
 - **Negative**: AI OCEAN scores are approximate and non-reproducible; they must not be presented to users as clinically meaningful assessments. Morning notification content is generic (personalisation is in-app only, not in the push body). Onboarding status check adds one AsyncStorage read to the root layout bootstrap path. Two new tables (`ocean_profiles`, `morning_messages`) and two new edge functions (`score-ocean-profile`, `generate-morning-message`) increase the schema and function surface.
 - **Neutral**: A new `(onboarding)` route group is added to the Expo Router structure alongside the existing `(auth)` and `(app)` groups. The `user_preferences` table gains one new key: `morning_notification_id` (the scheduled daily notification identifier, managed alongside the existing `morning_notification_time` key). The `question_set_version` column on `ocean_profiles` enables future question set upgrades without invalidating existing profiles.
+
+---
+
+## ADR-006: AI-Guided Journal, User State Memory, and Evening Reminder
+
+**Date**: 2026-04-11
+**Status**: Accepted
+**Deciders**: Josip / @systems-architect
+
+### Context
+
+The product roadmap calls for an AI-guided daily journal — a structured, conversational reflection session where the app asks the user up to three open-ended questions and builds a living memory of the user's patterns over time (FR-030, FR-060–063, FR-073). This is a pre-v2 variant: rather than the full longitudinal ML memory layer deferred to the paid tier, the journal writes a synthesised ~200-word third-person analysis (`user_state`) after each session. The analysis is used as context for future sessions and is readable by the user in a "Your profile" screen in Settings — it is never shown mid-session to avoid biasing responses.
+
+Four decisions are recorded together because they form a single coherent subsystem and each constrains the others.
+
+**Constraints that shape all four decisions**:
+- No custom servers (ADR-001); all logic runs in the mobile app or Supabase Edge Functions.
+- Client-side local notifications via `expo-notifications` (ADR-004); the evening reminder follows the same `DailyTriggerInput` pattern established for the morning notification in ADR-005.
+- `user_preferences` table already has a key-value pattern; `morning_notification_id` and `morning_notification_time` are already in use — evening keys follow the same convention.
+- AI calls must follow ADR-003 structured logging; journal-specific phases: `"journal_question"` and `"journal_state_update"`.
+- Raw journal answers must never appear in logs — only character counts and answer counts (same redaction rule as voice transcripts and raw OCEAN answers).
+- Beta scale — operational complexity must remain minimal.
+
+---
+
+### Decision 1 of 4 — AI Conversation Model
+
+#### Context
+
+The journal session is a guided conversation: the app shows a fixed opening question, the user answers, then the app presents up to two AI-generated follow-up questions (three total turns). The AI must contextualise each follow-up on what the user just said and on their long-term `user_state`, while never assuming life details the user has not volunteered in the current or prior sessions. A `done` signal allows the AI to end the session early (fewer than three turns) when no useful follow-up would add value. Max-turns enforcement must be authoritative server-side, not just client-side.
+
+#### Options Considered
+
+1. **Stateless single-shot per turn** — After each answer, the client calls `journal-next-question` with the full turn history from the current session (max 2 completed turns ≈ 300 tokens) plus the user's 200-word `user_state` snapshot. The function returns either the next question or `{ "done": true }`. No conversation state is held server-side between calls. — Pros: Consistent with all existing edge function patterns (stateless, no server-side session affinity); token usage is tightly bounded (turn history never grows beyond 3 turns); easy to reason about and test; server can enforce the 3-turn cap on every call; simple contract the client can rely on. Cons: The full context (turns + user_state) is re-sent on every call — acceptable given the small size (~600 tokens total); every turn requires a network round trip.
+
+2. **Stateful conversation thread** — Maintain a full OpenRouter `messages` array in a DB column, appended on every turn; each call sends the accumulated thread. — Pros: Richer conversational coherence; the model sees its own prior questions verbatim. Cons: Token growth is unbounded if sessions become long; DB becomes coupled to OpenRouter's message schema (leaky abstraction); no meaningful advantage at a fixed 3-turn maximum; harder to swap AI providers.
+
+3. **Two-pass generation** — First OpenRouter call extracts themes from the user's latest answer; second call formulates the next question from themes + user_state. — Pros: Modular prompt design. Cons: Two serial API calls per turn doubles latency (~2–4 s added) with no clear quality benefit at 3-turn depth; added cost; complexity disproportionate to beta scale.
+
+#### Decision
+
+**Option 1 (stateless single-shot per turn)**. The conversation is short (≤ 3 turns), so re-sending the full turn history is cheap. The stateless pattern is consistent with all existing edge functions and makes failure modes simple to reason about.
+
+**Max-turns enforcement (server-authoritative)**: `journal-next-question` counts the number of completed turns in the `turns` array. If `turns.length >= 2` (opening answered + one follow-up answered), the function may return a third question OR `{ "done": true }` per the AI's judgment. If `turns.length >= 3`, the function returns `{ "done": true }` unconditionally, ignoring the AI response. This server-side cap is the authoritative rule; client enforcement is a UX convenience only.
+
+**`done` signal contract**: The function always returns exactly one of two JSON shapes:
+
+```json
+{ "question": "string — the next question to present", "turn_index": 1 }
+```
+
+```json
+{ "done": true }
+```
+
+`turn_index` is the 0-based index of the question about to be asked (1 = first follow-up, 2 = second follow-up). The opening question (turn 0) is the client-side constant `JOURNAL_OPENING_QUESTION_V1` — it is never generated by the edge function.
+
+**User state in prompt**: `user_state.content` is passed as read-only context in the system prompt under an explicit constraint: *"Use this profile only as silent background — never mention it directly, never reference facts the user has not brought up in the current session. If unresolved struggles are present, you may check in about them only when the conversation makes it genuinely natural."* This prevents the AI from sounding like it is reading the user's file back at them.
+
+**Session save is awaited**: `journal-save-session` is a standard awaited POST — the client waits for confirmation of persistence before navigating away. The user state update triggered inside `journal-save-session` is fire-and-forget and does not block the save response.
+
+**Model resolution chain**: `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`.
+
+---
+
+### Decision 2 of 4 — User State Update Approach
+
+#### Context
+
+After each completed journal session, a `user_state` row (one per user) must be updated with a ~200-word third-person analysis synthesising everything the user has shared across all sessions to date. This analysis is the memory layer for future journal sessions. The update is non-blocking — it must not slow the session save response. The analysis must only describe what the user has actually shared; it must make no assumptions.
+
+#### Options Considered
+
+1. **Full rebuild from all session history** — After each session, read all `journal_entries` rows for the user across every completed session and prompt the AI to produce a fresh 200-word analysis from scratch. — Pros: Produces the most internally consistent analysis; AI can re-weigh everything on each update. Cons: Token usage grows linearly with session count (unbounded); at 50+ sessions the prompt context could be thousands of tokens, making this increasingly expensive and slow; not viable as a production approach.
+
+2. **Incremental merge** — After each session, read: (a) the current `user_state.content` (~200 words ≈ 300 tokens), and (b) the new session's Q&A pairs only (3 turns × ~100 words ≈ 300 tokens). Prompt the AI to produce an updated analysis that integrates the new information into the existing profile. — Pros: Token usage stays bounded regardless of session count (prior state is always ~200 words; new session is always small); reuses existing OpenRouter infrastructure with no new dependencies; the 200-word constraint naturally compresses session history; consistent with the beta-scale simplicity constraint. Cons: Each update is a delta — accumulated small errors or biases could slowly drift the analysis over many sessions; a corrective full rebuild is not available as a user-facing tool in v1 (it can be added as an admin utility later).
+
+3. **Vector embeddings + retrieval-augmented analysis** — Embed each session turn, store vectors in a pgvector column; at update time retrieve the most semantically similar prior turns and include them in the prompt. — Pros: Scales gracefully to hundreds of sessions; retrieves only the most relevant context. Cons: Requires pgvector extension (requires explicit Supabase enablement and schema addition); adds an embedding pipeline, vector storage, and retrieval logic — significant complexity for a beta feature with few sessions per user; the session volume at beta scale does not justify this infrastructure.
+
+#### Decision
+
+**Option 2 (incremental merge)**. At beta scale, token costs are small and analysis quality is acceptable. The 200-word prior state + ~300 tokens of new session content fits comfortably within any modern LLM context window. If analysis quality degrades at higher session counts, a full-rebuild correction can be run as a background utility in a future iteration — the schema supports this without changes.
+
+**Update trigger**: `journal-save-session` marks the session `completed`, then fires `updateUserState(userId, sessionId)` as fire-and-forget (`.catch(() => {})`). The save HTTP response is returned before the state update completes. If the update fails, it is logged via ADR-003 (`phase: "journal_state_update"`, `event: "ai.error"`) — the session save itself is unaffected and the session is correctly marked `completed`.
+
+**First session handling**: if no `user_state` row exists for the user, the function passes only the new session Q&A and prompts the AI to produce an initial 200-word analysis (no prior state to merge).
+
+**Model resolution chain (state update)**: `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`.
+
+---
+
+### Decision 3 of 4 — Opening Question
+
+#### Context
+
+Every journal session starts with the same fixed question. It must be open-ended, non-presumptuous, invite reflection on the day (internal and external), and embody the Sanctuary brand: calm, intentional, serene. It is stored as a versioned constant `JOURNAL_OPENING_QUESTION_V1` in the mobile client and referenced in the `journal-next-question` system prompt so the AI can see what question the user answered when generating follow-ups. The opening question is never generated by the AI.
+
+#### Options Considered
+
+1. **"How has your day been — what's stayed with you as the hours have passed?"** — Simple, warm, conversational. Invites both positive and negative reflection. Slightly passive ("stayed with you") and implies end-of-day timing. Does not explicitly offer multiple entry points for users who feel stuck.
+
+2. **"Take a moment to settle in. What's on your mind today — something that happened, a feeling, or just a thought that's been with you?"** — Brand-aligned opening clause ("Take a moment to settle in" = calm, intentional); explicitly offers three entry points (event, feeling, thought) covering both external and internal dimensions; non-presumptuous; works at any time of day; the parenthetical options reduce blank-page anxiety without prescribing content.
+
+3. **"What's been present for you today? There's no right answer — just what comes to mind."** — Very open; explicitly reduces performance pressure. However, "no right answer" may paradoxically heighten awareness of judgment. Less directionally inviting than option 2; "present for you" is slightly abstract.
+
+#### Decision
+
+**Option 2**: `JOURNAL_OPENING_QUESTION_V1 = "Take a moment to settle in. What's on your mind today — something that happened, a feeling, or just a thought that's been with you?"`
+
+This question best embodies the Sanctuary brand. The opening clause ("Take a moment to settle in") is an invitation to slow down — directly consistent with the "calm, intentional, serene" brand positioning. The main clause offers three explicit entry points (event, feeling, thought) that cover both the external events and internal reflections the session should explore, without presupposing which the user will lead with. It is non-presumptuous, works at any time of day, and makes no assumptions about the user's life situation.
+
+The constant is versioned (`_V1`) so future revisions can be tracked alongside existing sessions. `journal_sessions.opening_question_version` records which version was in use for each session.
+
+---
+
+### Decision 4 of 4 — Resume/Start-Fresh Handling
+
+#### Context
+
+A user may open the Journal tab, begin answering questions, and leave the app before tapping "Save Journal" (phone call, notification, battery death). On the next app open, the product spec requires the app to detect this and offer: "Continue your earlier session or start fresh?" Incomplete sessions must survive app termination. The design question is when and how journal data is written to the database during an active session.
+
+#### Options Considered
+
+1. **Incremental persistence — write each answer to DB immediately** — When the session opens, insert a `journal_sessions` row (`status: 'pending'`). When each question is displayed, insert the corresponding `journal_entries` row (question text, NULL answer). When the user submits an answer, update the entry row with the answer and `answered_at`. On final save: `journal-save-session` marks the session `completed`. On resume: query the pending session, load entries, resume from the first unanswered turn. — Pros: App crash does not lose any submitted answer; seamless resume from any point; DB is the authoritative state; simple recovery logic. Cons: Up to ~6 DB writes per session (vs 1 for final-save-only); network failures mid-session could create partial state (harmless but requires server to handle gracefully).
+
+2. **Client-side only — hold Q&A in React state, persist only on final save** — Q&A pairs accumulate in component state. On save, the client posts the full session payload (all turns at once) to `journal-save-session`. — Pros: Minimal DB writes; single transactional POST. Cons: If the app is killed, the in-progress session is lost entirely — genuine resume is impossible. **This option violates the product specification and is unacceptable.**
+
+3. **Session row on start, Q&A in client state until save** — Insert the `journal_sessions` row immediately (marking a session in progress); Q&A accumulates in client state; all entries written on save. Resume is detectable (pending session row exists) but Q&A is not recoverable — the "resume" prompt would effectively only offer start-fresh. — Pros: Fewer DB writes than Option 1; in-progress session is detectable. Cons: Cannot actually resume the conversation — the resume prompt is misleading. Contradicts the product specification.
+
+#### Decision
+
+**Option 1 (incremental persistence)**. This is the only approach that enables genuine, user-transparent resume. The cost — a few extra DB writes per session — is negligible at beta scale. Partial state created by mid-session failures is safe (rows are user-scoped via RLS; the session is recoverable on next open or it expires after 24 hours).
+
+**Session state machine**:
+
+```
+[pending]  — session created; opening question shown; answering in progress
+    |
+    +--- user taps "Save Journal"  -----> [completed]
+    |                                     (completed_at set; user_state update queued)
+    +--- user taps "Start fresh"   -----> [abandoned]
+         (new pending session created; old session marked abandoned)
+```
+
+There is no separate `active` state. A session is `pending` from creation until it becomes `completed` or `abandoned`. `completed_at` is NULL for pending and abandoned rows; it is set when `journal-save-session` succeeds.
+
+**Resume detection**: on Journal tab open, query `journal_sessions WHERE user_id = auth.uid() AND status = 'pending' AND created_at > now() - interval '24 hours'`. A 24-hour window prevents very old interrupted sessions from resurfacing. Sessions outside the window are not offered for resume (they remain in `pending` status in the DB; no automatic transition — a future cleanup job could abandon them).
+
+**Start-fresh flow**: update the found pending session to `status = 'abandoned'`, then create a new `journal_sessions` row (`status = 'pending'`).
+
+---
+
+### Consequences
+
+- **Positive**: The journal feature reuses the existing OpenRouter edge-function infrastructure, ADR-003 observability, and the ADR-004/ADR-005 `expo-notifications` local notification pattern — no new external dependencies. The 200-word user state keeps AI token costs bounded per call regardless of how many prior sessions exist. Incremental persistence enables genuine resume UX. The fixed opening question is versioned, enabling future A/B testing without invalidating existing sessions. The evening reminder follows identical code patterns to the ADR-005 morning reminder, minimising implementation novelty.
+- **Negative**: Incremental persistence creates up to ~6 DB writes per session (vs 1 for a final-save-only approach). The incremental user state merge may drift over many sessions; a full-rebuild correction utility is not planned for v1. Evening notification content is generic (not AI-personalised in the push body — same trade-off as the ADR-005 morning notification). The `user_state` analysis must not be shown mid-session to the user to avoid biasing their responses.
+- **Neutral**: Three new tables (`journal_sessions`, `journal_entries`, `user_state`) and two new edge functions (`journal-next-question`, `journal-save-session`) are added. The `user_preferences` table gains two new keys: `evening_notification_id` (text) and `evening_notification_time` (string `"HH:MM"`, default `"21:00"`). Navigation gains a new Journal tab (4th tab in bottom nav). Journal history is a separate screen from the Thoughts inbox.
