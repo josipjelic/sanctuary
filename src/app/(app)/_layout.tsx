@@ -1,4 +1,3 @@
-import { useOnboardingContext } from "@/contexts/OnboardingContext";
 import { useAuth } from "@/hooks/useAuth";
 import { colors, typography } from "@/lib/theme";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -6,14 +5,9 @@ import { Redirect, Tabs } from "expo-router";
 
 export default function AppLayout() {
   const { session } = useAuth();
-  const { onboardingComplete } = useOnboardingContext();
 
   if (!session) {
     return <Redirect href="/(auth)/sign-in" />;
-  }
-
-  if (!onboardingComplete) {
-    return <Redirect href="/(onboarding)" />;
   }
 
   return (

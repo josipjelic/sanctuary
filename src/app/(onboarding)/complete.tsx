@@ -114,7 +114,13 @@ export default function OnboardingCompleteScreen() {
   }
 
   function handleBegin() {
-    router.replace("/(app)");
+    // If navigated here from within the app (profile icon), go back.
+    // Otherwise (initial launch path), replace into the app tabs.
+    if (router.canDismiss()) {
+      router.dismissAll();
+    } else {
+      router.replace("/(app)");
+    }
   }
 
   return (

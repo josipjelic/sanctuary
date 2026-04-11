@@ -132,6 +132,9 @@ verify_jwt = false
 [functions.generate-morning-message]
 verify_jwt = false
 
+[functions.transcribe-answer]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 policy = "oneshot"

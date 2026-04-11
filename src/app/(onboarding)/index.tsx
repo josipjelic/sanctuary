@@ -1,14 +1,17 @@
 import { Button } from "@/components";
 import { colors, spacing, typography } from "@/lib/theme";
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useEffect, useRef } from "react";
 import {
   AccessibilityInfo,
   Animated,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -37,6 +40,22 @@ export default function OnboardingWelcomeScreen() {
       style={styles.gradient}
     >
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+        {router.canDismiss() && (
+          <View style={styles.closeRow}>
+            <Pressable
+              onPress={() => router.dismiss()}
+              style={({ pressed }) => [
+                styles.closeButton,
+                pressed && styles.closeButtonPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              testID="onboarding-close"
+            >
+              <Ionicons name="close" size={22} color={colors.primary} />
+            </Pressable>
+          </View>
+        )}
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.content}
@@ -85,6 +104,21 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+  },
+  closeRow: {
+    alignItems: "flex-end",
+    paddingHorizontal: spacing.s4,
+    paddingTop: spacing.s4,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeButtonPressed: {
+    backgroundColor: `${colors.primary}18`,
   },
   scroll: {
     flex: 1,

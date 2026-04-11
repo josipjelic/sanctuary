@@ -1,4 +1,5 @@
 import { Button, MorningMessageCard } from "@/components";
+import { useOnboardingContext } from "@/contexts/OnboardingContext";
 import { useAuth } from "@/hooks/useAuth";
 import {
   buildThoughtPayload,
@@ -98,6 +99,7 @@ function startOfLocalDay(): Date {
 
 export default function QuickCaptureScreen() {
   const { session, signOut } = useAuth();
+  const { onboardingComplete } = useOnboardingContext();
   const { width } = useWindowDimensions();
   const audioRecorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(audioRecorder, 250);
@@ -648,22 +650,51 @@ export default function QuickCaptureScreen() {
               </View>
               <Text style={styles.brandMark}>Sanctuary</Text>
             </View>
-            <Pressable
-              style={({ pressed }) => [
-                styles.headerIconSlot,
-                pressed && styles.headerIconSlotPressed,
-              ]}
-              onPress={() => setSettingsVisible(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Open settings"
-              testID="settings-button"
-            >
-              <Ionicons
-                name="settings-outline"
-                size={22}
-                color={colors.primary}
-              />
-            </Pressable>
+            <View style={styles.headerRight}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.headerIconSlot,
+                  pressed && styles.headerIconSlotPressed,
+                ]}
+                onPress={() => router.push("/(onboarding)")}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  onboardingComplete
+                    ? "View your personality profile"
+                    : "Set up your personality profile"
+                }
+                testID="profile-button"
+              >
+                <Ionicons
+                  name={onboardingComplete ? "person" : "person-outline"}
+                  size={22}
+                  color={colors.primary}
+                />
+                {!onboardingComplete && (
+                  <View
+                    style={styles.profileBadge}
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                  />
+                )}
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.headerIconSlot,
+                  pressed && styles.headerIconSlotPressed,
+                ]}
+                onPress={() => setSettingsVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Open settings"
+                testID="settings-button"
+              >
+                <Ionicons
+                  name="settings-outline"
+                  size={22}
+                  color={colors.primary}
+                />
+              </Pressable>
+            </View>
           </View>
 
           {isMorningWindow && !morningMessageDismissed && (
@@ -1257,6 +1288,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   headerIconSlot: {
     width: 40,
     height: 40,
@@ -1266,6 +1302,17 @@ const styles = StyleSheet.create({
   },
   headerIconSlotPressed: {
     backgroundColor: colors.surfaceContainerHigh,
+  },
+  profileBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
   },
   settingsModalBackdrop: {
     flex: 1,

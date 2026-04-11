@@ -1,13 +1,25 @@
 import { Button } from "@/components";
+import { logger } from "@/lib/logger";
 import { OCEAN_QUESTIONS_V1 } from "@/lib/oceanOnboarding";
+import { supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
 import { colors, radius, shadows, spacing, typography } from "@/lib/theme";
 import type { OceanAnswer } from "@/types/oceanProfile";
 import { Ionicons } from "@expo/vector-icons";
+import {
+  AudioModule,
+  AudioQuality,
+  IOSOutputFormat,
+  RecordingPresets,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from "expo-audio";
+import type { RecordingOptions } from "expo-audio";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   AccessibilityInfo,
+  ActivityIndicator,
   Animated,
   Easing,
   KeyboardAvoidingView,
@@ -22,6 +34,22 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+const VOICE_RECORDING_OPTIONS: RecordingOptions = {
+  ...RecordingPresets.HIGH_QUALITY,
+  extension: ".m4a",
+  sampleRate: Platform.OS === "ios" ? 44100 : 16000,
+  numberOfChannels: 1,
+  bitRate: 128000,
+  android: { outputFormat: "mpeg4", audioEncoder: "aac", sampleRate: 16000 },
+  ios: {
+    outputFormat: IOSOutputFormat.MPEG4AAC,
+    audioQuality: AudioQuality.HIGH,
+  },
+  web: { mimeType: "audio/webm", bitsPerSecond: 128000 },
+};
+
+type VoiceState = "idle" | "recording" | "transcribing" | "error";
+
 const QUESTIONS = OCEAN_QUESTIONS_V1;
 const REQUIRED_COUNT = QUESTIONS.filter((q) => q.required).length;
 
@@ -34,7 +62,9 @@ export default function OnboardingQuestionsScreen() {
   const [screenState, setScreenState] = useState<ScreenState>("question");
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
 
+  const audioRecorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
   const inputRef = useRef<TextInput>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const charCountOpacity = useRef(new Animated.Value(0)).current;
@@ -180,6 +210,124 @@ export default function OnboardingQuestionsScreen() {
     }
   }
 
+  async function handleMicPress() {
+    if (voiceState === "recording") {
+      await stopAndTranscribe();
+    } else if (voiceState === "idle" || voiceState === "error") {
+      await startVoiceRecording();
+    }
+  }
+
+  async function startVoiceRecording() {
+    setVoiceState("recording");
+    try {
+      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
+      if (!granted) {
+        setVoiceState("idle");
+        return;
+      }
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: true,
+        interruptionMode: "doNotMix",
+        shouldPlayInBackground: false,
+        shouldRouteThroughEarpiece: false,
+      });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+    } catch (err) {
+      logger.error("onboarding: failed to start voice recording", err);
+      setVoiceState("error");
+    }
+  }
+
+  async function stopAndTranscribe() {
+    setVoiceState("transcribing");
+    try {
+      await audioRecorder.stop();
+    } catch {
+      setVoiceState("error");
+      return;
+    }
+
+    const uri = audioRecorder.uri;
+    if (!uri) {
+      setVoiceState("idle");
+      return;
+    }
+
+    try {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: false,
+        interruptionMode: "mixWithOthers",
+      });
+    } catch {
+      /* non-fatal */
+    }
+
+    try {
+      const transcript = await transcribeAnswerAudio(uri);
+      if (transcript) {
+        setAnswers((prev) => ({
+          ...prev,
+          [question.id]: prev[question.id]
+            ? `${prev[question.id]} ${transcript}`
+            : transcript,
+        }));
+      }
+      setVoiceState("idle");
+    } catch (err) {
+      logger.error("onboarding: transcribe-answer failed", err);
+      setVoiceState("error");
+    }
+  }
+
+  async function transcribeAnswerAudio(uri: string): Promise<string> {
+    const filename = uri.split("/").pop()?.split("?")[0] ?? "recording.m4a";
+    const mimeType = Platform.OS === "web" ? "audio/webm" : "audio/mp4";
+    const endpoint = `${supabaseUrl}/functions/v1/transcribe-answer`;
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+
+    const formData = new FormData();
+    if (Platform.OS === "web") {
+      const res = await fetch(uri);
+      const blob = await res.blob();
+      formData.append(
+        "audio",
+        new File([blob], filename, { type: blob.type || mimeType }),
+      );
+    } else {
+      formData.append("audio", {
+        uri,
+        name: filename,
+        type: mimeType,
+      } as unknown as Blob);
+    }
+
+    return new Promise<string>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", endpoint);
+      xhr.setRequestHeader(
+        "Authorization",
+        `Bearer ${accessToken ?? supabaseAnonKey}`,
+      );
+      xhr.setRequestHeader("apikey", supabaseAnonKey);
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const body = JSON.parse(xhr.responseText) as { text?: string };
+          resolve(body.text ?? "");
+        } else {
+          reject(new Error(`transcribe-answer HTTP ${xhr.status}`));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Network error"));
+      xhr.send(formData);
+    });
+  }
+
   const showBackButton =
     screenState === "optional-transition" ||
     (screenState === "question" && currentIndex > 0);
@@ -290,19 +438,73 @@ export default function OnboardingQuestionsScreen() {
                   textAlignVertical="top"
                   returnKeyType={isLastRequired ? "done" : "next"}
                   blurOnSubmit={false}
-                  style={styles.textInput}
+                  editable={
+                    voiceState !== "recording" && voiceState !== "transcribing"
+                  }
+                  style={[
+                    styles.textInput,
+                    (voiceState === "recording" ||
+                      voiceState === "transcribing") &&
+                      styles.textInputVoiceActive,
+                  ]}
                   accessibilityLabel={question.text}
                   accessibilityHint="Your answer is private and will not be shared"
                   testID={`question-input-${question.id}`}
                 />
 
-                {/* Character count */}
-                <Animated.Text
-                  style={[styles.charCount, { opacity: charCountOpacity }]}
-                >
-                  {currentAnswer.length}{" "}
-                  {currentAnswer.length === 1 ? "character" : "characters"}
-                </Animated.Text>
+                {/* Voice + char count row */}
+                <View style={styles.inputFooterRow}>
+                  <Animated.Text
+                    style={[styles.charCount, { opacity: charCountOpacity }]}
+                  >
+                    {currentAnswer.length}{" "}
+                    {currentAnswer.length === 1 ? "character" : "characters"}
+                  </Animated.Text>
+
+                  <View style={styles.voiceControls}>
+                    {voiceState === "recording" && (
+                      <Text style={styles.voiceStatusText}>Recording…</Text>
+                    )}
+                    {voiceState === "transcribing" && (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    )}
+                    {voiceState === "error" && (
+                      <Text style={styles.voiceErrorText}>Tap to retry</Text>
+                    )}
+                    <Pressable
+                      onPress={() => void handleMicPress()}
+                      disabled={voiceState === "transcribing"}
+                      style={({ pressed }) => [
+                        styles.micButton,
+                        voiceState === "recording" && styles.micButtonRecording,
+                        pressed &&
+                          voiceState !== "recording" &&
+                          styles.micButtonPressed,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        voiceState === "recording"
+                          ? "Stop recording and transcribe"
+                          : "Speak your answer"
+                      }
+                      testID={`question-mic-${question.id}`}
+                    >
+                      <Ionicons
+                        name={
+                          voiceState === "recording"
+                            ? "stop-circle"
+                            : "mic-outline"
+                        }
+                        size={20}
+                        color={
+                          voiceState === "recording"
+                            ? colors.onError
+                            : colors.primary
+                        }
+                      />
+                    </Pressable>
+                  </View>
+                </View>
               </>
             )}
           </Animated.View>
@@ -437,11 +639,46 @@ const styles = StyleSheet.create({
     marginTop: spacing.s6,
     textAlignVertical: "top",
   },
+  inputFooterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.s2,
+    minHeight: 32,
+  },
   charCount: {
     ...typography.labelMd,
     color: colors.outlineVariant,
-    alignSelf: "flex-end",
-    marginTop: spacing.s2,
+  },
+  textInputVoiceActive: {
+    opacity: 0.5,
+  },
+  voiceControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.s2,
+  },
+  voiceStatusText: {
+    ...typography.labelMd,
+    color: colors.primary,
+  },
+  voiceErrorText: {
+    ...typography.labelMd,
+    color: colors.error,
+  },
+  micButton: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    backgroundColor: colors.surfaceContainerHigh,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micButtonRecording: {
+    backgroundColor: colors.error,
+  },
+  micButtonPressed: {
+    backgroundColor: colors.primaryContainer,
   },
   transitionCard: {
     marginTop: spacing.s8,
