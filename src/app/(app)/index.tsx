@@ -1,4 +1,5 @@
-import { Button } from "@/components";
+import { Button, MorningMessageCard } from "@/components";
+import { useOnboardingContext } from "@/contexts/OnboardingContext";
 import { useAuth } from "@/hooks/useAuth";
 import {
   buildThoughtPayload,
@@ -98,6 +99,7 @@ function startOfLocalDay(): Date {
 
 export default function QuickCaptureScreen() {
   const { session, signOut } = useAuth();
+  const { onboardingComplete } = useOnboardingContext();
   const { width } = useWindowDimensions();
   const audioRecorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(audioRecorder, 250);
@@ -130,6 +132,15 @@ export default function QuickCaptureScreen() {
   const [leadTime, setLeadTime] = useState<LeadTime>("15min");
   const [morningTime, setMorningTime] = useState("07:30");
   const [morningPickerVisible, setMorningPickerVisible] = useState(false);
+
+  // Morning message
+  const [isMorningWindow, setIsMorningWindow] = useState(false);
+  const [morningMessage, setMorningMessage] = useState<string | undefined>(
+    undefined,
+  );
+  const [morningMessageLoading, setMorningMessageLoading] = useState(false);
+  const [morningMessageError, setMorningMessageError] = useState(false);
+  const [morningMessageDismissed, setMorningMessageDismissed] = useState(false);
 
   const successOpacity = useRef(new Animated.Value(0)).current;
   const [successVisible, setSuccessVisible] = useState(false);
@@ -178,6 +189,13 @@ export default function QuickCaptureScreen() {
       }
     })();
   }, [settingsVisible]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadMorningMessage captures userId via closure; userId change should re-run
+  const loadMorningMessageMemo = useCallback(() => {
+    void loadMorningMessage();
+  }, [userId]);
+
+  useFocusEffect(loadMorningMessageMemo);
 
   useEffect(() => {
     const recorder = audioRecorder;
@@ -253,6 +271,85 @@ export default function QuickCaptureScreen() {
         useNativeDriver: true,
       }),
     ]).start(() => setSuccessVisible(false));
+  }
+
+  async function loadMorningMessage() {
+    const { data: prefData } = await supabase
+      .from("user_preferences")
+      .select("key, value")
+      .eq("user_id", userId)
+      .in("key", ["morning_notification_time"]);
+
+    let morningPrefTime = "07:30";
+    for (const row of prefData ?? []) {
+      if (row.key === "morning_notification_time") {
+        morningPrefTime = row.value as string;
+      }
+    }
+
+    const now = new Date();
+    const [hourStr, minuteStr] = morningPrefTime.split(":");
+    const morningHour = Number.parseInt(hourStr, 10);
+    const morningMinute = Number.parseInt(minuteStr, 10);
+    const morningStart = new Date(now);
+    morningStart.setHours(morningHour, morningMinute, 0, 0);
+    const noon = new Date(now);
+    noon.setHours(12, 0, 0, 0);
+
+    const inWindow = now >= morningStart && now < noon;
+    setIsMorningWindow(inWindow);
+    if (!inWindow) return;
+
+    setMorningMessageLoading(true);
+    setMorningMessageError(false);
+
+    try {
+      const today = now.toISOString().split("T")[0];
+      const { data: existing } = await supabase
+        .from("morning_messages")
+        .select("id, message, shown_at")
+        .eq("user_id", userId)
+        .eq("generated_for_date", today)
+        .maybeSingle();
+
+      if (existing?.message) {
+        setMorningMessage(existing.message as string);
+        if (!existing.shown_at) {
+          await supabase
+            .from("morning_messages")
+            .update({ shown_at: new Date().toISOString() })
+            .eq("id", existing.id);
+        }
+        return;
+      }
+
+      const { data: fnData, error: fnError } = await supabase.functions.invoke(
+        "generate-morning-message",
+      );
+
+      if (fnError) throw fnError;
+
+      const message = (fnData as { message: string } | null)?.message ?? "";
+      setMorningMessage(message);
+
+      const { data: inserted } = await supabase
+        .from("morning_messages")
+        .insert({
+          user_id: userId,
+          generated_for_date: today,
+          message,
+          shown_at: new Date().toISOString(),
+        })
+        .select("id")
+        .maybeSingle();
+
+      logger.debug("morning message inserted", { id: inserted?.id });
+    } catch (err) {
+      logger.error("loadMorningMessage failed", err);
+      setMorningMessageError(true);
+    } finally {
+      setMorningMessageLoading(false);
+    }
   }
 
   async function handleTextCapture() {
@@ -403,7 +500,11 @@ export default function QuickCaptureScreen() {
       );
     } else {
       // XHR (used below) handles the RN { uri, name, type } pattern natively
-      formData.append("audio", { uri, name: filename, type: mimeType } as unknown as Blob);
+      formData.append("audio", {
+        uri,
+        name: filename,
+        type: mimeType,
+      } as unknown as Blob);
     }
     formData.append("thought_id", thoughtId);
     formData.append("transcription_language", transcriptionLanguageCode);
@@ -434,13 +535,20 @@ export default function QuickCaptureScreen() {
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("POST", endpoint);
-        xhr.setRequestHeader("Authorization", `Bearer ${accessToken ?? supabaseAnonKey}`);
+        xhr.setRequestHeader(
+          "Authorization",
+          `Bearer ${accessToken ?? supabaseAnonKey}`,
+        );
         xhr.setRequestHeader("apikey", supabaseAnonKey);
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve();
           } else {
-            reject(new Error(`Transcribe function returned ${xhr.status}: ${xhr.responseText}`));
+            reject(
+              new Error(
+                `Transcribe function returned ${xhr.status}: ${xhr.responseText}`,
+              ),
+            );
           }
         };
         xhr.onerror = () => reject(new Error("Network error sending audio"));
@@ -542,23 +650,68 @@ export default function QuickCaptureScreen() {
               </View>
               <Text style={styles.brandMark}>Sanctuary</Text>
             </View>
-            <Pressable
-              style={({ pressed }) => [
-                styles.headerIconSlot,
-                pressed && styles.headerIconSlotPressed,
-              ]}
-              onPress={() => setSettingsVisible(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Open settings"
-              testID="settings-button"
-            >
-              <Ionicons
-                name="settings-outline"
-                size={22}
-                color={colors.primary}
-              />
-            </Pressable>
+            <View style={styles.headerRight}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.headerIconSlot,
+                  pressed && styles.headerIconSlotPressed,
+                ]}
+                onPress={() =>
+                  router.push(
+                    onboardingComplete
+                      ? "/(onboarding)/profile"
+                      : "/(onboarding)",
+                  )
+                }
+                accessibilityRole="button"
+                accessibilityLabel={
+                  onboardingComplete
+                    ? "View your personality profile"
+                    : "Set up your personality profile"
+                }
+                testID="profile-button"
+              >
+                <Ionicons
+                  name={onboardingComplete ? "person" : "person-outline"}
+                  size={22}
+                  color={colors.primary}
+                />
+                {!onboardingComplete && (
+                  <View
+                    style={styles.profileBadge}
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                  />
+                )}
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.headerIconSlot,
+                  pressed && styles.headerIconSlotPressed,
+                ]}
+                onPress={() => setSettingsVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Open settings"
+                testID="settings-button"
+              >
+                <Ionicons
+                  name="settings-outline"
+                  size={22}
+                  color={colors.primary}
+                />
+              </Pressable>
+            </View>
           </View>
+
+          {isMorningWindow && !morningMessageDismissed && (
+            <MorningMessageCard
+              messageText={morningMessage}
+              isLoading={morningMessageLoading}
+              hasError={morningMessageError}
+              onRetry={() => void loadMorningMessage()}
+              onDismiss={() => setMorningMessageDismissed(true)}
+            />
+          )}
 
           <View style={styles.heroBlock}>
             <Text
@@ -1141,6 +1294,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   headerIconSlot: {
     width: 40,
     height: 40,
@@ -1150,6 +1308,17 @@ const styles = StyleSheet.create({
   },
   headerIconSlotPressed: {
     backgroundColor: colors.surfaceContainerHigh,
+  },
+  profileBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
   },
   settingsModalBackdrop: {
     flex: 1,

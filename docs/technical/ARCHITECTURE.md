@@ -12,7 +12,7 @@ Read by: All agents. Always read before making implementation decisions.
 
 # System Architecture
 
-> Last updated: 2026-04-05 (Supabase deploy GitHub Action; Lists subsystem planned: tasks #029–#036; Reminders subsystem: ADR-004; AI I/O observability: ADR-003)
+> Last updated: 2026-04-11 (OCEAN onboarding & morning messages: ADR-005; Supabase deploy GitHub Action; Lists subsystem planned: tasks #029–#036; Reminders subsystem: ADR-004; AI I/O observability: ADR-003)
 > Version: 0.1.0
 
 ---
@@ -26,6 +26,7 @@ PRD v1.1 documents user-scoped topics and the transcribe/assign-topics pipeline.
 - **Voice**: `/transcribe` writes the transcript then runs topic assignment in the same edge invocation (no separate client call).
 - **Text**: `/assign-topics` runs the same shared logic after insert.
 - **Reminders** (ADR-004): AI detects future time references in thought text after topic assignment (fire-and-forget, non-blocking). Detected reminders are stored as **`inactive`** rows in `reminders` until the user approves or dismisses. Approved rows become **`active`** with a client-scheduled local notification via `expo-notifications` — no server-side scheduler in v1. PRD v1.0 section 7 listed reminders as out-of-scope; the product owner explicitly directed this addition.
+- **OCEAN onboarding & morning messages** (ADR-005): After sign-up, users answer 5–7 reflective questions. A `score-ocean-profile` edge function scores their answers against the OCEAN (Big Five) model via OpenRouter and stores the profile in `ocean_profiles`. Each morning, a `generate-morning-message` edge function produces a personalised message from the profile; a recurring daily local notification nudges the user to open the app; an in-app card on the Quick Capture screen shows the generated message. Onboarding completion is gated via a route guard in the root layout, held behind the Expo splash screen to avoid flash.
 - **Lists** (tasks #029–#036, planned): AI detects whether a captured thought is primarily a list (shopping, tasks, ideas, etc.) — fire-and-forget after topic assignment, same pattern as reminders. Detected lists create `user_lists` + `list_items` rows. The AI also detects **continuation** — when a new thought references an existing list title, new items are appended rather than creating a duplicate list. Each item can be marked done in the UI; marking all items done closes the list. ADR-005 pending architecture wave.
 
 ---
@@ -56,6 +57,8 @@ The architecture prioritizes simplicity and fast iteration: there is no custom A
 |    +-- assign-topics (text -> topics)     |
 |    +-- detect-reminders (fire-and-forget) |
 |    +-- detect-list (fire-and-forget, planned)|
+|    +-- score-ocean-profile (onboarding)   |
+|    +-- generate-morning-message (daily)   |
 +------------------+-----------------------+
                    |
                    |  OpenRouter API
@@ -162,6 +165,20 @@ Full spec: `.assets/reminders-ux-spec.md`. Summary of new and modified surfaces:
 
 **No new design tokens** are introduced by this feature. All values are drawn from the existing `src/lib/theme.ts` token set.
 
+### OCEAN onboarding & morning messages (task #038, @ui-ux-designer)
+
+Full spec: `.assets/onboarding-ocean-ux-spec.md`. Summary of new surfaces:
+
+**New components**:
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `OnboardingProgressStepper` | Inline in `(onboarding)/questions.tsx` | Horizontal row of 7 dots (5 primary + 2 optional). Active dot: `24×8pt` pill, `colors.primary`. Completed dot: `8×8pt` circle, `colors.primary` at 50% opacity. Upcoming dot: `8×8pt` circle, `colors.outlineVariant`. Optional dots (6–7): same sizing as upcoming/completed but `opacity: 0.4`. Active dot morphs from circle to pill via `LayoutAnimation` (150ms ease-out; `prefers-reduced-motion`: instant). The stepper row carries a single `accessibilityLabel` announcing current position (e.g. `"Question 2 of 5"`); individual dots are `accessibilityElementsHidden={true}`. |
+| `QuestionCard` | Inline in `(onboarding)/questions.tsx` | `Card` component (`variant="elevated"`, `radius.lg` / 24pt, `padding: spacing.s8`, ambient `shadows.card`). Contains: (1) question number label (`typography.labelMd`, `colors.outlineVariant`), (2) question text (`typography.headlineMd`, `colors.onSurface`), (3) hint text `"Write as much or as little as feels right."` (`typography.labelMd`, `colors.secondary`). Slides in/out horizontally on question advance (250ms, `cubic-bezier(0.4,0,0.2,1)`; cross-fade under `prefers-reduced-motion`). Question text `TextInput` rendered adjacent (not inside card): `multiline`, `minHeight: 120pt`, `maxHeight: 240pt`, `colors.surfaceContainerLow` background, `radius.lg`. Character count hint shown when focused (`typography.labelMd`, `colors.outlineVariant`). |
+| `MorningMessageCard` | `src/components/MorningMessageCard.tsx` | `Card` component (`variant="elevated"`, `radius.xl` / 32pt, `padding: spacing.s6`, ambient `shadows.card`). Rendered on Quick Capture screen between the header row and hero copy, during morning window only (`morning_notification_time ≤ local time < 12:00`). Top row: `"This morning"` label (`typography.labelMd`, `colors.outlineVariant`) + dismiss icon (`Ionicons close-outline`, 18pt, `colors.outlineVariant`, 36×36pt `Pressable`). Message body: `typography.bodyLg`, `colors.onSurface`; content above `maxHeight: 200pt` fades with a `LinearGradient` overlay. Bottom accent: 2pt × 40pt sage strip (`colors.primaryContainer`, `radius.full`). **Loading state**: skeleton bars (two `View` blocks, `colors.surfaceContainerHigh`, shimmer opacity 0.4↔0.8 loop at 1200ms; `prefers-reduced-motion`: static). **Error state**: `"Your morning message couldn't load."` copy + `"Try again"` text pressable (`colors.primary`). **Dismiss**: `translateY(0→-24pt)` + `opacity(1→0)`, 250ms ease-in, session-only (not persisted). Props: `messageText?: string`, `isLoading: boolean`, `hasError: boolean`, `onDismiss: () => void`, `onRetry: () => void`. |
+
+**No new design tokens** are introduced by this feature. All values are drawn from the existing `src/lib/theme.ts` token set.
+
 ---
 
 ## Mobile Architecture
@@ -255,6 +272,8 @@ All edge functions are deployed to Supabase and live under `supabase/functions/`
 | `detect-reminders` | POST | JSON `thought_id` + `text` (+ optional `current_iso_timestamp`) → AI extraction → zero or more `inactive` `reminders` rows | Implemented — shared `_shared/detect-reminders.ts` invoked fire-and-forget from `transcribe` and `assign-topics`; same module backs this standalone endpoint |
 | `detect-list` | POST | JSON `thought_id` + `text` → AI detection of list intent + item extraction + continuation matching against existing `user_lists` titles → `user_lists` + `list_items` rows | Planned — tasks #029–#036; shared `_shared/detect-list.ts` invoked fire-and-forget from `transcribe` and `assign-topics` |
 | `reflection-prompt` | POST | Receives thought text, returns an AI-generated reflection question — does not persist to DB | Planned — task #010 |
+| `score-ocean-profile` | POST | JSON `{ answers: [{ question, answer }] }` → OpenRouter OCEAN scoring → `ocean_profiles` upsert | Planned — tasks #038–#039 (ADR-005) |
+| `generate-morning-message` | POST | No body (reads caller's `ocean_profiles` row) → OpenRouter message generation → `morning_messages` insert → returns `message_text` | Planned — tasks #040–#041 (ADR-005) |
 
 All edge functions:
 - Require a valid Supabase session token on `POST` (`getUser()` with anon client + user JWT)
@@ -490,6 +509,137 @@ If multi-device sync or higher delivery reliability is needed, a future ADR can 
 ### Cross-agent handoffs (v1 — complete)
 
 Shipped work: migration `004_reminders`, `_shared/detect-reminders.ts`, `transcribe` / `assign-topics` fire-and-forget hooks, `detect-reminders` edge function, mobile UI and `src/lib/notifications.ts`, tests (#027), USER_GUIDE (#028). Future changes should update **DATABASE.md**, **API.md**, and this section together.
+
+---
+
+## OCEAN Onboarding & Morning Messages Subsystem
+
+> **ADR**: ADR-005. **Tasks**: #037 (architecture), #038–#042 (implementation — planned).
+> Added: 2026-04-11
+
+### Overview
+
+After a new user signs up, Sanctuary presents a 5–7 question reflective onboarding flow. The user's answers are scored by AI against the OCEAN (Big Five) model (Openness, Conscientiousness, Extraversion, Agreeableness, Neuroticism). The resulting profile is stored in `ocean_profiles` and drives a personalised daily morning message. Each morning, a local notification nudges the user; opening the app shows an AI-generated card on the Quick Capture screen. This is a simplified pre-v2 variant using static onboarding data rather than the longitudinal memory layer (FR-060–063) deferred to the paid v2 tier.
+
+### Components
+
+| Component | Location | Owner | Description |
+|-----------|----------|-------|-------------|
+| `(onboarding)` route group | `src/app/(onboarding)/` | @react-native-developer | Stack of 4 screens: intro (`index.tsx`), questions (`questions.tsx`), scoring loading state (`scoring.tsx`), completion (`complete.tsx`). No tab bar. |
+| Root route guard | `src/app/_layout.tsx` | @react-native-developer | Extends existing splash-screen hold to also resolve onboarding status (AsyncStorage first, then `ocean_profiles` query). Redirects to `(onboarding)` if profile absent; to `(auth)` if unauthenticated. Uses `<Redirect>` (no back-stack entry). |
+| `score-ocean-profile` (edge function) | `supabase/functions/score-ocean-profile/index.ts` | @backend-developer | `POST` — accepts `{ answers: [{ question: string, answer: string }] }` + user JWT. Calls OpenRouter with a structured-output prompt; stores `{ openness, conscientiousness, extraversion, agreeableness, neuroticism }` (floats 0–1) plus raw `answers` JSONB and `question_set_version` in `ocean_profiles`. |
+| `generate-morning-message` (edge function) | `supabase/functions/generate-morning-message/index.ts` | @backend-developer | `POST` — no request body; reads caller's `ocean_profiles` row; calls OpenRouter; inserts/upserts row in `morning_messages` keyed by `(user_id, generated_for_date)`; returns `{ message_text }`. |
+| `ocean_profiles` table | `supabase/migrations/005_ocean_profiles.sql` | @database-expert | One row per user (UNIQUE `user_id`). Columns: `openness`, `conscientiousness`, `extraversion`, `agreeableness`, `neuroticism` (float, 0–1), `answers` (jsonb), `question_set_version` (text, default `'v1'`), `scored_at`. RLS: `user_id = auth.uid()`. |
+| `morning_messages` table | `supabase/migrations/005_ocean_profiles.sql` | @database-expert | One row per user per day (UNIQUE `user_id, generated_for_date`). Columns: `message_text`, `generated_for_date` (date), `shown_at` (timestamptz, nullable). RLS: `user_id = auth.uid()`. |
+| Morning message card | `src/app/(app)/index.tsx` | @react-native-developer | On Quick Capture screen: if current local time is within the morning window (`morning_notification_time` ≤ now < 12:00), query `morning_messages` for today. If absent, call `generate-morning-message`. Display as an elevated `Card` above the capture controls. Dismiss hides for the session; `shown_at` is set on first render. |
+| Daily morning notification | `src/lib/notifications.ts` | @react-native-developer | On onboarding completion, schedule a repeating `DailyTriggerInput` local notification at `morning_notification_time` via `expo-notifications`. Store the returned identifier in `user_preferences` key `morning_notification_id`. Reschedule when preference changes. |
+| `user_preferences` additions | Existing `user_preferences` table | — | New key: `morning_notification_id` (text) — the `expo-notifications` identifier for the daily notification, enabling cancellation and rescheduling. Existing `morning_notification_time` key (already present from ADR-004) is the source of truth for scheduling. |
+
+### Onboarding Flow
+
+```
+New user signs up
+  -> Auth session established
+  -> Root _layout.tsx checks AsyncStorage for 'sanctuary:onboarding_complete:<userId>'
+       |--- key absent / false ---> <Redirect href="/(onboarding)" />
+       |--- key present (true) --> render (app) normally
+  -> (onboarding)/index.tsx — welcome screen, brand intro
+  -> (onboarding)/questions.tsx — 5 reflective questions (one per OCEAN dimension)
+       Optional: questions 6-7 shown after Q5 with skip affordance
+  -> (onboarding)/scoring.tsx — "Getting to know you…" loading state
+       -> POST /score-ocean-profile (user JWT + answers array)
+       -> OpenRouter scores answers -> OCEAN floats stored in ocean_profiles
+  -> (onboarding)/complete.tsx — "Your sanctuary is ready" + first capture CTA
+       -> AsyncStorage.setItem('sanctuary:onboarding_complete:<userId>', 'true')
+       -> Schedule daily morning notification (DailyTriggerInput)
+       -> router.replace('/(app)')
+```
+
+### Morning Message Generation Flow
+
+```
+App opens during morning window (morning_notification_time ≤ local time < 12:00)
+  -> Client checks morning_messages WHERE user_id = me AND generated_for_date = today
+       |--- row exists (cached) ---> render card with cached message_text
+       |--- row absent -----------> POST /generate-morning-message (user JWT, no body)
+                                         -> edge function reads ocean_profiles for user
+                                         -> OpenRouter generates personalised message
+                                         -> INSERT into morning_messages (upsert by date)
+                                         -> returns { message_text }
+                                    -> render card; set shown_at on morning_messages row
+Daily notification:
+  -> repeating DailyTriggerInput at morning_notification_time fires on device
+  -> generic notification: "Your morning reflection is ready — open Sanctuary"
+  -> tap opens app -> morning window check above runs -> message card shown
+```
+
+### Schema Summary
+
+Canonical DDL: `supabase/migrations/005_ocean_profiles.sql` (planned).
+
+**`ocean_profiles`**:
+- `id` uuid PK, `user_id` uuid UNIQUE FK → `auth.users` (ON DELETE CASCADE)
+- `openness`, `conscientiousness`, `extraversion`, `agreeableness`, `neuroticism` — float, NOT NULL, CHECK (0 ≤ value ≤ 1)
+- `answers` jsonb (array of `{ question, answer }` — retained for re-scoring on prompt updates)
+- `question_set_version` text NOT NULL DEFAULT `'v1'`
+- `scored_at`, `created_at`, `updated_at` timestamptz
+
+**`morning_messages`**:
+- `id` uuid PK, `user_id` uuid FK → `auth.users` (ON DELETE CASCADE)
+- `message_text` text NOT NULL
+- `generated_for_date` date NOT NULL
+- `shown_at` timestamptz NULL
+- `created_at` timestamptz
+- UNIQUE `(user_id, generated_for_date)`
+
+Both tables: RLS CRUD where `user_id = auth.uid()`.
+
+### Edge Function Contracts
+
+**`score-ocean-profile`**:
+- Input: `POST` with user JWT + `{ answers: [{ question: string; answer: string }], question_set_version?: string }`
+- OpenRouter prompt: structured output requesting `{ openness, conscientiousness, extraversion, agreeableness, neuroticism }` as floats 0–1; system prompt instructs independent per-dimension reasoning
+- Output: upserts `ocean_profiles` row; returns `{ openness, conscientiousness, extraversion, agreeableness, neuroticism, scored_at }`
+- Model resolution: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`
+- Logging: follows ADR-003 structured logging; `phase: "ocean_scoring"`; raw answers not logged (only `answer_count` and `question_set_version`)
+
+**`generate-morning-message`**:
+- Input: `POST` with user JWT (no body — user identity from JWT)
+- Reads `ocean_profiles` for the authenticated user; returns 404 if profile not found
+- OpenRouter prompt: given OCEAN scores, generate a single short morning message (≤ 3 sentences) that reflects the user's known tendencies back at them in a warm, non-prescriptive tone
+- Output: upserts `morning_messages` for today's date; returns `{ message_text, generated_for_date }`
+- Model resolution: `OPENROUTER_MORNING_MESSAGE_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`
+- Idempotent within a day: if a row for today already exists (possible if client retries), return existing message without calling OpenRouter
+- Logging: follows ADR-003; `phase: "morning_message"`; message text logged only as a character-count preview
+
+### Question Set (v1)
+
+Stored as `OCEAN_QUESTIONS_V1` constant in both the mobile client and edge function shared module.
+
+| # | Dimension | Question |
+|---|-----------|---------|
+| 1 | Openness | "What's something you've been curious about recently — an idea, a place, or a way of doing things that caught your attention?" |
+| 2 | Conscientiousness | "When you think about the things you want to get done, what tends to help you follow through — and what tends to get in the way?" |
+| 3 | Extraversion | "How do you tend to recharge after a busy or draining day? Describe what that usually looks like for you." |
+| 4 | Agreeableness | "Tell me about someone in your life you feel close to. What do you value most in that relationship?" |
+| 5 | Neuroticism | "What's been weighing on your mind lately? When that kind of feeling shows up, how do you usually sit with it?" |
+| 6 *(optional)* | Openness (depth) | "Is there a creative pursuit, habit, or new way of thinking you've been wanting to explore but haven't made space for yet?" |
+| 7 *(optional)* | Conscientiousness (depth) | "Describe a time when you felt really on top of things — organised, clear, in flow. What made that possible?" |
+
+Questions 1–5 are always shown. Questions 6–7 are optional extensions with a skip affordance. The `question_set_version` column enables future question revisions without invalidating existing profiles.
+
+### Observability
+
+Both edge functions follow the ADR-003 structured logging contract. Events use `phase: "ocean_scoring"` and `phase: "morning_message"` respectively. No raw answer content or message text in logs beyond truncated previews. Model, latency, and outcome (success / error) are logged per call.
+
+### Cross-Agent Handoffs (planned)
+
+| Agent | Tasks |
+|-------|-------|
+| @database-expert | Migration `005_ocean_profiles.sql`: `ocean_profiles`, `morning_messages` tables, RLS policies, indexes |
+| @backend-developer | `score-ocean-profile` and `generate-morning-message` edge functions; ADR-003 logging; OpenRouter prompt design |
+| @react-native-developer | `(onboarding)` route group screens; root layout route guard; morning message card on Quick Capture; daily notification scheduling in `src/lib/notifications.ts` |
+| @ui-ux-designer | Onboarding UX spec: question flow, scoring loading state, completion screen, morning message card design |
 
 ---
 

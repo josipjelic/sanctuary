@@ -4,7 +4,12 @@
  * OpenRouter payloads are nested objects (not JSON strings) for readable parsing after `event_message` decode.
  */
 
-export type AiLogPhase = "transcribe" | "topics" | "reminders";
+export type AiLogPhase =
+  | "transcribe"
+  | "topics"
+  | "reminders"
+  | "onboarding"
+  | "morning-message";
 
 export type AiLogEvent =
   | "ai.request.start"
@@ -13,7 +18,7 @@ export type AiLogEvent =
 
 export type AiLogPayload = {
   event: AiLogEvent;
-  /** Edge function name: transcribe | assign-topics */
+  /** Edge function name: transcribe | assign-topics | detect-reminders | score-ocean-profile | generate-morning-message */
   function: string;
   phase: AiLogPhase;
   model?: string;
