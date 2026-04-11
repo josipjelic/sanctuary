@@ -1,3 +1,4 @@
+import { supabase } from "@/lib/supabase";
 import type { OceanDimension } from "@/types/oceanProfile";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -56,8 +57,26 @@ const ONBOARDING_KEY_PREFIX = "sanctuary:onboarding_complete:";
 export async function checkOnboardingComplete(
   userId: string,
 ): Promise<boolean> {
-  const value = await AsyncStorage.getItem(`${ONBOARDING_KEY_PREFIX}${userId}`);
-  return value === "true";
+  // Fast path: local cache hit (same device, already onboarded)
+  const cached = await AsyncStorage.getItem(
+    `${ONBOARDING_KEY_PREFIX}${userId}`,
+  );
+  if (cached === "true") return true;
+
+  // Fallback: check the database so the flag travels across devices
+  const { data } = await supabase
+    .from("ocean_profiles")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (data) {
+    // Backfill the local cache so the next cold-start is instant
+    await AsyncStorage.setItem(`${ONBOARDING_KEY_PREFIX}${userId}`, "true");
+    return true;
+  }
+
+  return false;
 }
 
 export async function markOnboardingComplete(userId: string): Promise<void> {
