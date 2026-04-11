@@ -33,18 +33,18 @@ Apply this domain routing (mirrors the delegation table in CLAUDE.md):
 
 | Task involves... | Agent |
 |-----------------|-------|
-| New feature design, tech decisions, system integration, NFR concerns | `systems-architect` |
-| New user flows, interaction design, component specs, accessibility | `ui-ux-designer` |
-| Database schema, tables, migrations, indexes, query design | `database-expert` |
-| API endpoints, business logic, auth, background jobs, integrations | `backend-developer` |
-| UI components, pages, client state, styling, frontend performance | `frontend-developer` |
-| E2E tests, test strategy, coverage, Playwright specs | `qa-engineer` |
-| User guide updates, README, post-feature documentation | `documentation-writer` |
-| GitHub Actions workflows, deployment pipelines, CI config | `cicd-engineer` |
-| Dockerfiles, docker-compose, container setup | `docker-expert` |
-| Landing page copy, marketing content, SEO, meta tags | `copywriter-seo` |
+| New feature design, tech decisions, system integration, NFR concerns, ADRs | `planner` |
+| New user flows, interaction design, component specs, accessibility, copy, SEO | `designer` |
+| Database schema, tables, migrations, indexes, query design | `builder` (specify: database) |
+| API endpoints, business logic, auth, background jobs, integrations | `builder` (specify: backend) |
+| UI components, pages, client state, styling, frontend performance | `builder` (specify: frontend) |
+| React Native screens, navigation, native modules, mobile performance | `builder` (specify: mobile) |
+| E2E tests, test strategy, coverage, Playwright specs | `quality` |
+| User guide updates, README, post-feature documentation | `quality` |
+| GitHub Actions workflows, deployment pipelines, CI config | `infra` |
+| Dockerfiles, docker-compose, container setup | `infra` |
 
-Only include agents whose domain is genuinely needed. A small bug fix may need one agent. A new authenticated feature may need seven.
+Only include agents whose domain is genuinely needed. A small bug fix may need one agent. A new authenticated feature may need four or five.
 
 ---
 
@@ -54,31 +54,30 @@ For each pair of identified agents, determine whether they are **sequential** (o
 
 ### Hard sequential dependencies — not negotiable:
 
-1. **`systems-architect` → all implementation agents** when the task involves new system components, new technology choices, or cross-cutting architectural decisions. Architecture is decided before any implementation begins.
+1. **`planner` → all implementation agents** when the task involves new system components, new technology choices, or cross-cutting architectural decisions. Architecture is decided before any implementation begins.
 
-2. **`database-expert` → `backend-developer`** when the task requires new tables, columns, or schema changes. Backend needs the DDL spec before writing queries or migrations.
+2. **`builder` (database) → `builder` (backend)** when the task requires new tables, columns, or schema changes. Backend needs the DDL spec before writing queries or migrations.
 
-3. **`ui-ux-designer` → `frontend-developer`** when the task involves a new user flow, new page, or a component that requires a design spec. Frontend implements the spec — it does not invent UX decisions.
+3. **`designer` → `builder` (frontend)** when the task involves a new user flow, new page, or a component that requires a design spec. Frontend implements the spec — it does not invent UX decisions.
 
-4. **`backend-developer` → `frontend-developer`** when the frontend needs a new API endpoint. The endpoint must be implemented and documented in `API.md` before frontend can integrate it.
+4. **`builder` (backend) → `builder` (frontend)** when the frontend needs a new API endpoint. The endpoint must be implemented and documented in `API.md` before frontend can integrate it.
 
-5. **`copywriter-seo` → `frontend-developer`** when the task involves a public-facing page. Copy and meta specs must precede page implementation.
+5. **`designer` (copy spec) → `builder` (frontend)** when the task involves a public-facing page. Copy and meta specs must precede page implementation.
 
-6. **all implementation agents → `documentation-writer`** — docs are always last, written after implementation is stable.
+6. **all implementation agents → `quality` (documentation)** — docs are always last, written after implementation is stable.
 
-7. **`systems-architect` → `cicd-engineer`** when the task involves new deployment environments or significant infrastructure changes.
+7. **`planner` → `infra`** when the task involves new deployment environments or significant infrastructure changes.
 
 ### Parallel-safe combinations — these can run simultaneously:
 
-- `ui-ux-designer` ↔ `backend-developer` — independent domains
-- `ui-ux-designer` ↔ `database-expert` — independent domains
-- `cicd-engineer` ↔ any implementation agent (unless new environments needed — see rule 7)
-- `docker-expert` ↔ any implementation agent
-- `copywriter-seo` ↔ `systems-architect`, `database-expert`, `backend-developer` — independent domains
+- `designer` ↔ `builder` (backend) — independent domains
+- `designer` ↔ `builder` (database) — independent domains
+- `infra` ↔ any `builder` invocation (unless new environments needed — see rule 7)
+- `quality` (tests, TDD mode) ↔ `builder` — independent when writing tests ahead of implementation
 
 ### Judgment calls:
 
-- **`qa-engineer` timing**: default to running QA in parallel with implementation (TDD) for logic-heavy tasks (auth, payments, data processing); run QA after implementation for UI-heavy tasks. State your reasoning in the wave plan.
+- **`quality` timing**: default to running QA in parallel with implementation (TDD) for logic-heavy tasks (auth, payments, data processing); run QA after implementation for UI-heavy tasks. State your reasoning in the wave plan.
 
 ---
 
@@ -124,7 +123,7 @@ Wait for explicit `y` before continuing. If the user requests changes, revise an
 
 ## Phase 5 — Backlog Registration
 
-Before any implementation begins, invoke `@project-manager` with this instruction:
+Before any implementation begins, invoke `@planner` with this instruction:
 
 ```
 Register the following task decomposition in TODO.md and create corresponding .tasks/ files.
@@ -141,7 +140,7 @@ For each item:
 - Report back the assigned NNN task IDs
 ```
 
-Wait for the project-manager to return the assigned task IDs before proceeding.
+Wait for the planner to return the assigned task IDs before proceeding.
 
 ---
 
@@ -191,8 +190,8 @@ You are being invoked as part of an orchestrated execution of the following task
 
 **Context from prior waves**:
 [For each prior wave, list what the agent did and which docs they updated:]
-- @systems-architect (Wave 1): [brief summary of architectural decisions]. Updated: docs/technical/ARCHITECTURE.md, docs/technical/DECISIONS.md
-- @database-expert (Wave 2): [brief summary of schema decisions]. Updated: docs/technical/DATABASE.md
+- @planner (Wave 1): [brief summary of architectural decisions]. Updated: docs/technical/ARCHITECTURE.md, docs/technical/DECISIONS.md
+- @builder — database (Wave 2): [brief summary of schema decisions]. Updated: docs/technical/DATABASE.md
 [etc.]
 
 **Read these docs before starting** (prior agents have updated them):

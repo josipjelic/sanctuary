@@ -13,34 +13,56 @@ cd "$SYNC_TMP" && git sparse-checkout set .claude
 
 If the clone fails (no internet, repo moved, etc.) stop immediately and report the error.
 
-### 2. Show a diff summary
+### 2. Build file lists
 
-Compare `$SYNC_TMP/.claude/` against the project's `.claude/` directory and report:
-- **New files** — present in upstream but not locally
-- **Modified files** — present in both but with different content
-- **Local-only files** — present locally but not in upstream (these will be **kept unchanged**)
+```bash
+# All relative paths in upstream .claude/ (excluding .DS_Store)
+UPSTREAM_FILES=$(find "$SYNC_TMP/.claude" -type f | sed "s|$SYNC_TMP/.claude/||" | grep -v '\.DS_Store' | sort)
 
-If there are no changes, say so and skip to clean-up.
+# Read existing manifest (empty on first sync)
+MANIFEST_PATH=".claude/.template-manifest"
+MANIFEST_FILES=$([ -f "$MANIFEST_PATH" ] && cat "$MANIFEST_PATH" || echo "")
+```
 
-### 3. Ask for confirmation
+### 3. Show a diff summary
 
-Present the diff summary and ask the user: "Apply these changes? (yes/no)"
+Compare upstream against the project's `.claude/` directory and report:
+
+- **New files** — in upstream, not locally
+- **Modified files** — in both but content differs
+- **To delete** — in `.template-manifest` but no longer in upstream (template remnants that moved or were removed). If no manifest exists yet, this list will be empty.
+- **Local-only (kept)** — locally present, not in manifest, not in upstream (project-specific customisations — never touched)
+
+If there are no changes at all, say so and skip to clean-up.
+
+### 4. Ask for confirmation
+
+Present the full diff summary — including the deletion list — and ask the user: "Apply these changes? (yes/no)"
 
 Do not proceed until the user confirms.
 
-### 4. Apply the changes
+### 5. Apply the changes
 
-Copy all files from `$SYNC_TMP/.claude/` into the project's `.claude/` directory:
-- **Overwrite** files that exist in both
-- **Add** files that are new in upstream
-- **Do not delete** any local files that don't exist upstream — they may be project-specific customisations
+```bash
+# Delete template remnants (in manifest but gone from upstream)
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  if ! echo "$UPSTREAM_FILES" | grep -qx "$f"; then
+    rm -f ".claude/$f"
+  fi
+done <<< "$MANIFEST_FILES"
 
-Use `cp -r "$SYNC_TMP/.claude/." .claude/` from the project root.
+# Add/overwrite all upstream files
+cp -r "$SYNC_TMP/.claude/." .claude/
 
-### 5. Report
+# Rewrite the manifest with the current upstream file list
+echo "$UPSTREAM_FILES" > "$MANIFEST_PATH"
+```
 
-List each file that was added or updated.
+### 6. Report
 
-### 6. Clean up
+List each file that was added, updated, or deleted.
+
+### 7. Clean up
 
 Remove the temp directory: `rm -rf "$SYNC_TMP"`

@@ -54,6 +54,22 @@ Summaries only — link to task files or PRD sections for full specs when helpfu
 
 ---
 
+## Imagery sources
+
+When specs call for stock photography or illustration (and `.assets/` does not supply it), use **vetted catalogs** only — never generic web search without a verifiable license.
+
+| Kind | Sources | Handoff to implementation |
+|------|---------|---------------------------|
+| Photos | [Unsplash](https://unsplash.com), [Pexels](https://www.pexels.com), [Pixabay](https://pixabay.com), [Nappy](https://www.nappy.co/) | Source name, creator (if known), license link, attribution string if required |
+| Aggregator | [Openverse](https://openverse.org) (filter e.g. CC0) | Exact license per asset; verify metadata on the result page |
+| Illustration | [unDraw](https://undraw.co/), [Open Peeps](https://www.openpeeps.com/), [Storyset](https://storyset.com/) (attribution often required on free tier) | Same as photos; note Storyset/Freepik attribution rules when used |
+
+**Accessibility**: informative imagery gets descriptive `alt`; purely decorative stock uses `alt=""`. Record which applies in the spec.
+
+See @ui-ux-designer agent: **Photography, illustration, and stock imagery** for full protocol and caveats (model/property/trademark).
+
+---
+
 ## Spacing system
 
 [e.g., 4px base unit — all spacing is multiples of 4: 4, 8, 12, 16, 24, 32, 48, 64]
