@@ -11,7 +11,7 @@ Read by: All agents building or integrating with backend functionality.
 > **Backend**: Supabase (PostgreSQL + Auth + Storage + Edge Functions)
 > **Client**: `@supabase/supabase-js` — used directly in the mobile app and in edge functions
 > **Authentication**: Supabase JWT (managed by Supabase Auth). Pass the session token via the Supabase client — it is sent automatically as a Bearer token.
-> **Last updated**: 2026-04-11 (added score-ocean-profile + generate-morning-message; OCEAN onboarding subsystem tasks #039–#040; FR-060, FR-070)
+> **Last updated**: 2026-04-12 (added journal-next-question + journal-save-session; AI-Guided Journal subsystem task #046; FR-030, FR-060–063)
 
 ---
 
@@ -20,7 +20,7 @@ Read by: All agents building or integrating with backend functionality.
 Sanctuary does not have a traditional REST API server. The mobile app interacts with Supabase directly using the Supabase JS client for:
 - **Auth**: Sign up, sign in, sign out, password reset
 - **Database**: Direct table queries (filtered by RLS — users only see their own rows)
-- **Edge Functions**: AI-powered endpoints — `transcribe` (multipart audio → transcript + topic assignment + reminder detection), `assign-topics` (typed capture path, also triggers reminder detection), `detect-reminders` (explicit reminder extraction endpoint), `score-ocean-profile` (OCEAN personality scoring from onboarding answers), and `generate-morning-message` (personalised morning message from OCEAN profile). All call OpenRouter server-side. **Voice audio is not stored in Supabase Storage** in v1; it is posted to `transcribe` and discarded after processing. **Observability**: AI-related steps emit structured lines to Edge Function logs — see [Observability (AI edge functions)](#observability-ai-edge-functions) below; policy and full contract: [ADR-003](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs) and `docs/technical/ARCHITECTURE.md` (Observability and AI I/O logging).
+- **Edge Functions**: AI-powered endpoints — `transcribe` (multipart audio → transcript + topic assignment + reminder detection), `assign-topics` (typed capture path, also triggers reminder detection), `detect-reminders` (explicit reminder extraction endpoint), `score-ocean-profile` (OCEAN personality scoring from onboarding answers), `generate-morning-message` (personalised morning message from OCEAN profile), `journal-next-question` (AI-guided journal: return next question or done signal), and `journal-save-session` (mark session completed + fire-and-forget user state update). All call OpenRouter server-side. **Voice audio is not stored in Supabase Storage** in v1; it is posted to `transcribe` and discarded after processing. **Observability**: AI-related steps emit structured lines to Edge Function logs — see [Observability (AI edge functions)](#observability-ai-edge-functions) below; policy and full contract: [ADR-003](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs) and `docs/technical/ARCHITECTURE.md` (Observability and AI I/O logging).
 - **Storage**: Available from Supabase for future features; not used for voice capture in v1.
 
 This document tracks the Edge Function endpoints. Standard Supabase client patterns are documented in the Supabase docs.
@@ -349,6 +349,110 @@ The `topics` field is present when topic assignment completes successfully insid
 
 ---
 
+## Journal
+
+> **ADR**: ADR-006. **Tasks**: #046 (implementation). **PRD**: FR-030, FR-060–063.
+
+The Journal subsystem uses two edge functions. The mobile client manages incremental persistence of `journal_sessions` and `journal_entries` directly via the Supabase client (RLS enforces `user_id = auth.uid()`). The edge functions handle AI generation and session completion.
+
+**Opening question constant** (used by client and referenced by edge function prompts):
+
+```
+JOURNAL_OPENING_QUESTION_V1 = "Take a moment to settle in. What's on your mind today — something that happened, a feeling, or just a thought that's been with you?"
+```
+
+---
+
+### POST /journal-next-question
+
+**Auth required**: Yes (Supabase session token)
+
+**Description**: Stateless single-shot per turn (ADR-006 Decision 1). Returns either the next journal question or a `{ "done": true }` completion signal. Turn 0 returns the fixed opening question constant immediately — no AI call. Turns 1–2 call OpenRouter with prior Q&A and the user's `user_state` context. Server-side 3-turn cap: unconditionally returns `{ "done": true }` when `turns.length >= 3`.
+
+**Request body**:
+```json
+{
+  "session_id": "string — UUID of the journal_sessions row",
+  "turns": [
+    {
+      "turn_index": "number — 0, 1, or 2",
+      "question": "string — the question that was asked",
+      "answer": "string — the user's answer"
+    }
+  ]
+}
+```
+
+`turns` contains only **fully answered** turns (non-NULL answer). `turns.length` is the number of completed turns — the function returns the question for turn `turns.length`.
+
+**Response 200 — next question**:
+```json
+{
+  "question": "string — the next question to present to the user",
+  "turn_index": "number — 0-based index of this question (0, 1, or 2)"
+}
+```
+
+**Response 200 — session complete**:
+```json
+{ "done": true }
+```
+
+**Error codes**:
+- `400` — Missing or invalid `session_id` / `turns`; invalid turn shape
+- `401` — Unauthenticated
+- `403` — Session not found or not owned by caller
+- `500` — Server configuration error or DB read failure
+- `502` — OpenRouter request failed, empty response, or unparseable JSON
+
+**Notes**:
+- Turn 0 always returns `JOURNAL_OPENING_QUESTION_V1` — no AI call, no OpenRouter charge.
+- Follow-up questions (turns 1–2) read `user_state.content` from the database. If no row exists (new user), the AI receives an empty context placeholder — handled gracefully.
+- The edge function does **not** write to `journal_entries` — the mobile client owns incremental persistence (upserts the row on question display, updates `answer` + `answered_at` on submission).
+- Model resolution: `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`.
+- Logging (ADR-003): `phase: "journal_question"`. Raw answer text is **never** logged — only `answer_char_count` per turn.
+
+**JWT at gateway**: `[functions.journal-next-question] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
+
+---
+
+### POST /journal-save-session
+
+**Auth required**: Yes (Supabase session token)
+
+**Description**: Marks a journal session as `completed` and triggers a fire-and-forget incremental merge of the new session's Q&A into the user's `user_state` (a living ~200-word third-person analysis used as context for future sessions). The save is awaited and confirmed before the response is sent. The user state update runs fire-and-forget and never blocks the response — failures are logged but do not surface to the user.
+
+**Request body**:
+```json
+{
+  "session_id": "string — UUID of the journal_sessions row to complete"
+}
+```
+
+**Response 200**:
+```json
+{ "success": true }
+```
+
+**Error codes**:
+- `400` — Missing or invalid `session_id`; or no answered entries found for the session (at least one `journal_entries` row with non-NULL `answer` is required)
+- `401` — Unauthenticated
+- `403` — Session not found or not owned by caller
+- `409` — Session already completed
+- `422` — Session is in an unexpected state (e.g. `abandoned`) or no answered entries
+- `500` — Server configuration error or DB write failure
+
+**Notes**:
+- Validates: session exists, `user_id` matches JWT, `status = 'pending'`, at least one `journal_entries` row with non-NULL `answer`.
+- Sets `journal_sessions.status = 'completed'` and `completed_at = now()` (awaited before response).
+- User state update (fire-and-forget): reads `user_state.content` (NULL for first session) + new session Q&A pairs → OpenRouter produces an updated ~200-word third-person profile → upserts `user_state` row (`ON CONFLICT user_id DO UPDATE`). If the AI call or DB write fails, the error is logged (`phase: "journal_state_update"`) and the session remains correctly `completed`.
+- Model resolution (both question generation and state update): `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`. Set `OPENROUTER_JOURNAL_MODEL` in Supabase edge function secrets to override the model specifically for journal functions.
+- Logging (ADR-003): `phase: "journal_state_update"`. Raw answer text and state content are **never** logged — only `answer_count`, `prior_state_char_count`, `updated_state_char_count`, `word_count`, and `session_count`.
+
+**JWT at gateway**: `[functions.journal-save-session] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
+
+---
+
 ## Direct table access patterns (Reminders)
 
 The mobile app interacts with the `reminders` table directly via the Supabase JS client (RLS enforces `user_id = auth.uid()` on all operations — no edge function wrapper needed).
@@ -411,7 +515,7 @@ For operators debugging `transcribe` and `assign-topics` (shared topic pipeline)
 
 1. Open the [Supabase Dashboard](https://supabase.com/dashboard) for your project.
 2. Go to **Edge Functions**.
-3. Open the function (`transcribe`, `assign-topics`, `detect-reminders`, `score-ocean-profile`, or `generate-morning-message`) and use **Logs** (or the project **Logs** view filtered to that function, depending on dashboard layout).
+3. Open the function (`transcribe`, `assign-topics`, `detect-reminders`, `score-ocean-profile`, `generate-morning-message`, `journal-next-question`, or `journal-save-session`) and use **Logs** (or the project **Logs** view filtered to that function, depending on dashboard layout).
 
 There is **no** separate HTTP API or Postgres table for these events in v1. Retention and search are **platform-managed** — do not rely on logs as a long-term audit archive; see ADR-003.
 
@@ -484,8 +588,8 @@ Optional fields (`model`, `thought_id`, `user_id`, summaries, `error`) are omitt
 |-------|---------|
 | `log_level` | Always `"debug"` for lines emitted by `ai-log.ts`. |
 | `log_summary` | Short human-readable line (same info as the headline) for skimming raw `event_message`. |
-| `function` | Edge function name — one of `transcribe`, `assign-topics`, `detect-reminders`, `score-ocean-profile`, `generate-morning-message`. |
-| `phase` | `transcribe` — speech-to-text call inside `/transcribe`. `topics` — topic assignment (inside `/transcribe` or `/assign-topics`). `reminders` — reminder extraction. `onboarding` — OCEAN scoring inside `/score-ocean-profile`. `morning-message` — message generation inside `/generate-morning-message`. A single voice capture produces both `transcribe` and `topics` phases in order. |
+| `function` | Edge function name — one of `transcribe`, `assign-topics`, `detect-reminders`, `score-ocean-profile`, `generate-morning-message`, `journal-next-question`, `journal-save-session`. |
+| `phase` | `transcribe` — speech-to-text call inside `/transcribe`. `topics` — topic assignment (inside `/transcribe` or `/assign-topics`). `reminders` — reminder extraction. `onboarding` — OCEAN scoring inside `/score-ocean-profile`. `morning-message` — message generation inside `/generate-morning-message`. `journal_question` — follow-up question generation inside `/journal-next-question` (turn 0 returns the constant; no AI event emitted). `journal_state_update` — user state incremental merge inside `/journal-save-session` (fire-and-forget). A single voice capture produces both `transcribe` and `topics` phases in order. |
 | `model` | OpenRouter model id used for that call. |
 | `thought_id` | Thought UUID when known. |
 | `user_id` | Authenticated user UUID for correlation. |
@@ -530,3 +634,5 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 | 2026-04-11 | Added `POST /score-ocean-profile` and `POST /generate-morning-message` (OCEAN personality onboarding; FR-060, FR-070; tasks #039–#040) |
 | 2026-04-11 | Observability: extended `phase` values to include `onboarding` and `morning-message`; updated `function` field docs |
 | 2026-04-11 | Added `POST /score-ocean-profile` and `POST /generate-morning-message` for OCEAN personality onboarding subsystem (tasks #039, #040; FR-060, FR-070) |
+| 2026-04-12 | Added `POST /journal-next-question` and `POST /journal-save-session` (AI-Guided Journal subsystem; ADR-006; task #046; FR-030, FR-060–063) |
+| 2026-04-12 | Observability: extended `phase` values and `function` list to include `journal_question` and `journal_state_update` |
