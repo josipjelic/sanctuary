@@ -126,6 +126,12 @@ verify_jwt = false
 [functions.detect-reminders]
 verify_jwt = false
 
+[functions.score-ocean-profile]
+verify_jwt = false
+
+[functions.generate-morning-message]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 policy = "oneshot"

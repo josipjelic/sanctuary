@@ -11,7 +11,7 @@ Read by: All agents building or integrating with backend functionality.
 > **Backend**: Supabase (PostgreSQL + Auth + Storage + Edge Functions)
 > **Client**: `@supabase/supabase-js` — used directly in the mobile app and in edge functions
 > **Authentication**: Supabase JWT (managed by Supabase Auth). Pass the session token via the Supabase client — it is sent automatically as a Bearer token.
-> **Last updated**: 2026-03-31 (detect-list planned endpoint documented; lists subsystem tasks #029–#036)
+> **Last updated**: 2026-04-11 (added score-ocean-profile + generate-morning-message; OCEAN onboarding subsystem tasks #039–#040; FR-060, FR-070)
 
 ---
 
@@ -20,7 +20,7 @@ Read by: All agents building or integrating with backend functionality.
 Sanctuary does not have a traditional REST API server. The mobile app interacts with Supabase directly using the Supabase JS client for:
 - **Auth**: Sign up, sign in, sign out, password reset
 - **Database**: Direct table queries (filtered by RLS — users only see their own rows)
-- **Edge Functions**: AI-powered endpoints — `transcribe` (multipart audio → transcript + topic assignment + reminder detection), `assign-topics` (typed capture path, also triggers reminder detection), and `detect-reminders` (explicit reminder extraction endpoint). All call OpenRouter server-side. **Voice audio is not stored in Supabase Storage** in v1; it is posted to `transcribe` and discarded after processing. **Observability**: AI-related steps emit structured lines to Edge Function logs — see [Observability (AI edge functions)](#observability-ai-edge-functions) below; policy and full contract: [ADR-003](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs) and `docs/technical/ARCHITECTURE.md` (Observability and AI I/O logging).
+- **Edge Functions**: AI-powered endpoints — `transcribe` (multipart audio → transcript + topic assignment + reminder detection), `assign-topics` (typed capture path, also triggers reminder detection), `detect-reminders` (explicit reminder extraction endpoint), `score-ocean-profile` (OCEAN personality scoring from onboarding answers), and `generate-morning-message` (personalised morning message from OCEAN profile). All call OpenRouter server-side. **Voice audio is not stored in Supabase Storage** in v1; it is posted to `transcribe` and discarded after processing. **Observability**: AI-related steps emit structured lines to Edge Function logs — see [Observability (AI edge functions)](#observability-ai-edge-functions) below; policy and full contract: [ADR-003](DECISIONS.md#adr-003-ai-io-observability-via-supabase-edge-function-logs) and `docs/technical/ARCHITECTURE.md` (Observability and AI I/O logging).
 - **Storage**: Available from Supabase for future features; not used for voice capture in v1.
 
 This document tracks the Edge Function endpoints. Standard Supabase client patterns are documented in the Supabase docs.
@@ -172,6 +172,76 @@ The `topics` field is present when topic assignment completes successfully insid
 
 ---
 
+### POST /score-ocean-profile
+
+**Auth required**: Yes (Supabase session token)
+
+**Description**: Accepts free-text answers to the OCEAN personality questionnaire, calls OpenRouter to score all five Big Five dimensions as floats 0.0–1.0, and upserts the result into `ocean_profiles`. If a profile already exists for the user it is overwritten (upsert on `user_id`). On AI failure no partial profile is written. Implements FR-060.
+
+**Request body**:
+```json
+{
+  "answers": [
+    { "question": "string — the question text", "answer": "string — the user's free-text answer" }
+  ],
+  "question_set_version": "string — optional, defaults to \"v1\""
+}
+```
+
+`answers` must be an array of **1–7** objects. Each object must have non-empty `question` and `answer` strings. The standard v1 question set has 5 required questions and 2 optional depth questions (indices 5 and 6).
+
+**Response 200**:
+```json
+{
+  "profile": {
+    "openness": "number — float 0.0–1.0",
+    "conscientiousness": "number — float 0.0–1.0",
+    "extraversion": "number — float 0.0–1.0",
+    "agreeableness": "number — float 0.0–1.0",
+    "neuroticism": "number — float 0.0–1.0"
+  }
+}
+```
+
+**Error codes**:
+- `400` — Missing or invalid `answers` (not an array, wrong length, or items missing required fields)
+- `401` — Unauthenticated
+- `500` — Server configuration error or DB write failure
+- `502` — OpenRouter request failed or returned unparseable scores (`error: "scoring_failed"`)
+
+**Notes**: Model resolution: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`. Out-of-range model values are clamped to [0.0, 1.0] before upsert. Structured AI logs follow ADR-003 with `phase: "onboarding"` — answer text is limited to truncated previews; OCEAN scores are never logged.
+
+**JWT at gateway**: `[functions.score-ocean-profile] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
+
+---
+
+### POST /generate-morning-message
+
+**Auth required**: Yes (Supabase session token)
+
+**Description**: Fetches the authenticated user's OCEAN profile from `ocean_profiles` and generates a short (2–3 sentence) personalised morning motivational message via OpenRouter. **Stateless** — the edge function returns the message but does NOT write to `morning_messages`. The client is responsible for caching the message if needed. Implements FR-070.
+
+**Request body**: Empty — `{}` or no body. The user's profile is loaded from the database using the session JWT.
+
+**Response 200**:
+```json
+{
+  "message": "string — personalised 2–3 sentence morning message"
+}
+```
+
+**Error codes**:
+- `401` — Unauthenticated
+- `404` — No OCEAN profile found for the authenticated user (`error: "no_profile"`)
+- `500` — Server configuration error or DB read failure
+- `502` — OpenRouter request failed or returned an empty message (`error: "generation_failed"`)
+
+**Notes**: Model resolution: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`. The prompt translates numeric OCEAN scores into natural-language descriptors (high / moderate / low) so the message reflects personality without sounding clinical. OCEAN scores are never logged (ADR-003, `phase: "morning-message"`). The message preview (≤ 80 chars) is logged in `response_summary` for operator debugging.
+
+**JWT at gateway**: `[functions.generate-morning-message] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
+
+---
+
 ### POST /detect-list ⚠️ PLANNED
 
 **Auth required**: Yes (Supabase session token)
@@ -206,6 +276,76 @@ The `topics` field is present when topic assignment completes successfully insid
 **Notes**: The shared module `_shared/detect-list.ts` loads the caller's existing `user_lists` titles and passes them to the model so continuation can be detected. When `is_continuation` is true, new items are appended to the matching existing list rather than creating a duplicate. Sets `thoughts.list_detection_status` to `'pending'` → `'complete'` (or `'failed'` on error). Uses `OPENROUTER_LIST_MODEL` if set, then `OPENROUTER_TOPIC_MODEL`, then `google/gemini-2.0-flash-001`. AI logs follow the ADR-003 contract with `phase: "lists"`.
 
 **JWT at gateway**: `[functions.detect-list] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
+
+---
+
+### POST /score-ocean-profile
+
+**Auth required**: Yes (Supabase session token)
+
+**Description**: Accepts free-text answers from the OCEAN personality onboarding quiz, prompts OpenRouter to score all five Big Five dimensions independently as floats 0.0–1.0, upserts the result into `ocean_profiles` (one row per user — re-taking the quiz overwrites the previous scores), and returns the scores. The edge function does **not** return the raw model output — scores are clamped to [0.0, 1.0] before persistence and response.
+
+**Request body**:
+```json
+{
+  "answers": [
+    { "question": "string — the question text", "answer": "string — the user's free-text answer" }
+  ],
+  "question_set_version": "string — optional, defaults to \"v1\""
+}
+```
+
+`answers` must be an array of 1–7 objects. Each object must have non-empty `question` and `answer` strings.
+
+**Response 200**:
+```json
+{
+  "profile": {
+    "openness": "number (0.0–1.0)",
+    "conscientiousness": "number (0.0–1.0)",
+    "extraversion": "number (0.0–1.0)",
+    "agreeableness": "number (0.0–1.0)",
+    "neuroticism": "number (0.0–1.0)"
+  }
+}
+```
+
+**Error codes**:
+- `400` — Validation error (missing/invalid `answers`)
+- `401` — Unauthenticated
+- `500` — Server configuration error or DB write failure
+- `502` — AI scoring failed (OpenRouter error, empty response, or unparseable JSON)
+
+**Notes**: Model resolution order: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`. Scores are clamped to [0.0, 1.0] regardless of what the model returns. Upsert uses `ON CONFLICT` on the `ocean_profiles_user_id_unique` constraint — re-scoring replaces all five dimension values, `answers` (raw jsonb), `question_set_version`, `scored_at`, and `updated_at`. Structured AI logs emitted per ADR-003 with `phase: "onboarding"` — answer previews are truncated to 80 chars; raw OCEAN scores are **never** logged.
+
+**JWT at gateway**: `[functions.score-ocean-profile] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
+
+---
+
+### POST /generate-morning-message
+
+**Auth required**: Yes (Supabase session token)
+
+**Description**: Fetches the authenticated user's OCEAN profile from `ocean_profiles` and prompts OpenRouter to generate a short (2–3 sentence) personalised morning message tailored to their personality. The message tone is warm and reflective — not clinical or generic. **Stateless** — the edge function does NOT persist to `morning_messages`. The mobile client is responsible for caching the result (write to `morning_messages` table after receiving the response).
+
+**Request body**: Empty JSON object `{}` or omit body entirely.
+
+**Response 200**:
+```json
+{
+  "message": "string — a 2–3 sentence personalised morning message"
+}
+```
+
+**Error codes**:
+- `401` — Unauthenticated
+- `404` — `{ "error": "no_profile" }` — user has no OCEAN profile yet (onboarding not completed)
+- `500` — Server configuration error or DB fetch failure
+- `502` — `{ "error": "generation_failed", "message": "..." }` — OpenRouter error or empty model response
+
+**Notes**: Model resolution order: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`. The prompt passes OCEAN dimensions as named buckets (`low` / `moderate-low` / `moderate-high` / `high`) rather than raw floats — this keeps the prompt compact and avoids leaking precise scores. Raw OCEAN scores are **never** logged (ADR-003). Structured AI logs use `phase: "morning-message"`. The client should cache the returned message in `morning_messages` with `generated_for_date` = today's date; the unique constraint `morning_messages_user_date_unique` on `(user_id, generated_for_date)` prevents duplicates if the client calls the endpoint more than once before caching.
+
+**JWT at gateway**: `[functions.generate-morning-message] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
 ---
 
@@ -271,7 +411,7 @@ For operators debugging `transcribe` and `assign-topics` (shared topic pipeline)
 
 1. Open the [Supabase Dashboard](https://supabase.com/dashboard) for your project.
 2. Go to **Edge Functions**.
-3. Open the function (`transcribe`, `assign-topics`, or `detect-reminders`) and use **Logs** (or the project **Logs** view filtered to that function, depending on dashboard layout).
+3. Open the function (`transcribe`, `assign-topics`, `detect-reminders`, `score-ocean-profile`, or `generate-morning-message`) and use **Logs** (or the project **Logs** view filtered to that function, depending on dashboard layout).
 
 There is **no** separate HTTP API or Postgres table for these events in v1. Retention and search are **platform-managed** — do not rely on logs as a long-term audit archive; see ADR-003.
 
@@ -344,8 +484,8 @@ Optional fields (`model`, `thought_id`, `user_id`, summaries, `error`) are omitt
 |-------|---------|
 | `log_level` | Always `"debug"` for lines emitted by `ai-log.ts`. |
 | `log_summary` | Short human-readable line (same info as the headline) for skimming raw `event_message`. |
-| `function` | `transcribe` or `assign-topics` (or the caller name passed into shared topic code). |
-| `phase` | `transcribe` — speech-to-text OpenRouter call inside `/transcribe` only. `topics` — topic-assignment OpenRouter call: runs **after** a successful transcribe in the same `/transcribe` request, or alone inside `/assign-topics` for typed capture. A single voice capture therefore produces **both** phases in order in the logs when both steps run. |
+| `function` | Edge function name — one of `transcribe`, `assign-topics`, `detect-reminders`, `score-ocean-profile`, `generate-morning-message`. |
+| `phase` | `transcribe` — speech-to-text call inside `/transcribe`. `topics` — topic assignment (inside `/transcribe` or `/assign-topics`). `reminders` — reminder extraction. `onboarding` — OCEAN scoring inside `/score-ocean-profile`. `morning-message` — message generation inside `/generate-morning-message`. A single voice capture produces both `transcribe` and `topics` phases in order. |
 | `model` | OpenRouter model id used for that call. |
 | `thought_id` | Thought UUID when known. |
 | `user_id` | Authenticated user UUID for correlation. |
@@ -387,3 +527,6 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 | 2026-03-31 | Added planned `POST /detect-list` endpoint spec; lists subsystem tasks #029–#036 |
 | 2026-04-05 | Reminder extraction: `extracted_text` is prompted as a concise title (`_shared/detect-reminders.ts`) |
 | 2026-04-05 | CI: `.github/workflows/deploy-supabase.yml` pushes migrations and deploys edge functions on `main` when `supabase/**` changes |
+| 2026-04-11 | Added `POST /score-ocean-profile` and `POST /generate-morning-message` (OCEAN personality onboarding; FR-060, FR-070; tasks #039–#040) |
+| 2026-04-11 | Observability: extended `phase` values to include `onboarding` and `morning-message`; updated `function` field docs |
+| 2026-04-11 | Added `POST /score-ocean-profile` and `POST /generate-morning-message` for OCEAN personality onboarding subsystem (tasks #039, #040; FR-060, FR-070) |
