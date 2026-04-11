@@ -1,9 +1,18 @@
 import { Button, Card } from "@/components";
 import { useAuth } from "@/hooks/useAuth";
 import { logger } from "@/lib/logger";
-import { supabase } from "@/lib/supabase";
-import { colors, radius, spacing, typography } from "@/lib/theme";
+import { supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
+import { colors, radius, shadows, spacing, typography } from "@/lib/theme";
 import { Ionicons } from "@expo/vector-icons";
+import {
+  AudioModule,
+  AudioQuality,
+  IOSOutputFormat,
+  RecordingPresets,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from "expo-audio";
+import type { RecordingOptions } from "expo-audio";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -11,6 +20,7 @@ import {
   ActivityIndicator,
   Animated,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Modal,
   Platform,
   Pressable,
@@ -23,6 +33,20 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+const VOICE_RECORDING_OPTIONS: RecordingOptions = {
+  ...RecordingPresets.HIGH_QUALITY,
+  extension: ".m4a",
+  sampleRate: Platform.OS === "ios" ? 44100 : 16000,
+  numberOfChannels: 1,
+  bitRate: 128000,
+  android: { outputFormat: "mpeg4", audioEncoder: "aac", sampleRate: 16000 },
+  ios: {
+    outputFormat: IOSOutputFormat.MPEG4AAC,
+    audioQuality: AudioQuality.HIGH,
+  },
+  web: { mimeType: "audio/webm", bitsPerSecond: 128000 },
+};
+
 const JOURNAL_OPENING_QUESTION_V1 =
   "Take a moment to settle in. What's on your mind today — something that happened, a feeling, or just a thought that's been with you?";
 
@@ -32,6 +56,8 @@ type SessionState =
   | "saving"
   | "error_question"
   | "error_save";
+
+type VoiceState = "idle" | "recording" | "transcribing" | "error";
 
 type Turn = {
   turn_index: number;
@@ -54,7 +80,10 @@ export default function JournalSessionScreen() {
   const [isFocused, setIsFocused] = useState(false);
   const [showExitSheet, setShowExitSheet] = useState(false);
   const [saveErrorVisible, setSaveErrorVisible] = useState(false);
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [showTextInput, setShowTextInput] = useState(false);
 
+  const audioRecorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
   const inputRef = useRef<TextInput>(null);
   const slideAnim = useRef(new Animated.Value(screenWidth)).current;
   const skeletonOpacity1 = useRef(new Animated.Value(0.6)).current;
@@ -62,12 +91,66 @@ export default function JournalSessionScreen() {
   const skeletonAnimation = useRef<Animated.CompositeAnimation | null>(null);
   const saveErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reducedMotion = useRef(false);
+  const pulseOpacity = useRef(new Animated.Value(1)).current;
+  const ringScale = useRef(new Animated.Value(1)).current;
+  const pulseAnimation = useRef<Animated.CompositeAnimation | null>(null);
+  const ringAnimation = useRef<Animated.CompositeAnimation | null>(null);
+
+  const micSize = Math.min(148, Math.round(screenWidth * 0.38));
+  const micIconSize = Math.round(micSize * 0.3);
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then((val) => {
       reducedMotion.current = val;
     });
   }, []);
+
+  // ── Pulse ring (idle) ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (reducedMotion.current) return;
+    ringAnimation.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ringScale, {
+          toValue: 1.08,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(ringScale, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    ringAnimation.current.start();
+    return () => {
+      ringAnimation.current?.stop();
+    };
+  }, [ringScale]);
+
+  // ── Pulse opacity (recording) ──────────────────────────────────────────────
+  useEffect(() => {
+    if (voiceState === "recording" && !reducedMotion.current) {
+      pulseAnimation.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseOpacity, {
+            toValue: 0.45,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseOpacity, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      pulseAnimation.current.start();
+    } else {
+      pulseAnimation.current?.stop();
+      pulseOpacity.setValue(1);
+    }
+  }, [voiceState, pulseOpacity]);
 
   const animateCardIn = useCallback(() => {
     if (reducedMotion.current) {
@@ -130,12 +213,11 @@ export default function JournalSessionScreen() {
       setCurrentQuestion(question);
       setCurrentTurnIndex(turnIndex);
       setAnswer("");
+      setShowTextInput(false);
+      setVoiceState("idle");
       setSessionState("answering");
       stopSkeletonShimmer();
       animateCardIn();
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 200);
     },
     [animateCardIn, stopSkeletonShimmer],
   );
@@ -289,8 +371,123 @@ export default function JournalSessionScreen() {
         clearTimeout(saveErrorTimer.current);
       }
       skeletonAnimation.current?.stop();
+      pulseAnimation.current?.stop();
+      ringAnimation.current?.stop();
     };
   }, []);
+
+  // ── Voice recording ─────────────────────────────────────────────────────────
+  async function handleMicPress() {
+    if (voiceState === "recording") {
+      await stopAndTranscribe();
+    } else if (voiceState !== "transcribing") {
+      setShowTextInput(false);
+      await startVoiceRecording();
+    }
+  }
+
+  async function startVoiceRecording() {
+    setVoiceState("recording");
+    try {
+      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
+      if (!granted) {
+        setVoiceState("idle");
+        return;
+      }
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: true,
+        interruptionMode: "doNotMix",
+        shouldPlayInBackground: false,
+        shouldRouteThroughEarpiece: false,
+      });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+    } catch (err) {
+      logger.error("JournalSession: failed to start voice recording", err);
+      setVoiceState("error");
+    }
+  }
+
+  async function stopAndTranscribe() {
+    setVoiceState("transcribing");
+    try {
+      await audioRecorder.stop();
+    } catch {
+      setVoiceState("error");
+      return;
+    }
+    const uri = audioRecorder.uri;
+    if (!uri) {
+      setVoiceState("idle");
+      return;
+    }
+    try {
+      await setAudioModeAsync({
+        playsInSilentMode: true,
+        allowsRecording: false,
+        interruptionMode: "mixWithOthers",
+      });
+    } catch {
+      /* non-fatal */
+    }
+    try {
+      const transcript = await transcribeAnswerAudio(uri);
+      if (transcript) {
+        setAnswer(transcript);
+      }
+      setVoiceState("idle");
+    } catch (err) {
+      logger.error("JournalSession: transcribe-answer failed", err);
+      setVoiceState("error");
+    }
+  }
+
+  async function transcribeAnswerAudio(uri: string): Promise<string> {
+    const filename = uri.split("/").pop()?.split("?")[0] ?? "recording.m4a";
+    const mimeType = Platform.OS === "web" ? "audio/webm" : "audio/mp4";
+    const endpoint = `${supabaseUrl}/functions/v1/transcribe-answer`;
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    const formData = new FormData();
+    if (Platform.OS === "web") {
+      const res = await fetch(uri);
+      const blob = await res.blob();
+      formData.append(
+        "audio",
+        new File([blob], filename, { type: blob.type || mimeType }),
+      );
+    } else {
+      formData.append("audio", {
+        uri,
+        name: filename,
+        type: mimeType,
+      } as unknown as Blob);
+    }
+    return new Promise<string>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", endpoint);
+      xhr.setRequestHeader(
+        "Authorization",
+        `Bearer ${accessToken ?? supabaseAnonKey}`,
+      );
+      xhr.setRequestHeader("apikey", supabaseAnonKey);
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const body = JSON.parse(xhr.responseText) as { text?: string };
+          resolve(body.text ?? "");
+        } else {
+          reject(
+            new Error(
+              `transcribe-answer HTTP ${xhr.status}: ${xhr.responseText.slice(0, 300)}`,
+            ),
+          );
+        }
+      };
+      xhr.onerror = () => reject(new Error("Network error"));
+      xhr.send(formData);
+    });
+  }
 
   async function handleNext() {
     const trimmed = answer.trim();
@@ -342,8 +539,21 @@ export default function JournalSessionScreen() {
   const isSaving = sessionState === "saving";
   const isErrorQuestion = sessionState === "error_question";
   const isLastTurn = currentTurnIndex >= 2;
+  const isRecording = voiceState === "recording";
+  const isTranscribing = voiceState === "transcribing";
+  const isDisabled = isTranscribing;
   const canSubmit = answer.trim().length >= 10;
   const displayTurnIndex = isLoading ? turns.length + 1 : currentTurnIndex + 1;
+
+  const micLabel = isRecording
+    ? "Tap to finish"
+    : isTranscribing
+      ? "Transcribing…"
+      : voiceState === "error"
+        ? "Something went wrong — tap to try again"
+        : answer
+          ? "Tap to re-record"
+          : "Tap to speak";
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -456,35 +666,199 @@ export default function JournalSessionScreen() {
             </View>
           )}
 
-          {/* Answer input */}
+          {/* Voice-first input area */}
           {!isLoading && !isErrorQuestion && (
-            <View style={styles.answerSection}>
-              <TextInput
-                ref={inputRef}
-                value={answer}
-                onChangeText={setAnswer}
-                multiline
-                style={[
-                  styles.answerInput,
-                  isSaving && styles.answerInputDisabled,
-                ]}
-                placeholder="Your thoughts…"
-                placeholderTextColor={colors.outlineVariant}
-                editable={!isSaving}
-                accessibilityLabel={currentQuestion}
-                accessibilityHint="Your answer is private"
-                returnKeyType="default"
-                blurOnSubmit={false}
-                onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
-                testID="journal-answer-input"
-              />
-              {(isFocused || answer.length > 0) && (
-                <Text style={styles.charCount} accessibilityElementsHidden>
-                  {answer.length} characters
+            <>
+              {/* Hero mic button */}
+              <View style={styles.micSection}>
+                <View
+                  style={[
+                    styles.micStack,
+                    { width: micSize + 72, height: micSize + 72 },
+                  ]}
+                >
+                  {/* Ambient glow */}
+                  <View
+                    style={[
+                      styles.micGlow,
+                      {
+                        width: micSize + 40,
+                        height: micSize + 40,
+                        borderRadius: (micSize + 40) / 2,
+                      },
+                    ]}
+                  />
+                  {/* Pulse ring — hidden while recording */}
+                  {!isRecording && (
+                    <Animated.View
+                      style={[
+                        styles.micPulseRing,
+                        {
+                          width: micSize + 20,
+                          height: micSize + 20,
+                          borderRadius: (micSize + 20) / 2,
+                          transform: [{ scale: ringScale }],
+                        },
+                      ]}
+                      accessibilityElementsHidden
+                      importantForAccessibility="no-hide-descendants"
+                    />
+                  )}
+                  {/* Button */}
+                  <Animated.View style={{ opacity: pulseOpacity }}>
+                    <Pressable
+                      onPress={() => void handleMicPress()}
+                      disabled={isDisabled}
+                      style={[
+                        styles.micMain,
+                        {
+                          width: micSize,
+                          height: micSize,
+                          borderRadius: micSize / 2,
+                        },
+                        isRecording && styles.micMainRecording,
+                        isDisabled && styles.micMainDisabled,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        isRecording
+                          ? "Stop recording"
+                          : isTranscribing
+                            ? "Transcribing your answer"
+                            : "Start voice recording"
+                      }
+                      testID="journal-mic-btn"
+                    >
+                      {isTranscribing ? (
+                        <ActivityIndicator
+                          color={colors.onPrimary}
+                          size="large"
+                        />
+                      ) : isRecording ? (
+                        <Ionicons
+                          name="stop"
+                          size={micIconSize}
+                          color={colors.onPrimary}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="mic"
+                          size={micIconSize}
+                          color={colors.onPrimary}
+                        />
+                      )}
+                    </Pressable>
+                  </Animated.View>
+                </View>
+
+                {/* Mic status label */}
+                <Text
+                  style={[
+                    styles.micLabel,
+                    voiceState === "error" && styles.micLabelError,
+                    isRecording && styles.micLabelRecording,
+                  ]}
+                >
+                  {micLabel}
                 </Text>
+              </View>
+
+              {/* Transcribed/typed answer display */}
+              {answer !== "" && !showTextInput && (
+                <View style={styles.answerCard}>
+                  <Text style={styles.answerText} numberOfLines={6}>
+                    {answer}
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      void AccessibilityInfo.isReduceMotionEnabled().then(
+                        (reduced) => {
+                          if (!reduced)
+                            LayoutAnimation.configureNext(
+                              LayoutAnimation.Presets.easeInEaseOut,
+                            );
+                          setShowTextInput(true);
+                          setTimeout(() => inputRef.current?.focus(), 150);
+                        },
+                      );
+                    }}
+                    style={({ pressed }) => [
+                      styles.editButton,
+                      pressed && styles.editButtonPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Edit your answer"
+                    testID="journal-edit-btn"
+                  >
+                    <Ionicons
+                      name="pencil-outline"
+                      size={14}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.editButtonLabel}>Edit</Text>
+                  </Pressable>
+                </View>
               )}
-            </View>
+
+              {/* Text input (secondary, shown on demand) */}
+              {showTextInput && (
+                <View style={styles.textInputContainer}>
+                  <TextInput
+                    ref={inputRef}
+                    value={answer}
+                    onChangeText={setAnswer}
+                    multiline
+                    style={[
+                      styles.answerInput,
+                      isSaving && styles.answerInputDisabled,
+                    ]}
+                    placeholder="Your thoughts…"
+                    placeholderTextColor={colors.outlineVariant}
+                    editable={!isSaving}
+                    accessibilityLabel={currentQuestion}
+                    accessibilityHint="Your answer is private"
+                    returnKeyType="default"
+                    blurOnSubmit={false}
+                    textAlignVertical="top"
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                    testID="journal-answer-input"
+                  />
+                  {(isFocused || answer.length > 0) && (
+                    <Text style={styles.charCount} accessibilityElementsHidden>
+                      {answer.length} characters
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              {/* "Or type instead" link */}
+              {answer === "" && voiceState === "idle" && !showTextInput && (
+                <Pressable
+                  onPress={() => {
+                    void AccessibilityInfo.isReduceMotionEnabled().then(
+                      (reduced) => {
+                        if (!reduced)
+                          LayoutAnimation.configureNext(
+                            LayoutAnimation.Presets.easeInEaseOut,
+                          );
+                        setShowTextInput(true);
+                        setTimeout(() => inputRef.current?.focus(), 150);
+                      },
+                    );
+                  }}
+                  style={({ pressed }) => [
+                    styles.typeInsteadButton,
+                    pressed && styles.typeInsteadButtonPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Type your answer instead"
+                  testID="journal-type-instead-btn"
+                >
+                  <Text style={styles.typeInsteadText}>Or type instead</Text>
+                </Pressable>
+              )}
+            </>
           )}
         </ScrollView>
 
@@ -697,8 +1071,84 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.primary,
   },
-  answerSection: {
-    marginTop: spacing.s6,
+
+  // Hero mic
+  micSection: {
+    alignItems: "center",
+    marginTop: spacing.s8,
+    marginBottom: spacing.s4,
+  },
+  micStack: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micGlow: {
+    position: "absolute",
+    backgroundColor: colors.primaryContainer,
+    opacity: 0.28,
+  },
+  micPulseRing: {
+    position: "absolute",
+    borderWidth: 2,
+    borderColor: "rgba(215, 231, 211, 0.45)",
+  },
+  micMain: {
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.18,
+    shadowRadius: 40,
+    elevation: 12,
+  },
+  micMainRecording: {
+    backgroundColor: colors.error,
+    shadowColor: colors.error,
+  },
+  micMainDisabled: { opacity: 0.45 },
+  micLabel: {
+    ...typography.labelMd,
+    color: colors.secondary,
+    textAlign: "center",
+    marginTop: spacing.s4,
+  },
+  micLabelRecording: { color: colors.error },
+  micLabelError: { color: colors.error },
+
+  // Answer display card
+  answerCard: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.lg,
+    padding: spacing.s6,
+    marginBottom: spacing.s4,
+    ...shadows.card,
+  },
+  answerText: {
+    ...typography.bodyLg,
+    color: colors.onSurface,
+    lineHeight: 26,
+    marginBottom: spacing.s4,
+  },
+  editButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-end",
+    paddingVertical: spacing.s2,
+    paddingHorizontal: spacing.s4,
+    borderRadius: radius.full,
+  },
+  editButtonPressed: { backgroundColor: colors.primaryContainer },
+  editButtonLabel: {
+    ...typography.labelMd,
+    color: colors.primary,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+  },
+
+  // Text input (secondary)
+  textInputContainer: {
+    marginBottom: spacing.s4,
   },
   answerInput: {
     minHeight: 120,
@@ -721,6 +1171,22 @@ const styles = StyleSheet.create({
     alignSelf: "flex-end",
     marginTop: spacing.s2,
   },
+
+  // "Or type instead"
+  typeInsteadButton: {
+    alignSelf: "center",
+    paddingVertical: spacing.s2,
+    paddingHorizontal: spacing.s6,
+    borderRadius: radius.full,
+    marginBottom: spacing.s4,
+  },
+  typeInsteadButtonPressed: { backgroundColor: `${colors.primary}14` },
+  typeInsteadText: {
+    ...typography.labelMd,
+    color: colors.outlineVariant,
+    textDecorationLine: "underline",
+  },
+
   actionArea: {
     paddingHorizontal: spacing.s8,
     paddingBottom: spacing.s12,
