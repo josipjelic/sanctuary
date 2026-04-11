@@ -1,10 +1,4 @@
-<!--
-DOCUMENT METADATA
-Owner: @documentation-writer
-Update trigger: Any user-facing feature is added, changed, or removed
-Update scope: Full document
-Read by: End users and agents needing to understand user-facing flows.
--->
+
 
 # Sanctuary — User Guide
 
@@ -366,16 +360,18 @@ In that sheet you can:
 
 ### Common Issues
 
-| Issue | Likely Cause | What to Do |
-|-------|-------------|------------|
-| "Session expired" on open | Supabase session timed out | Sign in again |
-| Voice recording not working | Microphone permission not granted | System Settings → Sanctuary → allow Microphone |
-| Thought saved but no topic yet | Topic assignment runs after save | Wait a few seconds and pull to refresh on the inbox |
-| Email never arrives after sign-up | Confirmation off in dev, or spam / wrong address | Check spam; ask your host whether confirmation is required |
-| Reminder pill not appearing after capture | AI found no clear future time reference in the text | This is expected — try rephrasing with a specific date or time |
-| Notification did not fire | Notification permission was denied, or notifications are off for Sanctuary | System Settings → Sanctuary → Notifications → Allow |
-| Reminder suggests the wrong date or time | AI resolved a relative reference differently than you intended | Tap the suggested time in the Reminder sheet to edit it before approving |
-| Journal follow-up questions seem generic and don't reference past sessions | Your journal profile is empty — it builds over multiple sessions | This is expected on first use. After a few sessions, questions will become more tailored to you |
+
+| Issue                                                                      | Likely Cause                                                               | What to Do                                                                                      |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| "Session expired" on open                                                  | Supabase session timed out                                                 | Sign in again                                                                                   |
+| Voice recording not working                                                | Microphone permission not granted                                          | System Settings → Sanctuary → allow Microphone                                                  |
+| Thought saved but no topic yet                                             | Topic assignment runs after save                                           | Wait a few seconds and pull to refresh on the inbox                                             |
+| Email never arrives after sign-up                                          | Confirmation off in dev, or spam / wrong address                           | Check spam; ask your host whether confirmation is required                                      |
+| Reminder pill not appearing after capture                                  | AI found no clear future time reference in the text                        | This is expected — try rephrasing with a specific date or time                                  |
+| Notification did not fire                                                  | Notification permission was denied, or notifications are off for Sanctuary | System Settings → Sanctuary → Notifications → Allow                                             |
+| Reminder suggests the wrong date or time                                   | AI resolved a relative reference differently than you intended             | Tap the suggested time in the Reminder sheet to edit it before approving                        |
+| Journal follow-up questions seem generic and don't reference past sessions | Your journal profile is empty — it builds over multiple sessions           | This is expected on first use. After a few sessions, questions will become more tailored to you |
+
 
 ### Getting Help
 
