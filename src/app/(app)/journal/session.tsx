@@ -858,75 +858,78 @@ export default function JournalSessionScreen() {
                   <Text style={styles.typeInsteadText}>Or type instead</Text>
                 </Pressable>
               )}
+
+              {/* Continue / Save button row */}
+              <View style={styles.continueRow}>
+                {isLastTurn ? (
+                  <Pressable
+                    style={[
+                      styles.primaryButton,
+                      isSaving && styles.primaryButtonDisabled,
+                    ]}
+                    onPress={() => void handleNext()}
+                    disabled={isSaving}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      isSaving ? "Saving your journal" : "Save journal session"
+                    }
+                    accessibilityState={{ disabled: isSaving }}
+                    testID="journal-save-btn"
+                  >
+                    {isSaving ? (
+                      <View style={styles.savingRow}>
+                        <ActivityIndicator
+                          color={colors.onPrimary}
+                          size="small"
+                          style={styles.savingIndicator}
+                        />
+                        <Text style={styles.primaryButtonLabel}>Saving…</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.primaryButtonLabel}>
+                        Save journal
+                      </Text>
+                    )}
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    style={[
+                      styles.primaryButton,
+                      (!canSubmit || isSaving) && styles.primaryButtonDisabled,
+                    ]}
+                    onPress={() => void handleNext()}
+                    disabled={!canSubmit || isSaving}
+                    accessibilityRole="button"
+                    accessibilityLabel="Next question"
+                    accessibilityState={{ disabled: !canSubmit || isSaving }}
+                    testID="journal-next-btn"
+                  >
+                    {isSaving ? (
+                      <ActivityIndicator
+                        color={colors.onPrimary}
+                        size="small"
+                      />
+                    ) : (
+                      <Text style={styles.primaryButtonLabel}>Next</Text>
+                    )}
+                  </Pressable>
+                )}
+
+                {currentTurnIndex > 0 && !isSaving && (
+                  <Pressable
+                    style={styles.skipPressable}
+                    onPress={() => void handleSkip()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Skip this question"
+                    testID="journal-skip-btn"
+                  >
+                    <Text style={styles.skipText}>Skip this question</Text>
+                  </Pressable>
+                )}
+              </View>
             </>
           )}
         </ScrollView>
-
-        {/* Action area */}
-        {!isLoading && !isErrorQuestion && (
-          <View style={styles.actionArea}>
-            {isLastTurn ? (
-              <Pressable
-                style={[
-                  styles.primaryButton,
-                  isSaving && styles.primaryButtonDisabled,
-                ]}
-                onPress={() => void handleNext()}
-                disabled={isSaving}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  isSaving ? "Saving your journal" : "Save journal session"
-                }
-                accessibilityState={{ disabled: isSaving }}
-                testID="journal-save-btn"
-              >
-                {isSaving ? (
-                  <View style={styles.savingRow}>
-                    <ActivityIndicator
-                      color={colors.onPrimary}
-                      size="small"
-                      style={styles.savingIndicator}
-                    />
-                    <Text style={styles.primaryButtonLabel}>Saving…</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.primaryButtonLabel}>Save journal</Text>
-                )}
-              </Pressable>
-            ) : (
-              <Pressable
-                style={[
-                  styles.primaryButton,
-                  (!canSubmit || isSaving) && styles.primaryButtonDisabled,
-                ]}
-                onPress={() => void handleNext()}
-                disabled={!canSubmit || isSaving}
-                accessibilityRole="button"
-                accessibilityLabel="Next question"
-                accessibilityState={{ disabled: !canSubmit || isSaving }}
-                testID="journal-next-btn"
-              >
-                {isSaving ? (
-                  <ActivityIndicator color={colors.onPrimary} size="small" />
-                ) : (
-                  <Text style={styles.primaryButtonLabel}>Next</Text>
-                )}
-              </Pressable>
-            )}
-
-            {currentTurnIndex > 0 && !isSaving && (
-              <Pressable
-                style={styles.skipPressable}
-                onPress={() => void handleSkip()}
-                accessibilityRole="button"
-                accessibilityLabel="Skip this question"
-                testID="journal-skip-btn"
-              >
-                <Text style={styles.skipText}>Skip this question</Text>
-              </Pressable>
-            )}
-          </View>
-        )}
       </KeyboardAvoidingView>
 
       {/* Save error toast */}
@@ -1187,11 +1190,11 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
 
-  actionArea: {
-    paddingHorizontal: spacing.s8,
-    paddingBottom: spacing.s12,
-    paddingTop: spacing.s4,
-    backgroundColor: colors.surface,
+  continueRow: {
+    marginTop: spacing.s8,
+    paddingBottom: spacing.s8,
+    gap: spacing.s2,
+    alignItems: "stretch",
   },
   primaryButton: {
     height: 56,
