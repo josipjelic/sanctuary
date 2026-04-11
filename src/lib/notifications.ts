@@ -191,3 +191,60 @@ export async function scheduleDailyMorningNotification(params: {
   });
   return id;
 }
+
+/**
+ * Schedule a repeating daily evening journal reminder.
+ * @param time - "HH:MM" format, e.g. "21:00"
+ * @returns Expo notification identifier — persist to `user_preferences` under `evening_notification_id`.
+ */
+export async function scheduleEveningJournalReminder(
+  time: string,
+): Promise<string> {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    throw new Error(
+      "Local notifications are not available in Expo Go on Android. Use a development build.",
+    );
+  }
+  const [hourStr, minuteStr] = time.split(":");
+  const hour = Number.parseInt(hourStr, 10);
+  const minute = Number.parseInt(minuteStr, 10);
+  const id = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "Time to reflect ✨",
+      body: "Your journal is waiting — take a moment for yourself.",
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      hour,
+      minute,
+    },
+  });
+  return id;
+}
+
+/** Cancel the existing evening journal reminder by its identifier. */
+export async function cancelEveningJournalReminder(
+  notificationId: string,
+): Promise<void> {
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) return;
+  await Notifications.cancelScheduledNotificationAsync(notificationId);
+}
+
+/**
+ * Reschedule the evening journal reminder: cancel the old one (if any) and
+ * schedule a new one at the given time.
+ * @param oldId - existing notification id to cancel, or null
+ * @param newTime - "HH:MM" format for the new trigger time
+ * @returns new Expo notification identifier
+ */
+export async function rescheduleEveningJournalReminder(
+  oldId: string | null,
+  newTime: string,
+): Promise<string> {
+  if (oldId) {
+    await cancelEveningJournalReminder(oldId);
+  }
+  return scheduleEveningJournalReminder(newTime);
+}

@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/useAuth";
 import { colors, typography } from "@/lib/theme";
-import { MaterialIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { Redirect, Tabs } from "expo-router";
 
 export default function AppLayout() {
@@ -56,6 +56,19 @@ export default function AppLayout() {
           title: "Library",
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="subscriptions" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="journal"
+        options={{
+          title: "Journal",
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "book" : "book-outline"}
+              color={color}
+              size={size}
+            />
           ),
         }}
       />
