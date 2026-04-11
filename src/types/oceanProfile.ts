@@ -5,6 +5,8 @@ export type OceanDimension =
   | "agreeableness"
   | "neuroticism";
 
+export type OceanReasoning = Record<OceanDimension, string>;
+
 export interface OceanProfile {
   user_id: string;
   openness: number;
@@ -12,6 +14,7 @@ export interface OceanProfile {
   extraversion: number;
   agreeableness: number;
   neuroticism: number;
+  reasoning?: OceanReasoning | null;
   answers: OceanAnswer[];
   question_set_version: string;
   scored_at: string;

@@ -1,17 +1,11 @@
-import { useOnboardingContext } from "@/contexts/OnboardingContext";
 import { useAuth } from "@/hooks/useAuth";
 import { Redirect, Stack } from "expo-router";
 
 export default function OnboardingLayout() {
   const { session } = useAuth();
-  const { onboardingChecked, onboardingComplete } = useOnboardingContext();
 
   if (!session) {
     return <Redirect href="/(auth)/sign-in" />;
-  }
-
-  if (onboardingChecked && onboardingComplete) {
-    return <Redirect href="/(app)" />;
   }
 
   return <Stack screenOptions={{ headerShown: false }} />;

@@ -26,6 +26,7 @@ import {
   LayoutAnimation,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -49,25 +50,27 @@ const VOICE_RECORDING_OPTIONS: RecordingOptions = {
 };
 
 type VoiceState = "idle" | "recording" | "transcribing" | "error";
+type ScreenState = "question" | "optional-transition";
 
 const QUESTIONS = OCEAN_QUESTIONS_V1;
 const REQUIRED_COUNT = QUESTIONS.filter((q) => q.required).length;
-
-type ScreenState = "question" | "optional-transition";
 
 export default function OnboardingQuestionsScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [screenState, setScreenState] = useState<ScreenState>("question");
-  const [isInputFocused, setIsInputFocused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [showTextInput, setShowTextInput] = useState(false);
 
   const audioRecorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
   const inputRef = useRef<TextInput>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const charCountOpacity = useRef(new Animated.Value(0)).current;
+  const pulseOpacity = useRef(new Animated.Value(1)).current;
+  const ringScale = useRef(new Animated.Value(1)).current;
+  const pulseAnimation = useRef<Animated.CompositeAnimation | null>(null);
+  const ringAnimation = useRef<Animated.CompositeAnimation | null>(null);
 
   const question = QUESTIONS[currentIndex];
   const currentAnswer = answers[question?.id ?? 0] ?? "";
@@ -76,9 +79,8 @@ export default function OnboardingQuestionsScreen() {
   const isOptionalQuestion = !isRequired;
   const isLastQuestion = currentIndex === QUESTIONS.length - 1;
 
-  const questionLabel = isOptionalQuestion
-    ? "Optional"
-    : `${currentIndex + 1} of ${REQUIRED_COUNT}`;
+  const micSize = Math.min(148, Math.round(screenWidth * 0.38));
+  const micIconSize = Math.round(micSize * 0.3);
 
   const continueLabel =
     screenState === "optional-transition"
@@ -89,26 +91,82 @@ export default function OnboardingQuestionsScreen() {
           ? "Finish"
           : "Continue";
 
+  const questionLabel = isOptionalQuestion
+    ? "Optional"
+    : `${currentIndex + 1} of ${REQUIRED_COUNT}`;
+
+  const stepperLabel =
+    currentIndex < REQUIRED_COUNT
+      ? `Question ${currentIndex + 1} of ${REQUIRED_COUNT}`
+      : `Optional question ${currentIndex - REQUIRED_COUNT + 1} of ${QUESTIONS.length - REQUIRED_COUNT}`;
+
+  // ── Accessibility ──────────────────────────────────────────────────────────
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion);
   }, []);
 
-  function focusInput() {
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 200);
-  }
+  // ── Pulse ring (idle) ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (reducedMotion) return;
+    ringAnimation.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ringScale, {
+          toValue: 1.08,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(ringScale, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    ringAnimation.current.start();
+    return () => {
+      ringAnimation.current?.stop();
+    };
+  }, [ringScale, reducedMotion]);
 
+  // ── Pulse opacity (recording) ──────────────────────────────────────────────
+  useEffect(() => {
+    if (voiceState === "recording" && !reducedMotion) {
+      pulseAnimation.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseOpacity, {
+            toValue: 0.45,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseOpacity, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      pulseAnimation.current.start();
+    } else {
+      pulseAnimation.current?.stop();
+      pulseOpacity.setValue(1);
+    }
+  }, [voiceState, pulseOpacity, reducedMotion]);
+
+  // ── When moving to a new question, reset text input visibility ─────────────
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset on question/state change
+  useEffect(() => {
+    setShowTextInput(false);
+  }, [currentIndex, screenState]);
+
+  // ── Navigation ─────────────────────────────────────────────────────────────
   function animateSlide(direction: "forward" | "backward", onDone: () => void) {
     if (reducedMotion) {
       onDone();
       return;
     }
-
     const exitTo = direction === "forward" ? -screenWidth : screenWidth;
     const enterFrom = direction === "forward" ? screenWidth : -screenWidth;
     const easing = Easing.bezier(0.4, 0, 0.2, 1);
-
     Animated.timing(slideAnim, {
       toValue: exitTo,
       duration: 250,
@@ -122,7 +180,7 @@ export default function OnboardingQuestionsScreen() {
         duration: 250,
         easing,
         useNativeDriver: true,
-      }).start(() => focusInput());
+      }).start();
     });
   }
 
@@ -132,22 +190,15 @@ export default function OnboardingQuestionsScreen() {
       setScreenState("question");
       return;
     }
-
     if (isLastRequired) {
-      animateSlide("forward", () => {
-        setScreenState("optional-transition");
-      });
+      animateSlide("forward", () => setScreenState("optional-transition"));
       return;
     }
-
     if (isLastQuestion) {
       navigateToScoring();
       return;
     }
-
-    animateSlide("forward", () => {
-      setCurrentIndex((prev) => prev + 1);
-    });
+    animateSlide("forward", () => setCurrentIndex((prev) => prev + 1));
   }
 
   function handleBack() {
@@ -155,16 +206,8 @@ export default function OnboardingQuestionsScreen() {
       animateSlide("backward", () => setScreenState("question"));
       return;
     }
-
     if (currentIndex === 0) return;
-
-    animateSlide("backward", () => {
-      setCurrentIndex((prev) => prev - 1);
-    });
-  }
-
-  function handleSkip() {
-    navigateToScoring();
+    animateSlide("backward", () => setCurrentIndex((prev) => prev - 1));
   }
 
   function navigateToScoring() {
@@ -178,42 +221,13 @@ export default function OnboardingQuestionsScreen() {
     });
   }
 
-  function handleAnswerChange(text: string) {
-    setAnswers((prev) => ({ ...prev, [question.id]: text }));
-  }
-
-  function handleInputFocus() {
-    setIsInputFocused(true);
-    if (!reducedMotion) {
-      Animated.timing(charCountOpacity, {
-        toValue: 1,
-        duration: 150,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      charCountOpacity.setValue(1);
-    }
-  }
-
-  function handleInputBlur() {
-    setIsInputFocused(false);
-    if (currentAnswer.length === 0) {
-      if (!reducedMotion) {
-        Animated.timing(charCountOpacity, {
-          toValue: 0,
-          duration: 150,
-          useNativeDriver: true,
-        }).start();
-      } else {
-        charCountOpacity.setValue(0);
-      }
-    }
-  }
-
+  // ── Voice recording ─────────────────────────────────────────────────────────
   async function handleMicPress() {
     if (voiceState === "recording") {
       await stopAndTranscribe();
-    } else if (voiceState === "idle" || voiceState === "error") {
+    } else if (voiceState !== "transcribing") {
+      // Clear previous answer and collapse text input on re-record
+      setShowTextInput(false);
       await startVoiceRecording();
     }
   }
@@ -249,13 +263,11 @@ export default function OnboardingQuestionsScreen() {
       setVoiceState("error");
       return;
     }
-
     const uri = audioRecorder.uri;
     if (!uri) {
       setVoiceState("idle");
       return;
     }
-
     try {
       await setAudioModeAsync({
         playsInSilentMode: true,
@@ -265,16 +277,10 @@ export default function OnboardingQuestionsScreen() {
     } catch {
       /* non-fatal */
     }
-
     try {
       const transcript = await transcribeAnswerAudio(uri);
       if (transcript) {
-        setAnswers((prev) => ({
-          ...prev,
-          [question.id]: prev[question.id]
-            ? `${prev[question.id]} ${transcript}`
-            : transcript,
-        }));
+        setAnswers((prev) => ({ ...prev, [question.id]: transcript }));
       }
       setVoiceState("idle");
     } catch (err) {
@@ -287,10 +293,8 @@ export default function OnboardingQuestionsScreen() {
     const filename = uri.split("/").pop()?.split("?")[0] ?? "recording.m4a";
     const mimeType = Platform.OS === "web" ? "audio/webm" : "audio/mp4";
     const endpoint = `${supabaseUrl}/functions/v1/transcribe-answer`;
-
     const { data: sessionData } = await supabase.auth.getSession();
     const accessToken = sessionData.session?.access_token;
-
     const formData = new FormData();
     if (Platform.OS === "web") {
       const res = await fetch(uri);
@@ -306,7 +310,6 @@ export default function OnboardingQuestionsScreen() {
         type: mimeType,
       } as unknown as Blob);
     }
-
     return new Promise<string>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", endpoint);
@@ -320,7 +323,11 @@ export default function OnboardingQuestionsScreen() {
           const body = JSON.parse(xhr.responseText) as { text?: string };
           resolve(body.text ?? "");
         } else {
-          reject(new Error(`transcribe-answer HTTP ${xhr.status}`));
+          reject(
+            new Error(
+              `transcribe-answer HTTP ${xhr.status}: ${xhr.responseText.slice(0, 300)}`,
+            ),
+          );
         }
       };
       xhr.onerror = () => reject(new Error("Network error"));
@@ -328,14 +335,24 @@ export default function OnboardingQuestionsScreen() {
     });
   }
 
+  // ── Derived state ──────────────────────────────────────────────────────────
+  const isRecording = voiceState === "recording";
+  const isTranscribing = voiceState === "transcribing";
+  const isDisabled = isTranscribing;
   const showBackButton =
     screenState === "optional-transition" ||
     (screenState === "question" && currentIndex > 0);
 
-  const stepperLabel =
-    currentIndex < REQUIRED_COUNT
-      ? `Question ${currentIndex + 1} of ${REQUIRED_COUNT}`
-      : `Optional question ${currentIndex - REQUIRED_COUNT + 1} of ${QUESTIONS.length - REQUIRED_COUNT}`;
+  // Mic status label
+  const micLabel = isRecording
+    ? "Tap to finish"
+    : isTranscribing
+      ? "Transcribing…"
+      : voiceState === "error"
+        ? "Something went wrong — tap to try again"
+        : currentAnswer
+          ? "Tap to re-record"
+          : "Tap to speak";
 
   return (
     <LinearGradient
@@ -349,55 +366,90 @@ export default function OnboardingQuestionsScreen() {
           style={styles.flex}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
-          {/* Stepper */}
-          <View
-            style={styles.stepper}
-            accessibilityLabel={stepperLabel}
-            accessible
-          >
-            {QUESTIONS.map((q, idx) => {
-              const isActive =
-                screenState === "optional-transition"
-                  ? idx === REQUIRED_COUNT
-                  : idx === currentIndex;
-              const isCompleted =
-                screenState === "optional-transition"
-                  ? idx < REQUIRED_COUNT
-                  : idx < currentIndex;
-              const isOptional = !q.required;
-              const dotOpacity =
-                isOptional &&
-                idx > currentIndex &&
-                screenState !== "optional-transition"
-                  ? 0.4
-                  : 1;
-
-              return (
-                <View
-                  key={q.id}
-                  accessibilityElementsHidden
-                  importantForAccessibility="no-hide-descendants"
-                  style={[
-                    styles.dot,
-                    isActive && styles.dotActive,
-                    isCompleted && styles.dotCompleted,
-                    !isActive && !isCompleted && styles.dotUpcoming,
-                    { opacity: dotOpacity },
-                  ]}
+          {/* Header: back button + progress stepper */}
+          <View style={styles.header}>
+            {showBackButton ? (
+              <Pressable
+                onPress={() => {
+                  void AccessibilityInfo.isReduceMotionEnabled().then(
+                    (reduced) => {
+                      if (!reduced)
+                        LayoutAnimation.configureNext(
+                          LayoutAnimation.Presets.easeInEaseOut,
+                        );
+                      handleBack();
+                    },
+                  );
+                }}
+                style={({ pressed }) => [
+                  styles.backButton,
+                  pressed && styles.backButtonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Go back to previous question"
+                testID="question-back"
+              >
+                <Ionicons
+                  name="arrow-back"
+                  size={24}
+                  color={colors.onSurfaceVariant}
                 />
-              );
-            })}
+              </Pressable>
+            ) : (
+              <View style={styles.backButtonPlaceholder} />
+            )}
+
+            <View
+              style={styles.stepper}
+              accessibilityLabel={stepperLabel}
+              accessible
+            >
+              {QUESTIONS.map((q, idx) => {
+                const isActive =
+                  screenState === "optional-transition"
+                    ? idx === REQUIRED_COUNT
+                    : idx === currentIndex;
+                const isCompleted =
+                  screenState === "optional-transition"
+                    ? idx < REQUIRED_COUNT
+                    : idx < currentIndex;
+                const isOptional = !q.required;
+                const dotOpacity =
+                  isOptional &&
+                  idx > currentIndex &&
+                  screenState !== "optional-transition"
+                    ? 0.4
+                    : 1;
+                return (
+                  <View
+                    key={q.id}
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                    style={[
+                      styles.dot,
+                      isActive && styles.dotActive,
+                      isCompleted && styles.dotCompleted,
+                      !isActive && !isCompleted && styles.dotUpcoming,
+                      { opacity: dotOpacity },
+                    ]}
+                  />
+                );
+              })}
+            </View>
+
+            {/* Right spacer — mirrors back button width for centred dots */}
+            <View style={styles.backButtonPlaceholder} />
           </View>
 
-          {/* Main content area */}
-          <Animated.View
-            style={[
-              styles.mainContent,
-              { transform: [{ translateX: slideAnim }] },
-            ]}
+          <ScrollView
+            style={styles.flex}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            {screenState === "optional-transition" ? (
-              <View style={styles.transitionCard}>
+            <Animated.View style={{ transform: [{ translateX: slideAnim }] }}>
+              {screenState === "optional-transition" ? (
+                /* ── Optional-questions transition card ── */
                 <View style={styles.transitionCardInner}>
                   <Ionicons
                     name="sparkles-outline"
@@ -413,158 +465,234 @@ export default function OnboardingQuestionsScreen() {
                     forming.
                   </Text>
                 </View>
-              </View>
-            ) : (
-              <>
-                {/* Question card */}
-                <View style={styles.questionCard}>
-                  <Text style={styles.questionLabel}>{questionLabel}</Text>
-                  <Text style={styles.questionText}>{question.text}</Text>
-                  <Text style={styles.questionHint}>
-                    Write as much or as little as feels right.
-                  </Text>
-                </View>
-
-                {/* Answer input */}
-                <TextInput
-                  ref={inputRef}
-                  value={currentAnswer}
-                  onChangeText={handleAnswerChange}
-                  onFocus={handleInputFocus}
-                  onBlur={handleInputBlur}
-                  placeholder="Your thoughts…"
-                  placeholderTextColor={colors.outlineVariant}
-                  multiline
-                  textAlignVertical="top"
-                  returnKeyType={isLastRequired ? "done" : "next"}
-                  blurOnSubmit={false}
-                  editable={
-                    voiceState !== "recording" && voiceState !== "transcribing"
-                  }
-                  style={[
-                    styles.textInput,
-                    (voiceState === "recording" ||
-                      voiceState === "transcribing") &&
-                      styles.textInputVoiceActive,
-                  ]}
-                  accessibilityLabel={question.text}
-                  accessibilityHint="Your answer is private and will not be shared"
-                  testID={`question-input-${question.id}`}
-                />
-
-                {/* Voice + char count row */}
-                <View style={styles.inputFooterRow}>
-                  <Animated.Text
-                    style={[styles.charCount, { opacity: charCountOpacity }]}
-                  >
-                    {currentAnswer.length}{" "}
-                    {currentAnswer.length === 1 ? "character" : "characters"}
-                  </Animated.Text>
-
-                  <View style={styles.voiceControls}>
-                    {voiceState === "recording" && (
-                      <Text style={styles.voiceStatusText}>Recording…</Text>
-                    )}
-                    {voiceState === "transcribing" && (
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    )}
-                    {voiceState === "error" && (
-                      <Text style={styles.voiceErrorText}>Tap to retry</Text>
-                    )}
-                    <Pressable
-                      onPress={() => void handleMicPress()}
-                      disabled={voiceState === "transcribing"}
-                      style={({ pressed }) => [
-                        styles.micButton,
-                        voiceState === "recording" && styles.micButtonRecording,
-                        pressed &&
-                          voiceState !== "recording" &&
-                          styles.micButtonPressed,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        voiceState === "recording"
-                          ? "Stop recording and transcribe"
-                          : "Speak your answer"
-                      }
-                      testID={`question-mic-${question.id}`}
-                    >
-                      <Ionicons
-                        name={
-                          voiceState === "recording"
-                            ? "stop-circle"
-                            : "mic-outline"
-                        }
-                        size={20}
-                        color={
-                          voiceState === "recording"
-                            ? colors.onError
-                            : colors.primary
-                        }
-                      />
-                    </Pressable>
-                  </View>
-                </View>
-              </>
-            )}
-          </Animated.View>
-
-          {/* Navigation row */}
-          <View style={styles.navRow}>
-            <View style={styles.navLeft}>
-              {showBackButton ? (
-                <Pressable
-                  onPress={() => {
-                    void AccessibilityInfo.isReduceMotionEnabled().then(
-                      (reduced) => {
-                        if (!reduced) {
-                          LayoutAnimation.configureNext(
-                            LayoutAnimation.Presets.easeInEaseOut,
-                          );
-                        }
-                        handleBack();
-                      },
-                    );
-                  }}
-                  style={({ pressed }) => [
-                    styles.backButton,
-                    pressed && styles.backButtonPressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Go back to previous question"
-                  testID="question-back"
-                >
-                  <Ionicons
-                    name="arrow-back"
-                    size={24}
-                    color={colors.onSurfaceVariant}
-                  />
-                </Pressable>
               ) : (
-                <View style={styles.backButtonPlaceholder} />
-              )}
-            </View>
+                <>
+                  {/* ── Question card ── */}
+                  <View style={styles.questionCard}>
+                    <Text style={styles.questionLabel}>{questionLabel}</Text>
+                    <Text style={styles.questionText}>{question.text}</Text>
+                  </View>
 
-            <View style={styles.navRight}>
-              {screenState === "optional-transition" && (
-                <Pressable
-                  onPress={handleSkip}
-                  style={styles.skipLink}
-                  accessibilityRole="button"
-                  accessibilityLabel="Skip optional questions and go to your sanctuary"
-                  testID="question-skip"
-                >
-                  <Text style={styles.skipText}>Skip to my sanctuary →</Text>
-                </Pressable>
+                  {/* ── Hero mic button ── */}
+                  <View style={styles.micSection}>
+                    <View
+                      style={[
+                        styles.micStack,
+                        { width: micSize + 72, height: micSize + 72 },
+                      ]}
+                    >
+                      {/* Ambient glow */}
+                      <View
+                        style={[
+                          styles.micGlow,
+                          {
+                            width: micSize + 40,
+                            height: micSize + 40,
+                            borderRadius: (micSize + 40) / 2,
+                          },
+                        ]}
+                      />
+                      {/* Pulse ring — hidden while recording */}
+                      {!isRecording && (
+                        <Animated.View
+                          style={[
+                            styles.micPulseRing,
+                            {
+                              width: micSize + 20,
+                              height: micSize + 20,
+                              borderRadius: (micSize + 20) / 2,
+                              transform: [{ scale: ringScale }],
+                            },
+                          ]}
+                          accessibilityElementsHidden
+                          importantForAccessibility="no-hide-descendants"
+                        />
+                      )}
+                      {/* Button */}
+                      <Animated.View style={{ opacity: pulseOpacity }}>
+                        <Pressable
+                          onPress={() => void handleMicPress()}
+                          disabled={isDisabled}
+                          style={[
+                            styles.micMain,
+                            {
+                              width: micSize,
+                              height: micSize,
+                              borderRadius: micSize / 2,
+                            },
+                            isRecording && styles.micMainRecording,
+                            isDisabled && styles.micMainDisabled,
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            isRecording
+                              ? "Stop recording"
+                              : isTranscribing
+                                ? "Transcribing your answer"
+                                : "Start voice recording"
+                          }
+                          testID={`question-mic-${question.id}`}
+                        >
+                          {isTranscribing ? (
+                            <ActivityIndicator
+                              color={colors.onPrimary}
+                              size="large"
+                            />
+                          ) : isRecording ? (
+                            <Ionicons
+                              name="stop"
+                              size={micIconSize}
+                              color={colors.onPrimary}
+                            />
+                          ) : (
+                            <Ionicons
+                              name="mic"
+                              size={micIconSize}
+                              color={colors.onPrimary}
+                            />
+                          )}
+                        </Pressable>
+                      </Animated.View>
+                    </View>
+
+                    {/* Mic status label */}
+                    <Text
+                      style={[
+                        styles.micLabel,
+                        voiceState === "error" && styles.micLabelError,
+                        isRecording && styles.micLabelRecording,
+                      ]}
+                    >
+                      {micLabel}
+                    </Text>
+                  </View>
+
+                  {/* ── Transcribed/typed answer display ── */}
+                  {currentAnswer !== "" && !showTextInput && (
+                    <View style={styles.answerCard}>
+                      <Text style={styles.answerText} numberOfLines={6}>
+                        {currentAnswer}
+                      </Text>
+                      <Pressable
+                        onPress={() => {
+                          void AccessibilityInfo.isReduceMotionEnabled().then(
+                            (reduced) => {
+                              if (!reduced)
+                                LayoutAnimation.configureNext(
+                                  LayoutAnimation.Presets.easeInEaseOut,
+                                );
+                              setShowTextInput(true);
+                              setTimeout(() => inputRef.current?.focus(), 150);
+                            },
+                          );
+                        }}
+                        style={({ pressed }) => [
+                          styles.editButton,
+                          pressed && styles.editButtonPressed,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Edit your answer"
+                        testID={`question-edit-${question.id}`}
+                      >
+                        <Ionicons
+                          name="pencil-outline"
+                          size={14}
+                          color={colors.primary}
+                        />
+                        <Text style={styles.editButtonLabel}>Edit</Text>
+                      </Pressable>
+                    </View>
+                  )}
+
+                  {/* ── Text input (secondary, shown on demand) ── */}
+                  {showTextInput && (
+                    <View style={styles.textInputContainer}>
+                      <TextInput
+                        ref={inputRef}
+                        value={currentAnswer}
+                        onChangeText={(text) =>
+                          setAnswers((prev) => ({
+                            ...prev,
+                            [question.id]: text,
+                          }))
+                        }
+                        placeholder="Your thoughts…"
+                        placeholderTextColor={colors.outlineVariant}
+                        multiline
+                        textAlignVertical="top"
+                        style={styles.textInput}
+                        accessibilityLabel={`Type your answer to: ${question.text}`}
+                        accessibilityHint="Your answer is private and will not be shared"
+                        testID={`question-input-${question.id}`}
+                      />
+                    </View>
+                  )}
+
+                  {/* ── "Or type instead" link ── */}
+                  {!showTextInput &&
+                    currentAnswer === "" &&
+                    voiceState === "idle" && (
+                      <Pressable
+                        onPress={() => {
+                          void AccessibilityInfo.isReduceMotionEnabled().then(
+                            (reduced) => {
+                              if (!reduced)
+                                LayoutAnimation.configureNext(
+                                  LayoutAnimation.Presets.easeInEaseOut,
+                                );
+                              setShowTextInput(true);
+                              setTimeout(() => inputRef.current?.focus(), 150);
+                            },
+                          );
+                        }}
+                        style={({ pressed }) => [
+                          styles.typeInsteadButton,
+                          pressed && styles.typeInsteadButtonPressed,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Type your answer instead"
+                        testID={`question-type-instead-${question.id}`}
+                      >
+                        <Text style={styles.typeInsteadText}>
+                          Or type instead
+                        </Text>
+                      </Pressable>
+                    )}
+
+                  {/* ── Continue button ── */}
+                  <View style={styles.continueRow}>
+                    <Button
+                      label={continueLabel}
+                      variant="primary"
+                      onPress={handleContinue}
+                      testID="question-continue"
+                    />
+                  </View>
+                </>
               )}
-              <Button
-                label={continueLabel}
-                variant="primary"
-                onPress={handleContinue}
-                testID="question-continue"
-              />
-            </View>
-          </View>
+
+              {/* ── Continue + Skip (optional-transition) ── */}
+              {screenState === "optional-transition" && (
+                <View style={styles.continueRow}>
+                  <Pressable
+                    onPress={navigateToScoring}
+                    style={styles.skipLink}
+                    accessibilityRole="button"
+                    accessibilityLabel="Skip optional questions and go to your sanctuary"
+                    testID="question-skip"
+                  >
+                    <Text style={styles.skipText}>Skip to my sanctuary →</Text>
+                  </Pressable>
+                  <Button
+                    label={continueLabel}
+                    variant="primary"
+                    onPress={handleContinue}
+                    testID="question-continue"
+                  />
+                </View>
+              )}
+            </Animated.View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </LinearGradient>
@@ -575,42 +703,46 @@ const styles = StyleSheet.create({
   gradient: { flex: 1 },
   safeArea: { flex: 1 },
   flex: { flex: 1 },
+
+  // Header row (back button + stepper + spacer)
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.s6,
+    marginTop: spacing.s6,
+    marginBottom: spacing.s2,
+  },
   stepper: {
+    flex: 1,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     gap: 6,
+  },
+  dot: { height: 8, borderRadius: radius.full },
+  dotActive: { width: 24, height: 8, backgroundColor: colors.primary },
+  dotCompleted: { width: 8, backgroundColor: colors.primary, opacity: 0.5 },
+  dotUpcoming: { width: 8, backgroundColor: colors.outlineVariant },
+
+  // Continue button row (inside scroll content)
+  continueRow: {
     marginTop: spacing.s8,
-    marginBottom: spacing.s4,
+    paddingBottom: spacing.s8,
+    gap: spacing.s2,
+    alignItems: "stretch",
+  },
+
+  scrollContent: {
     paddingHorizontal: spacing.s8,
+    paddingBottom: spacing.s8,
   },
-  dot: {
-    height: 8,
-    borderRadius: radius.full,
-  },
-  dotActive: {
-    width: 24,
-    height: 8,
-    backgroundColor: colors.primary,
-  },
-  dotCompleted: {
-    width: 8,
-    backgroundColor: colors.primary,
-    opacity: 0.5,
-  },
-  dotUpcoming: {
-    width: 8,
-    backgroundColor: colors.outlineVariant,
-  },
-  mainContent: {
-    flex: 1,
-    paddingHorizontal: spacing.s8,
-  },
+
+  // Question card
   questionCard: {
     backgroundColor: colors.surfaceContainerLowest,
     borderRadius: radius.lg,
     padding: spacing.s8,
-    marginTop: spacing.s8,
+    marginTop: spacing.s4,
     ...shadows.card,
   },
   questionLabel: {
@@ -622,77 +754,122 @@ const styles = StyleSheet.create({
   questionText: {
     ...typography.headlineMd,
     color: colors.onSurface,
-    marginBottom: spacing.s6,
   },
-  questionHint: {
+
+  // Hero mic
+  micSection: {
+    alignItems: "center",
+    marginTop: spacing.s8,
+    marginBottom: spacing.s4,
+  },
+  micStack: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micGlow: {
+    position: "absolute",
+    backgroundColor: colors.primaryContainer,
+    opacity: 0.28,
+  },
+  micPulseRing: {
+    position: "absolute",
+    borderWidth: 2,
+    borderColor: "rgba(215, 231, 211, 0.45)",
+  },
+  micMain: {
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.18,
+    shadowRadius: 40,
+    elevation: 12,
+  },
+  micMainRecording: {
+    backgroundColor: colors.error,
+    shadowColor: colors.error,
+  },
+  micMainDisabled: { opacity: 0.45 },
+  micLabel: {
     ...typography.labelMd,
     color: colors.secondary,
+    textAlign: "center",
+    marginTop: spacing.s4,
+  },
+  micLabelRecording: { color: colors.error },
+  micLabelError: { color: colors.error },
+
+  // Answer display card
+  answerCard: {
+    backgroundColor: colors.surfaceContainerLowest,
+    borderRadius: radius.lg,
+    padding: spacing.s6,
+    marginBottom: spacing.s4,
+    ...shadows.card,
+  },
+  answerText: {
+    ...typography.bodyLg,
+    color: colors.onSurface,
+    lineHeight: 26,
+    marginBottom: spacing.s4,
+  },
+  editButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-end",
+    paddingVertical: spacing.s2,
+    paddingHorizontal: spacing.s4,
+    borderRadius: radius.full,
+  },
+  editButtonPressed: { backgroundColor: colors.primaryContainer },
+  editButtonLabel: {
+    ...typography.labelMd,
+    color: colors.primary,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+  },
+
+  // Text input
+  textInputContainer: {
+    marginBottom: spacing.s4,
   },
   textInput: {
     minHeight: 120,
-    maxHeight: 240,
+    maxHeight: 220,
     backgroundColor: colors.surfaceContainerLow,
     borderRadius: radius.lg,
     padding: spacing.s6,
     ...typography.bodyLg,
     color: colors.onSurface,
-    marginTop: spacing.s6,
     textAlignVertical: "top",
   },
-  inputFooterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: spacing.s2,
-    minHeight: 32,
+
+  // "Or type instead"
+  typeInsteadButton: {
+    alignSelf: "center",
+    paddingVertical: spacing.s2,
+    paddingHorizontal: spacing.s6,
+    borderRadius: radius.full,
+    marginBottom: spacing.s4,
   },
-  charCount: {
+  typeInsteadButtonPressed: { backgroundColor: `${colors.primary}14` },
+  typeInsteadText: {
     ...typography.labelMd,
     color: colors.outlineVariant,
+    textDecorationLine: "underline",
   },
-  textInputVoiceActive: {
-    opacity: 0.5,
-  },
-  voiceControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.s2,
-  },
-  voiceStatusText: {
-    ...typography.labelMd,
-    color: colors.primary,
-  },
-  voiceErrorText: {
-    ...typography.labelMd,
-    color: colors.error,
-  },
-  micButton: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceContainerHigh,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  micButtonRecording: {
-    backgroundColor: colors.error,
-  },
-  micButtonPressed: {
-    backgroundColor: colors.primaryContainer,
-  },
-  transitionCard: {
-    marginTop: spacing.s8,
-  },
+
+  // Optional-transition card
   transitionCardInner: {
     backgroundColor: colors.surfaceContainerLowest,
     borderRadius: radius.lg,
     padding: spacing.s8,
     alignItems: "center",
+    marginTop: spacing.s8,
     ...shadows.card,
   },
-  transitionIcon: {
-    marginBottom: spacing.s4,
-  },
+  transitionIcon: { marginBottom: spacing.s4 },
   transitionHeadline: {
     ...typography.headlineMd,
     color: colors.onSurface,
@@ -704,22 +881,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: spacing.s4,
   },
-  navRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: spacing.s8,
-    paddingBottom: spacing.s12,
-    paddingTop: spacing.s4,
-  },
-  navLeft: {
-    width: 44,
-  },
-  navRight: {
-    flex: 1,
-    alignItems: "flex-end",
-    gap: spacing.s2,
-  },
+
   backButton: {
     width: 44,
     height: 44,
@@ -727,16 +889,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  backButtonPressed: {
-    backgroundColor: colors.surfaceContainerHigh,
-  },
-  backButtonPlaceholder: {
-    width: 44,
-    height: 44,
-  },
-  skipLink: {
-    paddingVertical: spacing.s4,
-  },
+  backButtonPressed: { backgroundColor: colors.surfaceContainerHigh },
+  backButtonPlaceholder: { width: 44, height: 44 },
+  skipLink: { paddingVertical: spacing.s4 },
   skipText: {
     fontFamily: "PlusJakartaSans_600SemiBold",
     fontSize: 14,

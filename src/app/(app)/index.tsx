@@ -656,7 +656,13 @@ export default function QuickCaptureScreen() {
                   styles.headerIconSlot,
                   pressed && styles.headerIconSlotPressed,
                 ]}
-                onPress={() => router.push("/(onboarding)")}
+                onPress={() =>
+                  router.push(
+                    onboardingComplete
+                      ? "/(onboarding)/profile"
+                      : "/(onboarding)",
+                  )
+                }
                 accessibilityRole="button"
                 accessibilityLabel={
                   onboardingComplete

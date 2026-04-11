@@ -35,6 +35,15 @@ interface OceanScores {
   neuroticism: number;
 }
 
+type OceanReasoning = Record<
+  | "openness"
+  | "conscientiousness"
+  | "extraversion"
+  | "agreeableness"
+  | "neuroticism",
+  string
+>;
+
 const OCEAN_DIMS = [
   "openness",
   "conscientiousness",
@@ -54,30 +63,61 @@ function stripCodeFences(raw: string): string {
     .trim();
 }
 
-function parseOceanScores(raw: string): OceanScores {
+function parseOceanResponse(raw: string): {
+  scores: OceanScores;
+  reasoning: OceanReasoning;
+} {
   const parsed = JSON.parse(stripCodeFences(raw)) as Record<string, unknown>;
-  const result = {} as OceanScores;
+  const scores = {} as OceanScores;
+  const reasoningRaw = parsed.reasoning as Record<string, unknown> | undefined;
+  const reasoning = {} as OceanReasoning;
+
   for (const dim of OCEAN_DIMS) {
     const v = parsed[dim];
     if (typeof v !== "number" || Number.isNaN(v)) {
       throw new Error(`Missing or invalid OCEAN dimension: ${dim}`);
     }
-    result[dim] = clamp01(v);
+    scores[dim] = clamp01(v);
+    reasoning[dim] =
+      typeof reasoningRaw?.[dim] === "string"
+        ? (reasoningRaw[dim] as string).trim()
+        : "";
   }
-  return result;
+  return { scores, reasoning };
 }
 
-const SYSTEM_PROMPT = `You are a psychometric scoring assistant. Given a set of free-text answers from a personality questionnaire, score the respondent on the five OCEAN / Big Five personality dimensions. Each dimension must be scored as a float between 0.0 (very low) and 1.0 (very high). Base your scores only on the content and style of the answers provided. Be precise and use the full range; avoid clustering scores near 0.5.
+const SYSTEM_PROMPT = `You are a psychometric scoring assistant. Given free-text answers from a personality questionnaire, score the respondent on the five OCEAN / Big Five dimensions and explain each score.
 
-Return ONLY valid JSON in this exact shape — no markdown fences, no extra keys, no explanation:
-{"openness": 0.0, "conscientiousness": 0.0, "extraversion": 0.0, "agreeableness": 0.0, "neuroticism": 0.0}
+Scoring rules:
+- Each dimension is a float from 0.0 (extremely low) to 1.0 (extremely high).
+- Use the FULL range — do NOT cluster near 0.5.
+- Base scores solely on the actual content, language and style of the answers.
+- Scores MUST differ meaningfully unless the answers genuinely support similar levels.
 
 Dimension guidelines:
 - openness: curiosity, imagination, aesthetic sensitivity, willingness to explore new ideas
 - conscientiousness: organisation, self-discipline, goal-directed behaviour, reliability
 - extraversion: energy from social interaction, assertiveness, positive affect, talkativeness
 - agreeableness: cooperation, trust, empathy, warmth in close relationships
-- neuroticism: emotional instability, anxiety, tendency to experience negative affect`;
+- neuroticism: emotional instability, anxiety, tendency to experience negative affect
+
+For each dimension also write 1–2 sentences of plain-language reasoning that cites specific things from the answers. Keep reasoning concise and personal (use "you / your").
+
+Return ONLY valid JSON — no markdown fences, no extra keys. Example shape (illustrative values):
+{
+  "openness": 0.74,
+  "conscientiousness": 0.52,
+  "extraversion": 0.38,
+  "agreeableness": 0.81,
+  "neuroticism": 0.29,
+  "reasoning": {
+    "openness": "Your answers show a genuine love of exploring new ideas and creative thinking.",
+    "conscientiousness": "You seem fairly organised but leave room for spontaneity in how you approach tasks.",
+    "extraversion": "You draw energy from quieter, reflective time rather than social settings.",
+    "agreeableness": "Your warmth and empathy come through clearly in how you describe relationships.",
+    "neuroticism": "You appear emotionally steady and handle stress without much anxiety."
+  }
+}`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -293,8 +333,9 @@ Deno.serve(async (req) => {
   }
 
   let scores: OceanScores;
+  let reasoning: OceanReasoning;
   try {
-    scores = parseOceanScores(rawContent);
+    ({ scores, reasoning } = parseOceanResponse(rawContent));
   } catch (err) {
     logAiError({
       event: "ai.error",
@@ -326,6 +367,7 @@ Deno.serve(async (req) => {
       extraversion: scores.extraversion,
       agreeableness: scores.agreeableness,
       neuroticism: scores.neuroticism,
+      reasoning,
       answers: validatedAnswers,
       question_set_version: questionSetVersion,
       scored_at: new Date().toISOString(),
@@ -342,5 +384,5 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Failed to save profile" }, 500);
   }
 
-  return jsonResponse({ profile: scores });
+  return jsonResponse({ profile: scores, reasoning });
 });

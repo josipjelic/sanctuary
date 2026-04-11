@@ -79,12 +79,22 @@ export default function OnboardingScoringScreen() {
     setHasError(false);
     const startTime = Date.now();
 
+    // Filter out unanswered questions before sending — the edge function
+    // rejects items with empty answer strings.
+    const answeredItems = answers.filter((a) => a.answer.trim().length > 0);
+
+    if (answeredItems.length === 0) {
+      // Nothing to score — navigate straight to the completion screen.
+      router.replace("/(onboarding)/complete");
+      return;
+    }
+
     try {
       const { data, error } = await supabase.functions.invoke(
         "score-ocean-profile",
         {
           body: {
-            answers,
+            answers: answeredItems,
             question_set_version: "v1",
           },
         },

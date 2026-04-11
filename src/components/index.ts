@@ -1,4 +1,5 @@
 export { Button } from "./Button";
+export { OceanRadarChart } from "./OceanRadarChart";
 export { Card } from "./Card";
 export { MorningMessageCard } from "./MorningMessageCard";
 export { ReminderApprovalSheet } from "./ReminderApprovalSheet";

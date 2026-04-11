@@ -181,12 +181,12 @@ Deno.serve(async (req) => {
         role: "user",
         content: [
           {
-            type: "input_audio",
-            input_audio: { data: base64, format },
-          },
-          {
             type: "text",
             text: transcriptionUserPrompt(transcriptionLanguage),
+          },
+          {
+            type: "input_audio",
+            input_audio: { data: base64, format },
           },
         ],
       },
@@ -209,12 +209,17 @@ Deno.serve(async (req) => {
 
   let transcript: string;
   try {
+    const orHeaders: Record<string, string> = {
+      Authorization: `Bearer ${openrouterKey}`,
+      "Content-Type": "application/json",
+      "X-Title": "Sanctuary",
+    };
+    const referer = Deno.env.get("OPENROUTER_HTTP_REFERER");
+    if (referer) orHeaders["HTTP-Referer"] = referer;
+
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${openrouterKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: orHeaders,
       body: JSON.stringify(requestBody),
     });
 
