@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -166,7 +167,51 @@ export default function JournalHistoryScreen() {
 
   if (loading) {
     return (
+      <LinearGradient
+        colors={[colors.primaryContainer, colors.surface]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={styles.gradient}
+      >
+        <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+          <View style={styles.header}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed && styles.backButtonPressed,
+              ]}
+              onPress={() => router.back()}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <Ionicons
+                name="arrow-back"
+                size={24}
+                color={colors.onSurfaceVariant}
+              />
+            </Pressable>
+            <Text style={styles.headerTitle} accessibilityRole="header">
+              Past entries
+            </Text>
+            <View style={styles.headerSpacer} />
+          </View>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
+  return (
+    <LinearGradient
+      colors={[colors.primaryContainer, colors.surface]}
+      start={{ x: 0.1, y: 0 }}
+      end={{ x: 0.9, y: 1 }}
+      style={styles.gradient}
+    >
       <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+        {/* Header */}
         <View style={styles.header}>
           <Pressable
             style={({ pressed }) => [
@@ -176,6 +221,7 @@ export default function JournalHistoryScreen() {
             onPress={() => router.back()}
             accessibilityRole="button"
             accessibilityLabel="Go back"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons
               name="arrow-back"
@@ -188,65 +234,34 @@ export default function JournalHistoryScreen() {
           </Text>
           <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+
+        <FlatList
+          data={sessions}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          ListEmptyComponent={renderEmpty}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          showsVerticalScrollIndicator={false}
+          accessibilityRole="list"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+            />
+          }
+          testID="journal-history-list"
+        />
       </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed && styles.backButtonPressed,
-          ]}
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={24}
-            color={colors.onSurfaceVariant}
-          />
-        </Pressable>
-        <Text style={styles.headerTitle} accessibilityRole="header">
-          Past entries
-        </Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <FlatList
-        data={sessions}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        ListEmptyComponent={renderEmpty}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        showsVerticalScrollIndicator={false}
-        accessibilityRole="list"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.primary}
-          />
-        }
-        testID="journal-history-list"
-      />
-    </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: { flex: 1 },
   container: {
     flex: 1,
-    backgroundColor: colors.surface,
   },
   loadingContainer: {
     flex: 1,
@@ -268,7 +283,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   backButtonPressed: {
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: `${colors.primary}14`,
   },
   headerTitle: {
     ...typography.headlineMd,

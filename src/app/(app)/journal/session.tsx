@@ -13,6 +13,7 @@ import {
   useAudioRecorder,
 } from "expo-audio";
 import type { RecordingOptions } from "expo-audio";
+import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -553,219 +554,294 @@ export default function JournalSessionScreen() {
           : "Tap to speak";
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed && styles.backButtonPressed,
-          ]}
-          onPress={handleBackPress}
-          accessibilityRole="button"
-          accessibilityLabel="Back — leave journal session"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={24}
-            color={colors.onSurfaceVariant}
-          />
-        </Pressable>
-        <Text style={styles.headerTitle} accessibilityRole="header">
-          Journal
-        </Text>
-        <Text
-          style={styles.progress}
-          accessibilityLabel={`Question ${displayTurnIndex} of 3`}
-        >
-          {displayTurnIndex} / 3
-        </Text>
-      </View>
-
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Question card */}
-          <Animated.View
-            style={{ transform: [{ translateX: isLoading ? 0 : slideAnim }] }}
+    <LinearGradient
+      colors={[colors.primaryContainer, colors.surface]}
+      start={{ x: 0.1, y: 0 }}
+      end={{ x: 0.9, y: 1 }}
+      style={styles.gradient}
+    >
+      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.backButton,
+              pressed && styles.backButtonPressed,
+            ]}
+            onPress={handleBackPress}
+            accessibilityRole="button"
+            accessibilityLabel="Back — leave journal session"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Card
-              variant="elevated"
-              size="lg"
-              style={styles.questionCard}
-              testID="journal-question-card"
-            >
-              {isLoading ? (
-                <View
-                  accessibilityLabel="Loading next question"
-                  accessibilityLiveRegion="polite"
-                >
-                  <Animated.View
-                    style={[
-                      styles.skeletonBar,
-                      styles.skeletonBar1,
-                      { opacity: skeletonOpacity1 },
-                    ]}
-                    accessibilityElementsHidden
-                  />
-                  <Animated.View
-                    style={[
-                      styles.skeletonBar,
-                      styles.skeletonBar2,
-                      { opacity: skeletonOpacity2 },
-                    ]}
-                    accessibilityElementsHidden
-                  />
-                </View>
-              ) : (
-                <View
-                  accessibilityLabel={`Question ${currentTurnIndex + 1} of 3: ${currentQuestion}`}
-                >
-                  <Text style={styles.turnLabel}>
-                    Question {currentTurnIndex + 1}
-                  </Text>
-                  <Text style={styles.questionText}>{currentQuestion}</Text>
-                  {currentTurnIndex === 0 && (
-                    <Text style={styles.questionHint}>
-                      Take your time. Write as much or as little as feels right.
-                    </Text>
-                  )}
-                </View>
-              )}
-            </Card>
-          </Animated.View>
+            <Ionicons
+              name="arrow-back"
+              size={24}
+              color={colors.onSurfaceVariant}
+            />
+          </Pressable>
+          <Text style={styles.headerTitle} accessibilityRole="header">
+            Journal
+          </Text>
+          <Text
+            style={styles.progress}
+            accessibilityLabel={`Question ${displayTurnIndex} of 3`}
+          >
+            {displayTurnIndex} / 3
+          </Text>
+        </View>
 
-          {/* Error — failed to load question */}
-          {isErrorQuestion && (
-            <View
-              style={styles.questionErrorContainer}
-              accessibilityRole="alert"
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <ScrollView
+            style={styles.flex}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Question card */}
+            <Animated.View
+              style={{ transform: [{ translateX: isLoading ? 0 : slideAnim }] }}
             >
-              <Text style={styles.questionErrorText}>
-                Couldn't load the next question.
-              </Text>
-              <Pressable
-                onPress={() => void fetchNextQuestion(turns)}
-                accessibilityRole="button"
-                accessibilityLabel="Try again"
-                style={styles.retryPressable}
+              <Card
+                variant="elevated"
+                size="lg"
+                style={styles.questionCard}
+                testID="journal-question-card"
               >
-                <Text style={styles.retryText}>Try again</Text>
-              </Pressable>
-            </View>
-          )}
-
-          {/* Voice-first input area */}
-          {!isLoading && !isErrorQuestion && (
-            <>
-              {/* Hero mic button */}
-              <View style={styles.micSection}>
-                <View
-                  style={[
-                    styles.micStack,
-                    { width: micSize + 72, height: micSize + 72 },
-                  ]}
-                >
-                  {/* Ambient glow */}
+                {isLoading ? (
                   <View
-                    style={[
-                      styles.micGlow,
-                      {
-                        width: micSize + 40,
-                        height: micSize + 40,
-                        borderRadius: (micSize + 40) / 2,
-                      },
-                    ]}
-                  />
-                  {/* Pulse ring — hidden while recording */}
-                  {!isRecording && (
+                    accessibilityLabel="Loading next question"
+                    accessibilityLiveRegion="polite"
+                  >
                     <Animated.View
                       style={[
-                        styles.micPulseRing,
-                        {
-                          width: micSize + 20,
-                          height: micSize + 20,
-                          borderRadius: (micSize + 20) / 2,
-                          transform: [{ scale: ringScale }],
-                        },
+                        styles.skeletonBar,
+                        styles.skeletonBar1,
+                        { opacity: skeletonOpacity1 },
                       ]}
                       accessibilityElementsHidden
-                      importantForAccessibility="no-hide-descendants"
                     />
-                  )}
-                  {/* Button */}
-                  <Animated.View style={{ opacity: pulseOpacity }}>
-                    <Pressable
-                      onPress={() => void handleMicPress()}
-                      disabled={isDisabled}
+                    <Animated.View
                       style={[
-                        styles.micMain,
-                        {
-                          width: micSize,
-                          height: micSize,
-                          borderRadius: micSize / 2,
-                        },
-                        isRecording && styles.micMainRecording,
-                        isDisabled && styles.micMainDisabled,
+                        styles.skeletonBar,
+                        styles.skeletonBar2,
+                        { opacity: skeletonOpacity2 },
                       ]}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        isRecording
-                          ? "Stop recording"
-                          : isTranscribing
-                            ? "Transcribing your answer"
-                            : "Start voice recording"
-                      }
-                      testID="journal-mic-btn"
-                    >
-                      {isTranscribing ? (
-                        <ActivityIndicator
-                          color={colors.onPrimary}
-                          size="large"
-                        />
-                      ) : isRecording ? (
-                        <Ionicons
-                          name="stop"
-                          size={micIconSize}
-                          color={colors.onPrimary}
-                        />
-                      ) : (
-                        <Ionicons
-                          name="mic"
-                          size={micIconSize}
-                          color={colors.onPrimary}
-                        />
-                      )}
-                    </Pressable>
-                  </Animated.View>
+                      accessibilityElementsHidden
+                    />
+                  </View>
+                ) : (
+                  <View
+                    accessibilityLabel={`Question ${currentTurnIndex + 1} of 3: ${currentQuestion}`}
+                  >
+                    <Text style={styles.turnLabel}>
+                      Question {currentTurnIndex + 1}
+                    </Text>
+                    <Text style={styles.questionText}>{currentQuestion}</Text>
+                    {currentTurnIndex === 0 && (
+                      <Text style={styles.questionHint}>
+                        Take your time. Write as much or as little as feels
+                        right.
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </Card>
+            </Animated.View>
+
+            {/* Error — failed to load question */}
+            {isErrorQuestion && (
+              <View
+                style={styles.questionErrorContainer}
+                accessibilityRole="alert"
+              >
+                <Text style={styles.questionErrorText}>
+                  Couldn't load the next question.
+                </Text>
+                <Pressable
+                  onPress={() => void fetchNextQuestion(turns)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Try again"
+                  style={styles.retryPressable}
+                >
+                  <Text style={styles.retryText}>Try again</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* Voice-first input area */}
+            {!isLoading && !isErrorQuestion && (
+              <>
+                {/* Hero mic button */}
+                <View style={styles.micSection}>
+                  <View
+                    style={[
+                      styles.micStack,
+                      { width: micSize + 72, height: micSize + 72 },
+                    ]}
+                  >
+                    {/* Ambient glow */}
+                    <View
+                      style={[
+                        styles.micGlow,
+                        {
+                          width: micSize + 40,
+                          height: micSize + 40,
+                          borderRadius: (micSize + 40) / 2,
+                        },
+                      ]}
+                    />
+                    {/* Pulse ring — hidden while recording */}
+                    {!isRecording && (
+                      <Animated.View
+                        style={[
+                          styles.micPulseRing,
+                          {
+                            width: micSize + 20,
+                            height: micSize + 20,
+                            borderRadius: (micSize + 20) / 2,
+                            transform: [{ scale: ringScale }],
+                          },
+                        ]}
+                        accessibilityElementsHidden
+                        importantForAccessibility="no-hide-descendants"
+                      />
+                    )}
+                    {/* Button */}
+                    <Animated.View style={{ opacity: pulseOpacity }}>
+                      <Pressable
+                        onPress={() => void handleMicPress()}
+                        disabled={isDisabled}
+                        style={[
+                          styles.micMain,
+                          {
+                            width: micSize,
+                            height: micSize,
+                            borderRadius: micSize / 2,
+                          },
+                          isRecording && styles.micMainRecording,
+                          isDisabled && styles.micMainDisabled,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          isRecording
+                            ? "Stop recording"
+                            : isTranscribing
+                              ? "Transcribing your answer"
+                              : "Start voice recording"
+                        }
+                        testID="journal-mic-btn"
+                      >
+                        {isTranscribing ? (
+                          <ActivityIndicator
+                            color={colors.onPrimary}
+                            size="large"
+                          />
+                        ) : isRecording ? (
+                          <Ionicons
+                            name="stop"
+                            size={micIconSize}
+                            color={colors.onPrimary}
+                          />
+                        ) : (
+                          <Ionicons
+                            name="mic"
+                            size={micIconSize}
+                            color={colors.onPrimary}
+                          />
+                        )}
+                      </Pressable>
+                    </Animated.View>
+                  </View>
+
+                  {/* Mic status label */}
+                  <Text
+                    style={[
+                      styles.micLabel,
+                      voiceState === "error" && styles.micLabelError,
+                      isRecording && styles.micLabelRecording,
+                    ]}
+                  >
+                    {micLabel}
+                  </Text>
                 </View>
 
-                {/* Mic status label */}
-                <Text
-                  style={[
-                    styles.micLabel,
-                    voiceState === "error" && styles.micLabelError,
-                    isRecording && styles.micLabelRecording,
-                  ]}
-                >
-                  {micLabel}
-                </Text>
-              </View>
+                {/* Transcribed/typed answer display */}
+                {answer !== "" && !showTextInput && (
+                  <View style={styles.answerCard}>
+                    <Text style={styles.answerText} numberOfLines={6}>
+                      {answer}
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        void AccessibilityInfo.isReduceMotionEnabled().then(
+                          (reduced) => {
+                            if (!reduced)
+                              LayoutAnimation.configureNext(
+                                LayoutAnimation.Presets.easeInEaseOut,
+                              );
+                            setShowTextInput(true);
+                            setTimeout(() => inputRef.current?.focus(), 150);
+                          },
+                        );
+                      }}
+                      style={({ pressed }) => [
+                        styles.editButton,
+                        pressed && styles.editButtonPressed,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Edit your answer"
+                      testID="journal-edit-btn"
+                    >
+                      <Ionicons
+                        name="pencil-outline"
+                        size={14}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.editButtonLabel}>Edit</Text>
+                    </Pressable>
+                  </View>
+                )}
 
-              {/* Transcribed/typed answer display */}
-              {answer !== "" && !showTextInput && (
-                <View style={styles.answerCard}>
-                  <Text style={styles.answerText} numberOfLines={6}>
-                    {answer}
-                  </Text>
+                {/* Text input (secondary, shown on demand) */}
+                {showTextInput && (
+                  <View style={styles.textInputContainer}>
+                    <TextInput
+                      ref={inputRef}
+                      value={answer}
+                      onChangeText={setAnswer}
+                      multiline
+                      style={[
+                        styles.answerInput,
+                        isSaving && styles.answerInputDisabled,
+                      ]}
+                      placeholder="Your thoughts…"
+                      placeholderTextColor={colors.outlineVariant}
+                      editable={!isSaving}
+                      accessibilityLabel={currentQuestion}
+                      accessibilityHint="Your answer is private"
+                      returnKeyType="default"
+                      blurOnSubmit={false}
+                      textAlignVertical="top"
+                      onFocus={() => setIsFocused(true)}
+                      onBlur={() => setIsFocused(false)}
+                      testID="journal-answer-input"
+                    />
+                    {(isFocused || answer.length > 0) && (
+                      <Text
+                        style={styles.charCount}
+                        accessibilityElementsHidden
+                      >
+                        {answer.length} characters
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                {/* "Or type instead" link */}
+                {answer === "" && voiceState === "idle" && !showTextInput && (
                   <Pressable
                     onPress={() => {
                       void AccessibilityInfo.isReduceMotionEnabled().then(
@@ -780,213 +856,152 @@ export default function JournalSessionScreen() {
                       );
                     }}
                     style={({ pressed }) => [
-                      styles.editButton,
-                      pressed && styles.editButtonPressed,
+                      styles.typeInsteadButton,
+                      pressed && styles.typeInsteadButtonPressed,
                     ]}
                     accessibilityRole="button"
-                    accessibilityLabel="Edit your answer"
-                    testID="journal-edit-btn"
+                    accessibilityLabel="Type your answer instead"
+                    testID="journal-type-instead-btn"
                   >
-                    <Ionicons
-                      name="pencil-outline"
-                      size={14}
-                      color={colors.primary}
-                    />
-                    <Text style={styles.editButtonLabel}>Edit</Text>
+                    <Text style={styles.typeInsteadText}>Or type instead</Text>
                   </Pressable>
-                </View>
-              )}
+                )}
 
-              {/* Text input (secondary, shown on demand) */}
-              {showTextInput && (
-                <View style={styles.textInputContainer}>
-                  <TextInput
-                    ref={inputRef}
-                    value={answer}
-                    onChangeText={setAnswer}
-                    multiline
-                    style={[
-                      styles.answerInput,
-                      isSaving && styles.answerInputDisabled,
-                    ]}
-                    placeholder="Your thoughts…"
-                    placeholderTextColor={colors.outlineVariant}
-                    editable={!isSaving}
-                    accessibilityLabel={currentQuestion}
-                    accessibilityHint="Your answer is private"
-                    returnKeyType="default"
-                    blurOnSubmit={false}
-                    textAlignVertical="top"
-                    onFocus={() => setIsFocused(true)}
-                    onBlur={() => setIsFocused(false)}
-                    testID="journal-answer-input"
-                  />
-                  {(isFocused || answer.length > 0) && (
-                    <Text style={styles.charCount} accessibilityElementsHidden>
-                      {answer.length} characters
-                    </Text>
-                  )}
-                </View>
-              )}
-
-              {/* "Or type instead" link */}
-              {answer === "" && voiceState === "idle" && !showTextInput && (
-                <Pressable
-                  onPress={() => {
-                    void AccessibilityInfo.isReduceMotionEnabled().then(
-                      (reduced) => {
-                        if (!reduced)
-                          LayoutAnimation.configureNext(
-                            LayoutAnimation.Presets.easeInEaseOut,
-                          );
-                        setShowTextInput(true);
-                        setTimeout(() => inputRef.current?.focus(), 150);
-                      },
-                    );
-                  }}
-                  style={({ pressed }) => [
-                    styles.typeInsteadButton,
-                    pressed && styles.typeInsteadButtonPressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Type your answer instead"
-                  testID="journal-type-instead-btn"
-                >
-                  <Text style={styles.typeInsteadText}>Or type instead</Text>
-                </Pressable>
-              )}
-
-              {/* Continue / Save button row */}
-              <View style={styles.continueRow}>
-                {isLastTurn ? (
-                  <Pressable
-                    style={[
-                      styles.primaryButton,
-                      isSaving && styles.primaryButtonDisabled,
-                    ]}
-                    onPress={() => void handleNext()}
-                    disabled={isSaving}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      isSaving ? "Saving your journal" : "Save journal session"
-                    }
-                    accessibilityState={{ disabled: isSaving }}
-                    testID="journal-save-btn"
-                  >
-                    {isSaving ? (
-                      <View style={styles.savingRow}>
+                {/* Continue / Save button row */}
+                <View style={styles.continueRow}>
+                  {isLastTurn ? (
+                    <Pressable
+                      style={[
+                        styles.primaryButton,
+                        isSaving && styles.primaryButtonDisabled,
+                      ]}
+                      onPress={() => void handleNext()}
+                      disabled={isSaving}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        isSaving
+                          ? "Saving your journal"
+                          : "Save journal session"
+                      }
+                      accessibilityState={{ disabled: isSaving }}
+                      testID="journal-save-btn"
+                    >
+                      {isSaving ? (
+                        <View style={styles.savingRow}>
+                          <ActivityIndicator
+                            color={colors.onPrimary}
+                            size="small"
+                            style={styles.savingIndicator}
+                          />
+                          <Text style={styles.primaryButtonLabel}>Saving…</Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.primaryButtonLabel}>
+                          Save journal
+                        </Text>
+                      )}
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      style={[
+                        styles.primaryButton,
+                        (!canSubmit || isSaving) &&
+                          styles.primaryButtonDisabled,
+                      ]}
+                      onPress={() => void handleNext()}
+                      disabled={!canSubmit || isSaving}
+                      accessibilityRole="button"
+                      accessibilityLabel="Next question"
+                      accessibilityState={{ disabled: !canSubmit || isSaving }}
+                      testID="journal-next-btn"
+                    >
+                      {isSaving ? (
                         <ActivityIndicator
                           color={colors.onPrimary}
                           size="small"
-                          style={styles.savingIndicator}
                         />
-                        <Text style={styles.primaryButtonLabel}>Saving…</Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.primaryButtonLabel}>
-                        Save journal
-                      </Text>
-                    )}
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    style={[
-                      styles.primaryButton,
-                      (!canSubmit || isSaving) && styles.primaryButtonDisabled,
-                    ]}
-                    onPress={() => void handleNext()}
-                    disabled={!canSubmit || isSaving}
-                    accessibilityRole="button"
-                    accessibilityLabel="Next question"
-                    accessibilityState={{ disabled: !canSubmit || isSaving }}
-                    testID="journal-next-btn"
-                  >
-                    {isSaving ? (
-                      <ActivityIndicator
-                        color={colors.onPrimary}
-                        size="small"
-                      />
-                    ) : (
-                      <Text style={styles.primaryButtonLabel}>Next</Text>
-                    )}
-                  </Pressable>
-                )}
+                      ) : (
+                        <Text style={styles.primaryButtonLabel}>Next</Text>
+                      )}
+                    </Pressable>
+                  )}
 
-                {currentTurnIndex > 0 && !isSaving && (
-                  <Pressable
-                    style={styles.skipPressable}
-                    onPress={() => void handleSkip()}
-                    accessibilityRole="button"
-                    accessibilityLabel="Skip this question"
-                    testID="journal-skip-btn"
-                  >
-                    <Text style={styles.skipText}>Skip this question</Text>
-                  </Pressable>
-                )}
-              </View>
-            </>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+                  {currentTurnIndex > 0 && !isSaving && (
+                    <Pressable
+                      style={styles.skipPressable}
+                      onPress={() => void handleSkip()}
+                      accessibilityRole="button"
+                      accessibilityLabel="Skip this question"
+                      testID="journal-skip-btn"
+                    >
+                      <Text style={styles.skipText}>Skip this question</Text>
+                    </Pressable>
+                  )}
+                </View>
+              </>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
 
-      {/* Save error toast */}
-      {saveErrorVisible && (
-        <View style={styles.saveErrorToast} accessibilityRole="alert">
-          <Text style={styles.saveErrorText}>
-            Couldn't save your journal. Try again.
-          </Text>
-        </View>
-      )}
+        {/* Save error toast */}
+        {saveErrorVisible && (
+          <View style={styles.saveErrorToast} accessibilityRole="alert">
+            <Text style={styles.saveErrorText}>
+              Couldn't save your journal. Try again.
+            </Text>
+          </View>
+        )}
 
-      {/* Exit confirmation sheet */}
-      <Modal
-        visible={showExitSheet}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowExitSheet(false)}
-        accessibilityViewIsModal
-      >
-        <Pressable
-          style={styles.exitModalBackdrop}
-          onPress={() => setShowExitSheet(false)}
-          accessibilityLabel="Dismiss"
+        {/* Exit confirmation sheet */}
+        <Modal
+          visible={showExitSheet}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setShowExitSheet(false)}
+          accessibilityViewIsModal
         >
           <Pressable
-            style={styles.exitSheet}
-            onPress={(e) => e.stopPropagation()}
+            style={styles.exitModalBackdrop}
+            onPress={() => setShowExitSheet(false)}
+            accessibilityLabel="Dismiss"
           >
-            <Text style={styles.exitHeadline}>Leave your journal?</Text>
-            <Text style={styles.exitBody}>
-              Your answers so far are saved. You can continue later.
-            </Text>
-            <Button
-              label="Keep writing"
-              variant="primary"
-              onPress={() => setShowExitSheet(false)}
-              testID="journal-keep-writing-btn"
-            />
-            <Button
-              label="Leave for now"
-              variant="secondary"
-              onPress={() => {
-                setShowExitSheet(false);
-                router.back();
-              }}
-              style={styles.leaveButton}
-              testID="journal-leave-btn"
-            />
+            <Pressable
+              style={styles.exitSheet}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <Text style={styles.exitHeadline}>Leave your journal?</Text>
+              <Text style={styles.exitBody}>
+                Your answers so far are saved. You can continue later.
+              </Text>
+              <Button
+                label="Keep writing"
+                variant="primary"
+                onPress={() => setShowExitSheet(false)}
+                testID="journal-keep-writing-btn"
+              />
+              <Button
+                label="Leave for now"
+                variant="secondary"
+                onPress={() => {
+                  setShowExitSheet(false);
+                  router.back();
+                }}
+                style={styles.leaveButton}
+                testID="journal-leave-btn"
+              />
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
-    </SafeAreaView>
+        </Modal>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  gradient: { flex: 1 },
   container: {
     flex: 1,
-    backgroundColor: colors.surface,
   },
   header: {
     flexDirection: "row",
@@ -1004,7 +1019,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   backButtonPressed: {
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: `${colors.primary}14`,
   },
   headerTitle: {
     ...typography.labelMd,
@@ -1028,7 +1043,7 @@ const styles = StyleSheet.create({
   },
   skeletonBar: {
     borderRadius: radius.sm,
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: `${colors.primary}20`,
     height: 20,
     marginBottom: spacing.s2,
   },

@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -17,8 +18,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const JOURNAL_OPENING_QUESTION_PLACEHOLDER =
-  "A question is waiting for you.";
+const JOURNAL_OPENING_QUESTION_PLACEHOLDER = "A question is waiting for you.";
 
 type PendingSession = {
   id: string;
@@ -175,145 +175,159 @@ export default function JournalHomeScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
-      </SafeAreaView>
+      <LinearGradient
+        colors={[colors.primaryContainer, colors.surface]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={styles.gradient}
+      >
+        <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.brandMark}>sanctuary</Text>
-        </View>
-
-        {/* State A — no pending session */}
-        {!pendingSession && (
-          <View style={styles.heroBlock}>
-            <Text style={styles.heroTitle} accessibilityRole="header">
-              Your daily reflection
-            </Text>
-            <Text style={styles.heroSubtitle}>
-              A quiet space to make sense of your day.
-            </Text>
-            <View style={styles.ctaWrapper}>
-              <Button
-                label={isStarting ? "Starting…" : "Begin today's journal"}
-                variant="primary"
-                onPress={() => void handleBegin()}
-                disabled={isStarting}
-                style={styles.ctaButton}
-                testID="journal-begin-btn"
-              />
-            </View>
-            {actionError && (
-              <View style={styles.errorRow}>
-                <Text style={styles.errorText}>{actionError}</Text>
-                <Pressable
-                  onPress={() => void handleBegin()}
-                  accessibilityRole="button"
-                  accessibilityLabel="Try again"
-                >
-                  <Text style={styles.retryText}> Try again</Text>
-                </Pressable>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* State B — incomplete session */}
-        {pendingSession && (
-          <View style={styles.resumeBlock}>
-            <Card
-              variant="elevated"
-              size="xl"
-              style={styles.resumeCard}
-              testID="journal-resume-card"
-            >
-              <View
-                accessibilityLabel={`Incomplete journal session, ${formatRelativeTime(pendingSession.created_at)}`}
-              >
-                <Text style={styles.resumeTimestamp}>
-                  {formatRelativeTime(pendingSession.created_at)}
-                </Text>
-                {pendingSession.opening_answer ? (
-                  <Text style={styles.resumePreview} numberOfLines={2}>
-                    {pendingSession.opening_answer.slice(0, 100)}
-                  </Text>
-                ) : (
-                  <View>
-                    <Text style={styles.resumeNotStartedLabel}>
-                      You were just getting started.
-                    </Text>
-                    <Text
-                      style={styles.resumeQuestionPreview}
-                      numberOfLines={2}
-                    >
-                      {JOURNAL_OPENING_QUESTION_PLACEHOLDER}
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.resumeButtons}>
-                  <Button
-                    label="Continue"
-                    variant="primary"
-                    onPress={() => void handleContinue()}
-                    disabled={isStarting}
-                    style={styles.resumeButtonFlex}
-                    testID="journal-continue-btn"
-                  />
-                  <Button
-                    label="Start fresh"
-                    variant="secondary"
-                    onPress={() => void handleStartFresh()}
-                    disabled={isStarting}
-                    style={styles.resumeButtonFlex}
-                    testID="journal-start-fresh-btn"
-                  />
-                </View>
-                {actionError && (
-                  <Text style={[styles.errorText, styles.resumeError]}>
-                    {actionError}
-                  </Text>
-                )}
-              </View>
-            </Card>
-          </View>
-        )}
-
-        {/* Past entries row */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.pastEntriesRow,
-            pressed && styles.pastEntriesRowPressed,
-          ]}
-          onPress={() => router.push("/(app)/journal/history")}
-          accessibilityRole="button"
-          accessibilityLabel="Past journal entries"
-          accessibilityHint="Shows your completed journal sessions"
-          testID="journal-past-entries-btn"
+    <LinearGradient
+      colors={[colors.primaryContainer, colors.surface]}
+      start={{ x: 0.1, y: 0 }}
+      end={{ x: 0.9, y: 1 }}
+      style={styles.gradient}
+    >
+      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.pastEntriesLabel}>Past entries</Text>
-          <Ionicons name="chevron-forward" size={18} color={colors.primary} />
-        </Pressable>
-      </ScrollView>
-    </SafeAreaView>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.brandMark}>sanctuary</Text>
+          </View>
+
+          {/* State A — no pending session */}
+          {!pendingSession && (
+            <View style={styles.heroBlock}>
+              <Text style={styles.heroTitle} accessibilityRole="header">
+                Your daily reflection
+              </Text>
+              <Text style={styles.heroSubtitle}>
+                A quiet space to make sense of your day.
+              </Text>
+              <View style={styles.ctaWrapper}>
+                <Button
+                  label={isStarting ? "Starting…" : "Begin today's journal"}
+                  variant="primary"
+                  onPress={() => void handleBegin()}
+                  disabled={isStarting}
+                  style={styles.ctaButton}
+                  testID="journal-begin-btn"
+                />
+              </View>
+              {actionError && (
+                <View style={styles.errorRow}>
+                  <Text style={styles.errorText}>{actionError}</Text>
+                  <Pressable
+                    onPress={() => void handleBegin()}
+                    accessibilityRole="button"
+                    accessibilityLabel="Try again"
+                  >
+                    <Text style={styles.retryText}> Try again</Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* State B — incomplete session */}
+          {pendingSession && (
+            <View style={styles.resumeBlock}>
+              <Card
+                variant="elevated"
+                size="xl"
+                style={styles.resumeCard}
+                testID="journal-resume-card"
+              >
+                <View
+                  accessibilityLabel={`Incomplete journal session, ${formatRelativeTime(pendingSession.created_at)}`}
+                >
+                  <Text style={styles.resumeTimestamp}>
+                    {formatRelativeTime(pendingSession.created_at)}
+                  </Text>
+                  {pendingSession.opening_answer ? (
+                    <Text style={styles.resumePreview} numberOfLines={2}>
+                      {pendingSession.opening_answer.slice(0, 100)}
+                    </Text>
+                  ) : (
+                    <View>
+                      <Text style={styles.resumeNotStartedLabel}>
+                        You were just getting started.
+                      </Text>
+                      <Text
+                        style={styles.resumeQuestionPreview}
+                        numberOfLines={2}
+                      >
+                        {JOURNAL_OPENING_QUESTION_PLACEHOLDER}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.resumeButtons}>
+                    <Button
+                      label="Continue"
+                      variant="primary"
+                      onPress={() => void handleContinue()}
+                      disabled={isStarting}
+                      style={styles.resumeButtonFlex}
+                      testID="journal-continue-btn"
+                    />
+                    <Button
+                      label="Start fresh"
+                      variant="secondary"
+                      onPress={() => void handleStartFresh()}
+                      disabled={isStarting}
+                      style={styles.resumeButtonFlex}
+                      testID="journal-start-fresh-btn"
+                    />
+                  </View>
+                  {actionError && (
+                    <Text style={[styles.errorText, styles.resumeError]}>
+                      {actionError}
+                    </Text>
+                  )}
+                </View>
+              </Card>
+            </View>
+          )}
+
+          {/* Past entries row */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.pastEntriesRow,
+              pressed && styles.pastEntriesRowPressed,
+            ]}
+            onPress={() => router.push("/(app)/journal/history")}
+            accessibilityRole="button"
+            accessibilityLabel="Past journal entries"
+            accessibilityHint="Shows your completed journal sessions"
+            testID="journal-past-entries-btn"
+          >
+            <Text style={styles.pastEntriesLabel}>Past entries</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+          </Pressable>
+        </ScrollView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  gradient: { flex: 1 },
   container: {
     flex: 1,
-    backgroundColor: colors.surface,
   },
   loadingContainer: {
     flex: 1,
@@ -428,7 +442,7 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.s8,
   },
   pastEntriesRowPressed: {
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: `${colors.primary}14`,
   },
   pastEntriesLabel: {
     fontFamily: "PlusJakartaSans_600SemiBold",

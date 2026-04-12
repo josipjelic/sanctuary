@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -85,7 +86,51 @@ export default function JournalProfileScreen() {
 
   if (loading) {
     return (
+      <LinearGradient
+        colors={[colors.primaryContainer, colors.surface]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={styles.gradient}
+      >
+        <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+          <View style={styles.header}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed && styles.backButtonPressed,
+              ]}
+              onPress={() => router.back()}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <Ionicons
+                name="arrow-back"
+                size={24}
+                color={colors.onSurfaceVariant}
+              />
+            </Pressable>
+            <Text style={styles.headerTitle} accessibilityRole="header">
+              Your profile
+            </Text>
+            <View style={styles.headerSpacer} />
+          </View>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
+  return (
+    <LinearGradient
+      colors={[colors.primaryContainer, colors.surface]}
+      start={{ x: 0.1, y: 0 }}
+      end={{ x: 0.9, y: 1 }}
+      style={styles.gradient}
+    >
       <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+        {/* Header */}
         <View style={styles.header}>
           <Pressable
             style={({ pressed }) => [
@@ -95,6 +140,7 @@ export default function JournalProfileScreen() {
             onPress={() => router.back()}
             accessibilityRole="button"
             accessibilityLabel="Go back"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons
               name="arrow-back"
@@ -107,98 +153,67 @@ export default function JournalProfileScreen() {
           </Text>
           <View style={styles.headerSpacer} />
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
 
-  return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed && styles.backButtonPressed,
-          ]}
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+            />
+          }
         >
-          <Ionicons
-            name="arrow-back"
-            size={24}
-            color={colors.onSurfaceVariant}
-          />
-        </Pressable>
-        <Text style={styles.headerTitle} accessibilityRole="header">
-          Your profile
-        </Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.primary}
-          />
-        }
-      >
-        <Text style={styles.introText} accessibilityRole="text">
-          This is what Sanctuary has learned about you from your journal
-          sessions. It helps personalise the questions you're asked.
-        </Text>
-
-        <Card
-          variant="elevated"
-          size="xl"
-          style={styles.profileCard}
-          testID="journal-profile-card"
-        >
-          <View accessibilityLabel="Your journal profile">
-            {userState?.content ? (
-              <Text style={styles.profileContent} accessibilityRole="text">
-                {userState.content}
-              </Text>
-            ) : (
-              <View style={styles.emptyProfile}>
-                <Text style={styles.emptyProfileText}>
-                  Complete your first journal session to start building your
-                  profile.
-                </Text>
-              </View>
-            )}
-          </View>
-        </Card>
-
-        {userState?.last_updated_at && (
-          <Text style={styles.lastUpdated}>
-            {formatRelativeTime(userState.last_updated_at)}
+          <Text style={styles.introText} accessibilityRole="text">
+            This is what Sanctuary has learned about you from your journal
+            sessions. It helps personalise the questions you're asked.
           </Text>
-        )}
 
-        <Text style={styles.privacyNote} accessibilityRole="text">
-          This profile is private and only used to personalise your journal
-          experience.
-        </Text>
-      </ScrollView>
-    </SafeAreaView>
+          <Card
+            variant="elevated"
+            size="xl"
+            style={styles.profileCard}
+            testID="journal-profile-card"
+          >
+            <View accessibilityLabel="Your journal profile">
+              {userState?.content ? (
+                <Text style={styles.profileContent} accessibilityRole="text">
+                  {userState.content}
+                </Text>
+              ) : (
+                <View style={styles.emptyProfile}>
+                  <Text style={styles.emptyProfileText}>
+                    Complete your first journal session to start building your
+                    profile.
+                  </Text>
+                </View>
+              )}
+            </View>
+          </Card>
+
+          {userState?.last_updated_at && (
+            <Text style={styles.lastUpdated}>
+              {formatRelativeTime(userState.last_updated_at)}
+            </Text>
+          )}
+
+          <Text style={styles.privacyNote} accessibilityRole="text">
+            This profile is private and only used to personalise your journal
+            experience.
+          </Text>
+        </ScrollView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  gradient: { flex: 1 },
   container: {
     flex: 1,
-    backgroundColor: colors.surface,
   },
   loadingContainer: {
     flex: 1,
@@ -220,7 +235,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   backButtonPressed: {
-    backgroundColor: colors.surfaceContainerHigh,
+    backgroundColor: `${colors.primary}14`,
   },
   headerTitle: {
     ...typography.headlineMd,

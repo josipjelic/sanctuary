@@ -155,7 +155,8 @@ export default function QuickCaptureScreen() {
   );
   const [morningMessageLoading, setMorningMessageLoading] = useState(false);
   const [morningMessageError, setMorningMessageError] = useState(false);
-  const [morningMessageDismissed, setMorningMessageDismissed] = useState(false);
+  const [morningMessageVisible, setMorningMessageVisible] = useState(false);
+  const morningMessageAutoShown = useRef(false);
 
   const successOpacity = useRef(new Animated.Value(0)).current;
   const [successVisible, setSuccessVisible] = useState(false);
@@ -325,13 +326,14 @@ export default function QuickCaptureScreen() {
 
     const inWindow = now >= morningStart && now < noon;
     setIsMorningWindow(inWindow);
-    if (!inWindow) return;
 
     setMorningMessageLoading(true);
     setMorningMessageError(false);
 
     try {
       const today = now.toISOString().split("T")[0];
+
+      // Always try to load today's message first
       const { data: existing } = await supabase
         .from("morning_messages")
         .select("id, message, shown_at")
@@ -341,6 +343,10 @@ export default function QuickCaptureScreen() {
 
       if (existing?.message) {
         setMorningMessage(existing.message as string);
+        if (!morningMessageAutoShown.current) {
+          morningMessageAutoShown.current = true;
+          setMorningMessageVisible(true);
+        }
         if (!existing.shown_at) {
           await supabase
             .from("morning_messages")
@@ -350,6 +356,60 @@ export default function QuickCaptureScreen() {
         return;
       }
 
+      // In morning window with no message yet — generate one
+      if (inWindow) {
+        const { data: fnData, error: fnError } =
+          await supabase.functions.invoke("generate-morning-message");
+
+        if (fnError) throw fnError;
+
+        const message = (fnData as { message: string } | null)?.message ?? "";
+        setMorningMessage(message);
+        if (!morningMessageAutoShown.current) {
+          morningMessageAutoShown.current = true;
+          setMorningMessageVisible(true);
+        }
+
+        const { data: inserted } = await supabase
+          .from("morning_messages")
+          .insert({
+            user_id: userId,
+            generated_for_date: today,
+            message,
+            shown_at: new Date().toISOString(),
+          })
+          .select("id")
+          .maybeSingle();
+
+        logger.debug("morning message inserted", { id: inserted?.id });
+        return;
+      }
+
+      // Outside window — fall back to the most recent message from any day
+      const { data: recent } = await supabase
+        .from("morning_messages")
+        .select("message")
+        .eq("user_id", userId)
+        .order("generated_for_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (recent?.message) {
+        setMorningMessage(recent.message as string);
+      }
+    } catch (err) {
+      logger.error("loadMorningMessage failed", err);
+      setMorningMessageError(true);
+    } finally {
+      setMorningMessageLoading(false);
+    }
+  }
+
+  async function regenerateMorningMessage() {
+    setMorningMessageLoading(true);
+    setMorningMessageError(false);
+
+    try {
       const { data: fnData, error: fnError } = await supabase.functions.invoke(
         "generate-morning-message",
       );
@@ -359,20 +419,20 @@ export default function QuickCaptureScreen() {
       const message = (fnData as { message: string } | null)?.message ?? "";
       setMorningMessage(message);
 
-      const { data: inserted } = await supabase
-        .from("morning_messages")
-        .insert({
+      const today = new Date().toISOString().split("T")[0];
+      await supabase.from("morning_messages").upsert(
+        {
           user_id: userId,
           generated_for_date: today,
           message,
           shown_at: new Date().toISOString(),
-        })
-        .select("id")
-        .maybeSingle();
+        },
+        { onConflict: "user_id, generated_for_date" },
+      );
 
-      logger.debug("morning message inserted", { id: inserted?.id });
+      logger.debug("morning message regenerated");
     } catch (err) {
-      logger.error("loadMorningMessage failed", err);
+      logger.error("regenerateMorningMessage failed", err);
       setMorningMessageError(true);
     } finally {
       setMorningMessageLoading(false);
@@ -838,6 +898,22 @@ export default function QuickCaptureScreen() {
                   styles.headerIconSlot,
                   pressed && styles.headerIconSlotPressed,
                 ]}
+                onPress={() => setMorningMessageVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel="View morning message"
+                testID="morning-message-button"
+              >
+                <Ionicons
+                  name="sunny-outline"
+                  size={22}
+                  color={colors.primary}
+                />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.headerIconSlot,
+                  pressed && styles.headerIconSlotPressed,
+                ]}
                 onPress={() => setSettingsVisible(true)}
                 accessibilityRole="button"
                 accessibilityLabel="Open settings"
@@ -851,16 +927,6 @@ export default function QuickCaptureScreen() {
               </Pressable>
             </View>
           </View>
-
-          {isMorningWindow && !morningMessageDismissed && (
-            <MorningMessageCard
-              messageText={morningMessage}
-              isLoading={morningMessageLoading}
-              hasError={morningMessageError}
-              onRetry={() => void loadMorningMessage()}
-              onDismiss={() => setMorningMessageDismissed(true)}
-            />
-          )}
 
           <View style={styles.heroBlock}>
             <Text
@@ -1021,6 +1087,16 @@ export default function QuickCaptureScreen() {
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <MorningMessageCard
+        visible={morningMessageVisible}
+        messageText={morningMessage}
+        isLoading={morningMessageLoading}
+        hasError={morningMessageError}
+        onRetry={() => void loadMorningMessage()}
+        onRegenerate={() => void regenerateMorningMessage()}
+        onDismiss={() => setMorningMessageVisible(false)}
+      />
 
       {successVisible && (
         <Animated.View

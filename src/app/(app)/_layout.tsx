@@ -31,7 +31,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Capture",
+          title: "Home",
           tabBarIcon: ({ color, size, focused }) => (
             <MaterialIcons
               name={focused ? "home-filled" : "home"}

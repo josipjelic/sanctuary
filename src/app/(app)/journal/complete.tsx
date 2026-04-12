@@ -1,6 +1,7 @@
 import { Button } from "@/components";
 import { colors, radius, spacing, typography } from "@/lib/theme";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -66,63 +67,70 @@ export default function JournalCompleteScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      {/* Invisible live region for screen reader announcement */}
-      <View
-        accessible
-        accessibilityLiveRegion="assertive"
-        accessibilityLabel="Journal session saved"
-        style={styles.srAnnounce}
-      />
+    <LinearGradient
+      colors={[colors.primaryContainer, colors.surface]}
+      start={{ x: 0.1, y: 0 }}
+      end={{ x: 0.9, y: 1 }}
+      style={styles.gradient}
+    >
+      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+        {/* Invisible live region for screen reader announcement */}
+        <View
+          accessible
+          accessibilityLiveRegion="assertive"
+          accessibilityLabel="Journal session saved"
+          style={styles.srAnnounce}
+        />
 
-      <View style={styles.content}>
-        <Animated.View
-          style={{ transform: [{ scale: scaleAnim }] }}
-          accessibilityElementsHidden
-        >
-          <Ionicons
-            name="checkmark-circle-outline"
-            size={64}
-            color={colors.primary}
-          />
-        </Animated.View>
+        <View style={styles.content}>
+          <Animated.View
+            style={{ transform: [{ scale: scaleAnim }] }}
+            accessibilityElementsHidden
+          >
+            <Ionicons
+              name="checkmark-circle-outline"
+              size={64}
+              color={colors.primary}
+            />
+          </Animated.View>
 
-        <Text style={styles.headline} accessibilityRole="header">
-          Reflection saved.
-        </Text>
-        <Text style={styles.subtitle}>Well done for taking the time.</Text>
+          <Text style={styles.headline} accessibilityRole="header">
+            Reflection saved.
+          </Text>
+          <Text style={styles.subtitle}>Well done for taking the time.</Text>
 
-        <View style={styles.buttons}>
-          <Button
-            label="Back to journal"
-            variant="primary"
-            onPress={handleBackToJournal}
-            style={styles.primaryButton}
-            testID="journal-complete-back-btn"
-          />
-          <Button
-            label="View your profile"
-            variant="secondary"
-            onPress={handleViewProfile}
-            style={styles.secondaryButton}
-            testID="journal-complete-profile-btn"
-          />
+          <View style={styles.buttons}>
+            <Button
+              label="Back to journal"
+              variant="primary"
+              onPress={handleBackToJournal}
+              style={styles.primaryButton}
+              testID="journal-complete-back-btn"
+            />
+            <Button
+              label="View your profile"
+              variant="secondary"
+              onPress={handleViewProfile}
+              style={styles.secondaryButton}
+              testID="journal-complete-profile-btn"
+            />
+          </View>
+
+          <Text style={styles.autoRedirect} accessibilityLiveRegion="polite">
+            {countdown > 0
+              ? `Returning to journal in ${countdown}s…`
+              : "Returning…"}
+          </Text>
         </View>
-
-        <Text style={styles.autoRedirect} accessibilityLiveRegion="polite">
-          {countdown > 0
-            ? `Returning to journal in ${countdown}s…`
-            : "Returning…"}
-        </Text>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: { flex: 1 },
   container: {
     flex: 1,
-    backgroundColor: colors.surface,
   },
   srAnnounce: {
     position: "absolute",
