@@ -504,12 +504,9 @@ export default function JournalSessionScreen() {
     ];
     setTurns(newTurns);
 
-    const isLastTurn = currentTurnIndex >= 2;
-    if (isLastTurn) {
-      await saveSession();
-    } else {
-      await fetchNextQuestion(newTurns);
-    }
+    // Always ask the server for the next question — it returns { done: true }
+    // when the session is complete (after Q3, or after optional Q4/Q5)
+    await fetchNextQuestion(newTurns);
   }
 
   async function handleSkip() {
@@ -521,12 +518,7 @@ export default function JournalSessionScreen() {
     ];
     setTurns(newTurns);
 
-    const isLastTurn = currentTurnIndex >= 2;
-    if (isLastTurn) {
-      await saveSession();
-    } else {
-      await fetchNextQuestion(newTurns);
-    }
+    await fetchNextQuestion(newTurns);
   }
 
   function handleBackPress() {
@@ -536,12 +528,12 @@ export default function JournalSessionScreen() {
   const isLoading = sessionState === "loading_question";
   const isSaving = sessionState === "saving";
   const isErrorQuestion = sessionState === "error_question";
-  const isLastTurn = currentTurnIndex >= 2;
   const isRecording = voiceState === "recording";
   const isTranscribing = voiceState === "transcribing";
   const isDisabled = isTranscribing;
   const canSubmit = answer.trim().length >= 10;
-  const displayTurnIndex = isLoading ? turns.length + 1 : currentTurnIndex + 1;
+  // Which dot should be shown as active in the stepper
+  const activeDotIndex = isLoading ? turns.length : currentTurnIndex;
 
   const micLabel = isRecording
     ? "Tap to finish"
@@ -582,12 +574,33 @@ export default function JournalSessionScreen() {
           <Text style={styles.headerTitle} accessibilityRole="header">
             Journal
           </Text>
-          <Text
-            style={styles.progress}
-            accessibilityLabel={`Question ${displayTurnIndex} of 3`}
+          <View
+            style={styles.stepper}
+            accessible
+            accessibilityLabel={`Question ${activeDotIndex + 1} of up to 5`}
           >
-            {displayTurnIndex} / 3
-          </Text>
+            {[0, 1, 2, 3, 4].map((idx) => {
+              const isActive = idx === activeDotIndex;
+              const isCompleted = idx < activeDotIndex;
+              const isOptional = idx >= 3;
+              return (
+                <View
+                  key={idx}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                  style={[
+                    styles.dot,
+                    isActive && styles.dotActive,
+                    isCompleted && styles.dotCompleted,
+                    !isActive && !isCompleted && styles.dotUpcoming,
+                    isOptional && !isActive && !isCompleted
+                      ? { opacity: 0.4 }
+                      : undefined,
+                  ]}
+                />
+              );
+            })}
+          </View>
         </View>
 
         <KeyboardAvoidingView
@@ -634,7 +647,7 @@ export default function JournalSessionScreen() {
                   </View>
                 ) : (
                   <View
-                    accessibilityLabel={`Question ${currentTurnIndex + 1} of 3: ${currentQuestion}`}
+                    accessibilityLabel={`Question ${currentTurnIndex + 1}: ${currentQuestion}`}
                   >
                     <Text style={styles.turnLabel}>
                       Question {currentTurnIndex + 1}
@@ -869,62 +882,31 @@ export default function JournalSessionScreen() {
 
                 {/* Continue / Save button row */}
                 <View style={styles.continueRow}>
-                  {isLastTurn ? (
-                    <Pressable
-                      style={[
-                        styles.primaryButton,
-                        isSaving && styles.primaryButtonDisabled,
-                      ]}
-                      onPress={() => void handleNext()}
-                      disabled={isSaving}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        isSaving
-                          ? "Saving your journal"
-                          : "Save journal session"
-                      }
-                      accessibilityState={{ disabled: isSaving }}
-                      testID="journal-save-btn"
-                    >
-                      {isSaving ? (
-                        <View style={styles.savingRow}>
-                          <ActivityIndicator
-                            color={colors.onPrimary}
-                            size="small"
-                            style={styles.savingIndicator}
-                          />
-                          <Text style={styles.primaryButtonLabel}>Saving…</Text>
-                        </View>
-                      ) : (
-                        <Text style={styles.primaryButtonLabel}>
-                          Save journal
-                        </Text>
-                      )}
-                    </Pressable>
-                  ) : (
-                    <Pressable
-                      style={[
-                        styles.primaryButton,
-                        (!canSubmit || isSaving) &&
-                          styles.primaryButtonDisabled,
-                      ]}
-                      onPress={() => void handleNext()}
-                      disabled={!canSubmit || isSaving}
-                      accessibilityRole="button"
-                      accessibilityLabel="Next question"
-                      accessibilityState={{ disabled: !canSubmit || isSaving }}
-                      testID="journal-next-btn"
-                    >
-                      {isSaving ? (
+                  <Pressable
+                    style={[
+                      styles.primaryButton,
+                      (!canSubmit || isSaving) && styles.primaryButtonDisabled,
+                    ]}
+                    onPress={() => void handleNext()}
+                    disabled={!canSubmit || isSaving}
+                    accessibilityRole="button"
+                    accessibilityLabel={isSaving ? "Saving your journal" : "Next question"}
+                    accessibilityState={{ disabled: !canSubmit || isSaving }}
+                    testID="journal-next-btn"
+                  >
+                    {isSaving ? (
+                      <View style={styles.savingRow}>
                         <ActivityIndicator
                           color={colors.onPrimary}
                           size="small"
+                          style={styles.savingIndicator}
                         />
-                      ) : (
-                        <Text style={styles.primaryButtonLabel}>Next</Text>
-                      )}
-                    </Pressable>
-                  )}
+                        <Text style={styles.primaryButtonLabel}>Saving…</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.primaryButtonLabel}>Next</Text>
+                    )}
+                  </Pressable>
 
                   {currentTurnIndex > 0 && !isSaving && (
                     <Pressable
@@ -1026,12 +1008,15 @@ const styles = StyleSheet.create({
     color: colors.onSurface,
     letterSpacing: 0.5,
   },
-  progress: {
-    ...typography.labelMd,
-    color: colors.outlineVariant,
-    textAlign: "right",
-    minWidth: 40,
+  stepper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
+  dot: { height: 8, borderRadius: radius.full },
+  dotActive: { width: 24, height: 8, backgroundColor: colors.primary },
+  dotCompleted: { width: 8, backgroundColor: colors.primary, opacity: 0.5 },
+  dotUpcoming: { width: 8, backgroundColor: colors.outlineVariant },
   scrollContent: {
     paddingHorizontal: spacing.s8,
     paddingBottom: spacing.s4,
