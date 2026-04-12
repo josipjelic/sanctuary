@@ -193,7 +193,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.s4,
     marginBottom: spacing.s6,
     minHeight: 80,
-    maxHeight: 200,
     ...shadows.card,
   },
   topRow: {
