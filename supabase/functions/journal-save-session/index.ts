@@ -96,16 +96,19 @@ async function updateUserState(
     ? priorContent.trim()
     : "(No prior profile — this is the user's first completed session.)";
 
-  const systemPrompt = `You are maintaining a private user profile for the Sanctuary journaling app. Based on the user's journal session and their existing profile, write an updated profile.
+  const systemPrompt = `You are maintaining a private, evolving user profile for the Sanctuary journaling app. Your task is to write a fully synthesised, coherent profile that integrates what was already known about the user with insights from their latest journal session.
+
+This is a COMPLETE REWRITE — do not copy the prior profile verbatim or append new observations to the end of it. Read both the prior profile and the new session, then produce a single unified profile that feels like one coherent document.
 
 Rules:
 - Write in third person (e.g. "The user..." or "They...")
-- Target length: ~200 words (150–250 acceptable)
-- Include: recurring themes, current struggles and challenges, recent events mentioned, emotional patterns, relationships or people mentioned, goals or intentions expressed
+- Target length: ~250 words (200–300 acceptable)
+- Synthesise across: recurring themes, current struggles and challenges, recent events mentioned, emotional patterns, relationships or people mentioned, goals or intentions expressed
 - NEVER infer or assume things not explicitly mentioned by the user
-- Preserve important context from the prior profile that wasn't contradicted by the new session
+- Naturally weave in important context from the prior profile — do not list old facts then new facts; integrate them
+- Replace or update observations that the new session contradicts or evolves
 - Write observations that will remain meaningful weeks later — avoid ephemeral references like "today" or "this week"
-- Do not include the opening question text in the profile
+- Output ONLY the profile text — no preamble, no headings, no meta-commentary
 
 Prior profile (may be empty):
 ${priorBlock}`;

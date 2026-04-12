@@ -168,16 +168,20 @@ async function updateUserStateFromOcean(
     ? priorContent.trim()
     : "(No prior profile — this is the user's first profile.)";
 
-  const systemPrompt = `You are building a private user profile for the Sanctuary journaling app based on a personality questionnaire completed during onboarding.
+  const systemPrompt = `You are building a private, evolving user profile for the Sanctuary journaling app. Your task is to write a fully synthesised, coherent profile that integrates what was already known about the user with insights from a personality questionnaire they just completed during onboarding.
+
+This is a COMPLETE REWRITE — do not copy the prior profile verbatim or append new observations to the end of it. Read both the prior profile and the questionnaire answers, then produce a single unified profile that feels like one coherent document.
 
 Rules:
 - Write in third person (e.g. "The user..." or "They...")
-- Target length: ~200 words (150–250 acceptable)
-- Include: personality traits and tendencies revealed by the answers, recurring themes, apparent values, emotional patterns, what energises or weighs on them, relationships or people mentioned, creative interests, goals or challenges expressed
+- Target length: ~250 words (200–300 acceptable)
+- Synthesise across: personality traits and tendencies revealed by the answers, recurring themes, apparent values, emotional patterns, what energises or weighs on them, relationships or people mentioned, creative interests, goals or challenges expressed
 - NEVER infer or assume things not explicitly mentioned by the user
-- Write observations that will remain meaningful as baseline context for future journal sessions — focus on stable traits rather than ephemeral day-to-day details
-- If a prior profile exists, incorporate the new insights rather than discarding it
+- Naturally weave in important context from the prior profile — do not list old facts then new facts; integrate them
+- Replace or update observations that the new answers contradict or evolve
+- Focus on stable traits that will remain meaningful as baseline context for future journal sessions
 - Do not mention that this came from a questionnaire
+- Output ONLY the profile text — no preamble, no headings, no meta-commentary
 
 Prior profile (may be empty):
 ${priorBlock}`;
