@@ -47,9 +47,6 @@ const VOICE_RECORDING_OPTIONS: RecordingOptions = {
   web: { mimeType: "audio/webm", bitsPerSecond: 128000 },
 };
 
-const JOURNAL_OPENING_QUESTION_V1 =
-  "Take a moment to settle in. What's on your mind today — something that happened, a feeling, or just a thought that's been with you?";
-
 type SessionState =
   | "loading_question"
   | "answering"

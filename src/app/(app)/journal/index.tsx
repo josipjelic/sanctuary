@@ -17,8 +17,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const JOURNAL_OPENING_QUESTION_V1 =
-  "Take a moment to settle in. What's on your mind today — something that happened, a feeling, or just a thought that's been with you?";
+const JOURNAL_OPENING_QUESTION_PLACEHOLDER =
+  "A question is waiting for you.";
 
 type PendingSession = {
   id: string;
@@ -123,14 +123,6 @@ export default function JournalHomeScreen() {
       setActionError("Couldn't start your journal. Try again.");
       return null;
     }
-
-    await supabase.from("journal_entries").insert({
-      session_id: newSession.id,
-      user_id: userId,
-      turn_index: 0,
-      question: JOURNAL_OPENING_QUESTION_V1,
-      answer: null,
-    });
 
     return newSession.id as string;
   }
@@ -265,7 +257,7 @@ export default function JournalHomeScreen() {
                       style={styles.resumeQuestionPreview}
                       numberOfLines={2}
                     >
-                      {JOURNAL_OPENING_QUESTION_V1}
+                      {JOURNAL_OPENING_QUESTION_PLACEHOLDER}
                     </Text>
                   </View>
                 )}

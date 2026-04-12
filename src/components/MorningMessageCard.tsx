@@ -145,6 +145,13 @@ export function MorningMessageCard({
           <Animated.View
             style={[
               styles.skeletonBar,
+              styles.skeletonBarMid,
+              { opacity: shimmerOpacity },
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.skeletonBar,
               styles.skeletonBarNarrow,
               { opacity: shimmerOpacity },
             ]}
@@ -236,6 +243,9 @@ const styles = StyleSheet.create({
   },
   skeletonBarWide: {
     width: "90%",
+  },
+  skeletonBarMid: {
+    width: "75%",
   },
   skeletonBarNarrow: {
     width: "60%",
