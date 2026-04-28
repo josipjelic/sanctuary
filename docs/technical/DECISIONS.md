@@ -234,7 +234,7 @@ Four decisions are recorded together here because they form a single coherent su
 
 #### Decision
 
-**Option 1 (AI-analysed free-text)**. The reflective free-text approach is consistent with how Sanctuary already captures voice and text thoughts. At beta scale the per-user AI cost is negligible, the one-time latency is acceptable behind a loading screen, and the approximate nature of AI-derived scores is appropriate for a personalisation use case (not clinical assessment). Model resolution follows the existing pattern: `OPENROUTER_OCEAN_MODEL` env var → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001` as default.
+**Option 1 (AI-analysed free-text)**. The reflective free-text approach is consistent with how Sanctuary already captures voice and text thoughts. At beta scale the per-user AI cost is negligible, the one-time latency is acceptable behind a loading screen, and the approximate nature of AI-derived scores is appropriate for a personalisation use case (not clinical assessment). Model resolution follows the existing pattern: `OPENROUTER_OCEAN_MODEL` env var → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite` as default.
 
 The edge function sends all answers in a single OpenRouter call with a structured-output prompt. The prompt instructs the model to reason about each dimension independently and return scores as floats between 0.0 and 1.0. Raw answers are stored in an `answers` JSONB column alongside the scores so the profile can be re-scored if the prompt is improved in future.
 
@@ -399,7 +399,7 @@ The journal session is a guided conversation: the app shows a fixed opening ques
 
 **Session save is awaited**: `journal-save-session` is a standard awaited POST — the client waits for confirmation of persistence before navigating away. The user state update triggered inside `journal-save-session` is fire-and-forget and does not block the save response.
 
-**Model resolution chain**: `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`.
+**Model resolution chain**: `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite`.
 
 ---
 
@@ -425,7 +425,7 @@ After each completed journal session, a `user_state` row (one per user) must be 
 
 **First session handling**: if no `user_state` row exists for the user, the function passes only the new session Q&A and prompts the AI to produce an initial 200-word analysis (no prior state to merge).
 
-**Model resolution chain (state update)**: `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`.
+**Model resolution chain (state update)**: `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite`.
 
 ---
 

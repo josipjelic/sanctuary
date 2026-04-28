@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
   const model =
     Deno.env.get("OPENROUTER_TOPIC_MODEL") ??
     Deno.env.get("OPENROUTER_TAGGING_MODEL") ??
-    "google/gemini-2.0-flash-001";
+    "google/gemini-2.5-flash-lite";
 
   const referer = Deno.env.get("OPENROUTER_HTTP_REFERER");
 

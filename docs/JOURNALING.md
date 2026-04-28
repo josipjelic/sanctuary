@@ -262,7 +262,7 @@ For Q4/Q5 (lookback), `user_state` is not used — those questions draw only fro
 All LLM calls in the journal subsystem use the same model resolution chain:
 
 ```
-OPENROUTER_JOURNAL_MODEL → OPENROUTER_TOPIC_MODEL → google/gemini-2.0-flash-001
+OPENROUTER_JOURNAL_MODEL → OPENROUTER_TOPIC_MODEL → google/gemini-2.5-flash-lite
 ```
 
 Set `OPENROUTER_JOURNAL_MODEL` in Supabase secrets to pin a different model for journal calls without affecting other features.

@@ -206,8 +206,7 @@ Deno.serve(async (req) => {
   }
 
   const model =
-    Deno.env.get("OPENROUTER_TRANSCRIPTION_MODEL") ??
-    "google/gemini-2.0-flash-001";
+    Deno.env.get("OPENROUTER_TRANSCRIPTION_MODEL") ?? "google/gemini-2.5-flash";
 
   const orHeaders: Record<string, string> = {
     Authorization: `Bearer ${openrouterKey}`,
@@ -358,7 +357,7 @@ Deno.serve(async (req) => {
   const topicModel =
     Deno.env.get("OPENROUTER_TOPIC_MODEL") ??
     Deno.env.get("OPENROUTER_TAGGING_MODEL") ??
-    "google/gemini-2.0-flash-001";
+    "google/gemini-2.5-flash-lite";
   const topicReferer = Deno.env.get("OPENROUTER_HTTP_REFERER");
 
   const topicResult = await assignTopicsToThought({

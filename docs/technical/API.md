@@ -104,7 +104,7 @@ The `topics` field is present when topic assignment completes successfully insid
 
 **Error codes**: `400` (missing params or empty strings), `401` (unauthenticated), `404` (thought not found or not owned by caller), `502` (OpenRouter error, unparseable response, or assignment failure), `500` (server configuration or DB write failure)
 
-**Notes**: Loads the caller’s `user_topics`, prompts the model for structured JSON (`best_existing_normalized_name`, `best_match_score` 0–1, `new_topic`). Reuses an existing topic when `best_match_score` > **0.2** and the name matches the catalog; otherwise inserts into `user_topics` and links via `thought_topics`. Syncs `thoughts.topics` (one-element array) and `tagging_status`. Model: `OPENROUTER_TOPIC_MODEL` if set, else `OPENROUTER_TAGGING_MODEL`, default `google/gemini-2.0-flash-001`. Fire-and-forget reminder detection uses `iana_timezone` and `current_local_iso` when provided (same semantics as `/transcribe` multipart fields).
+**Notes**: Loads the caller’s `user_topics`, prompts the model for structured JSON (`best_existing_normalized_name`, `best_match_score` 0–1, `new_topic`). Reuses an existing topic when `best_match_score` > **0.2** and the name matches the catalog; otherwise inserts into `user_topics` and links via `thought_topics`. Syncs `thoughts.topics` (one-element array) and `tagging_status`. Model: `OPENROUTER_TOPIC_MODEL` if set, else `OPENROUTER_TAGGING_MODEL`, default `google/gemini-2.5-flash-lite`. Fire-and-forget reminder detection uses `iana_timezone` and `current_local_iso` when provided (same semantics as `/transcribe` multipart fields).
 
 **JWT at gateway**: `[functions.assign-topics] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
@@ -166,7 +166,7 @@ The `topics` field is present when topic assignment completes successfully insid
 - `404` — Thought not found or not owned by caller
 - `500` — Server configuration error (missing env vars)
 
-**Notes**: Sets `thoughts.reminder_detection_status` to `'pending'` → `'complete'` (or `'failed'` on error). Inserted reminders have `status = 'inactive'`; the mobile app is responsible for surfacing them for user approval and scheduling local notifications (the edge function does **not** schedule push notifications). The model populates `reminders.extracted_text` with a **short display title** (not a verbatim snippet of the thought). Uses `OPENROUTER_REMINDER_MODEL` if set, then `OPENROUTER_TOPIC_MODEL`, then `google/gemini-2.0-flash-001`. The extraction prompt uses `current_iso_timestamp` and optional `iana_timezone` so relative phrases resolve in the user’s locale (the mobile app sends both on typed and voice capture). When `iana_timezone` is present, if the model returns `scheduled_at` with `Z` or `±00:00` but the digits represent the user’s intended **local** wall time (a common model mistake), the server reinterprets that timestamp in the IANA zone before insert so storage matches local intent. Structured AI logs are emitted via `console.debug` (phase: `reminders`) per ADR-003.
+**Notes**: Sets `thoughts.reminder_detection_status` to `'pending'` → `'complete'` (or `'failed'` on error). Inserted reminders have `status = 'inactive'`; the mobile app is responsible for surfacing them for user approval and scheduling local notifications (the edge function does **not** schedule push notifications). The model populates `reminders.extracted_text` with a **short display title** (not a verbatim snippet of the thought). Uses `OPENROUTER_REMINDER_MODEL` if set, then `OPENROUTER_TOPIC_MODEL`, then `google/gemini-2.5-flash-lite`. The extraction prompt uses `current_iso_timestamp` and optional `iana_timezone` so relative phrases resolve in the user’s locale (the mobile app sends both on typed and voice capture). When `iana_timezone` is present, if the model returns `scheduled_at` with `Z` or `±00:00` but the digits represent the user’s intended **local** wall time (a common model mistake), the server reinterprets that timestamp in the IANA zone before insert so storage matches local intent. Structured AI logs are emitted via `console.debug` (phase: `reminders`) per ADR-003.
 
 **JWT at gateway**: `[functions.detect-reminders] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
@@ -209,7 +209,7 @@ The `topics` field is present when topic assignment completes successfully insid
 - `500` — Server configuration error or DB write failure
 - `502` — OpenRouter request failed or returned unparseable scores (`error: "scoring_failed"`)
 
-**Notes**: Model resolution: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`. Out-of-range model values are clamped to [0.0, 1.0] before upsert. Structured AI logs follow ADR-003 with `phase: "onboarding"` — answer text is limited to truncated previews; OCEAN scores are never logged.
+**Notes**: Model resolution: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite`. Out-of-range model values are clamped to [0.0, 1.0] before upsert. Structured AI logs follow ADR-003 with `phase: "onboarding"` — answer text is limited to truncated previews; OCEAN scores are never logged.
 
 **JWT at gateway**: `[functions.score-ocean-profile] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
@@ -236,7 +236,7 @@ The `topics` field is present when topic assignment completes successfully insid
 - `500` — Server configuration error or DB read failure
 - `502` — OpenRouter request failed or returned an empty message (`error: "generation_failed"`)
 
-**Notes**: Model resolution: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`. The prompt translates numeric OCEAN scores into natural-language descriptors (high / moderate / low) so the message reflects personality without sounding clinical. OCEAN scores are never logged (ADR-003, `phase: "morning-message"`). The message preview (≤ 80 chars) is logged in `response_summary` for operator debugging.
+**Notes**: Model resolution: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite`. The prompt translates numeric OCEAN scores into natural-language descriptors (high / moderate / low) so the message reflects personality without sounding clinical. OCEAN scores are never logged (ADR-003, `phase: "morning-message"`). The message preview (≤ 80 chars) is logged in `response_summary` for operator debugging.
 
 **JWT at gateway**: `[functions.generate-morning-message] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
@@ -273,7 +273,7 @@ The `topics` field is present when topic assignment completes successfully insid
 - `404` — Thought not found or not owned by caller
 - `500` — Server configuration error
 
-**Notes**: The shared module `_shared/detect-list.ts` loads the caller's existing `user_lists` titles and passes them to the model so continuation can be detected. When `is_continuation` is true, new items are appended to the matching existing list rather than creating a duplicate. Sets `thoughts.list_detection_status` to `'pending'` → `'complete'` (or `'failed'` on error). Uses `OPENROUTER_LIST_MODEL` if set, then `OPENROUTER_TOPIC_MODEL`, then `google/gemini-2.0-flash-001`. AI logs follow the ADR-003 contract with `phase: "lists"`.
+**Notes**: The shared module `_shared/detect-list.ts` loads the caller's existing `user_lists` titles and passes them to the model so continuation can be detected. When `is_continuation` is true, new items are appended to the matching existing list rather than creating a duplicate. Sets `thoughts.list_detection_status` to `'pending'` → `'complete'` (or `'failed'` on error). Uses `OPENROUTER_LIST_MODEL` if set, then `OPENROUTER_TOPIC_MODEL`, then `google/gemini-2.5-flash-lite`. AI logs follow the ADR-003 contract with `phase: "lists"`.
 
 **JWT at gateway**: `[functions.detect-list] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
@@ -316,7 +316,7 @@ The `topics` field is present when topic assignment completes successfully insid
 - `500` — Server configuration error or DB write failure
 - `502` — AI scoring failed (OpenRouter error, empty response, or unparseable JSON)
 
-**Notes**: Model resolution order: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`. Scores are clamped to [0.0, 1.0] regardless of what the model returns. Upsert uses `ON CONFLICT` on the `ocean_profiles_user_id_unique` constraint — re-scoring replaces all five dimension values, `answers` (raw jsonb), `question_set_version`, `scored_at`, and `updated_at`. Structured AI logs emitted per ADR-003 with `phase: "onboarding"` — answer previews are truncated to 80 chars; raw OCEAN scores are **never** logged.
+**Notes**: Model resolution order: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite`. Scores are clamped to [0.0, 1.0] regardless of what the model returns. Upsert uses `ON CONFLICT` on the `ocean_profiles_user_id_unique` constraint — re-scoring replaces all five dimension values, `answers` (raw jsonb), `question_set_version`, `scored_at`, and `updated_at`. Structured AI logs emitted per ADR-003 with `phase: "onboarding"` — answer previews are truncated to 80 chars; raw OCEAN scores are **never** logged.
 
 **JWT at gateway**: `[functions.score-ocean-profile] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
@@ -343,7 +343,7 @@ The `topics` field is present when topic assignment completes successfully insid
 - `500` — Server configuration error or DB fetch failure
 - `502` — `{ "error": "generation_failed", "message": "..." }` — OpenRouter error or empty model response
 
-**Notes**: Model resolution order: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`. The prompt passes OCEAN dimensions as named buckets (`low` / `moderate-low` / `moderate-high` / `high`) rather than raw floats — this keeps the prompt compact and avoids leaking precise scores. Raw OCEAN scores are **never** logged (ADR-003). Structured AI logs use `phase: "morning-message"`. The client should cache the returned message in `morning_messages` with `generated_for_date` = today's date; the unique constraint `morning_messages_user_date_unique` on `(user_id, generated_for_date)` prevents duplicates if the client calls the endpoint more than once before caching.
+**Notes**: Model resolution order: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite`. The prompt passes OCEAN dimensions as named buckets (`low` / `moderate-low` / `moderate-high` / `high`) rather than raw floats — this keeps the prompt compact and avoids leaking precise scores. Raw OCEAN scores are **never** logged (ADR-003). Structured AI logs use `phase: "morning-message"`. The client should cache the returned message in `morning_messages` with `generated_for_date` = today's date; the unique constraint `morning_messages_user_date_unique` on `(user_id, generated_for_date)` prevents duplicates if the client calls the endpoint more than once before caching.
 
 **JWT at gateway**: `[functions.generate-morning-message] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
 
@@ -409,7 +409,7 @@ JOURNAL_OPENING_QUESTION_V1 = "Take a moment to settle in. What's on your mind t
 - Turn 0 always returns `JOURNAL_OPENING_QUESTION_V1` — no AI call, no OpenRouter charge.
 - Follow-up questions (turns 1–2) read `user_state.content` from the database. If no row exists (new user), the AI receives an empty context placeholder — handled gracefully.
 - The edge function does **not** write to `journal_entries` — the mobile client owns incremental persistence (upserts the row on question display, updates `answer` + `answered_at` on submission).
-- Model resolution: `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`.
+- Model resolution: `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite`.
 - Logging (ADR-003): `phase: "journal_question"`. Raw answer text is **never** logged — only `answer_char_count` per turn.
 
 **JWT at gateway**: `[functions.journal-next-question] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
@@ -446,7 +446,7 @@ JOURNAL_OPENING_QUESTION_V1 = "Take a moment to settle in. What's on your mind t
 - Validates: session exists, `user_id` matches JWT, `status = 'pending'`, at least one `journal_entries` row with non-NULL `answer`.
 - Sets `journal_sessions.status = 'completed'` and `completed_at = now()` (awaited before response).
 - User state update (fire-and-forget): reads `user_state.content` (NULL for first session) + new session Q&A pairs → OpenRouter produces an updated ~200-word third-person profile → upserts `user_state` row (`ON CONFLICT user_id DO UPDATE`). If the AI call or DB write fails, the error is logged (`phase: "journal_state_update"`) and the session remains correctly `completed`.
-- Model resolution (both question generation and state update): `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`. Set `OPENROUTER_JOURNAL_MODEL` in Supabase edge function secrets to override the model specifically for journal functions.
+- Model resolution (both question generation and state update): `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite`. Set `OPENROUTER_JOURNAL_MODEL` in Supabase edge function secrets to override the model specifically for journal functions.
 - Logging (ADR-003): `phase: "journal_state_update"`. Raw answer text and state content are **never** logged — only `answer_count`, `prior_state_char_count`, `updated_state_char_count`, `word_count`, and `session_count`.
 
 **JWT at gateway**: `[functions.journal-save-session] verify_jwt = false` in `supabase/config.toml` for `OPTIONS` preflight; `POST` validates the Bearer token via `getUser()`.
@@ -536,7 +536,7 @@ Successful transcription step start:
   "event": "ai.request.start",
   "function": "transcribe",
   "phase": "transcribe",
-  "model": "google/gemini-2.0-flash-001",
+  "model": "google/gemini-2.5-flash",
   "thought_id": "550e8400-e29b-41d4-a716-446655440000",
   "user_id": "660e8400-e29b-41d4-a716-446655440001",
   "request_summary": {
@@ -558,7 +558,7 @@ Topic phase failure (same transport: **`console.debug`**; distinguish failures v
   "event": "ai.error",
   "function": "assign-topics",
   "phase": "topics",
-  "model": "google/gemini-2.0-flash-001",
+  "model": "google/gemini-2.5-flash-lite",
   "thought_id": "550e8400-e29b-41d4-a716-446655440000",
   "user_id": "660e8400-e29b-41d4-a716-446655440001",
   "error": {

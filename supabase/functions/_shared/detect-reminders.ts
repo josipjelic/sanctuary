@@ -19,7 +19,7 @@ export interface DetectRemindersParams {
   ianaTimezone?: string;
   supabaseClient: SupabaseClient;
   openRouterApiKey: string;
-  /** Defaults to OPENROUTER_REMINDER_MODEL → OPENROUTER_TOPIC_MODEL → google/gemini-2.0-flash-001. */
+  /** Defaults to OPENROUTER_REMINDER_MODEL → OPENROUTER_TOPIC_MODEL → google/gemini-2.5-flash-lite. */
   model?: string;
   /** Edge function name for structured logs. */
   callerFunction?: string;
@@ -114,10 +114,10 @@ function resolveModel(): string {
     return (
       Deno?.env?.get("OPENROUTER_REMINDER_MODEL") ??
       Deno?.env?.get("OPENROUTER_TOPIC_MODEL") ??
-      "google/gemini-2.0-flash-001"
+      "google/gemini-2.5-flash-lite"
     );
   } catch {
-    return "google/gemini-2.0-flash-001";
+    return "google/gemini-2.5-flash-lite";
   }
 }
 

@@ -166,8 +166,7 @@ Deno.serve(async (req) => {
   }
 
   const transcriptionModel =
-    Deno.env.get("OPENROUTER_TRANSCRIPTION_MODEL") ??
-    "google/gemini-2.0-flash-001";
+    Deno.env.get("OPENROUTER_TRANSCRIPTION_MODEL") ?? "google/gemini-2.5-flash";
 
   const arrayBuffer = await audio.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);

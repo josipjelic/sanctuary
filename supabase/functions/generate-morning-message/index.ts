@@ -210,7 +210,7 @@ Deno.serve(async (req) => {
   const model =
     Deno.env.get("OPENROUTER_OCEAN_MODEL") ??
     Deno.env.get("OPENROUTER_TOPIC_MODEL") ??
-    "google/gemini-2.0-flash-001";
+    "google/gemini-2.5-flash-lite";
 
   const httpReferer = Deno.env.get("OPENROUTER_HTTP_REFERER");
 

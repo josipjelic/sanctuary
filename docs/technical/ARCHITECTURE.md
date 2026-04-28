@@ -454,7 +454,7 @@ The shared module prompts OpenRouter for **only** valid JSON of this shape (code
 - `reminders`: array; empty when no future time references.
 - Each item must have non-empty `extracted_text` (concise reminder title) and a parseable ISO 8601 `scheduled_at`; invalid items are skipped.
 - The prompt includes the caller-supplied **local “now”** (ISO with offset) and optional **IANA timezone** (`Europe/Zagreb`, etc.) from the mobile app so phrases like “next Tuesday” resolve in the user’s zone; voice and typed capture send `iana_timezone` + `current_local_iso` via `/transcribe` and `/assign-topics`. Standalone `POST /detect-reminders` accepts `iana_timezone` and `current_iso_timestamp`. Server UTC is only a fallback when the client omits local fields.
-- Model resolution: `OPENROUTER_REMINDER_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`.
+- Model resolution: `OPENROUTER_REMINDER_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite`.
 
 ### Reminder Lifecycle
 
@@ -628,7 +628,7 @@ Both tables: RLS CRUD where `user_id = auth.uid()`.
 - Input: `POST` with user JWT + `{ answers: [{ question: string; answer: string }], question_set_version?: string }`
 - OpenRouter prompt: structured output requesting `{ openness, conscientiousness, extraversion, agreeableness, neuroticism }` as floats 0–1; system prompt instructs independent per-dimension reasoning
 - Output: upserts `ocean_profiles` row; returns `{ openness, conscientiousness, extraversion, agreeableness, neuroticism, scored_at }`
-- Model resolution: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`
+- Model resolution: `OPENROUTER_OCEAN_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite`
 - Logging: follows ADR-003 structured logging; `phase: "ocean_scoring"`; raw answers not logged (only `answer_count` and `question_set_version`)
 
 `**generate-morning-message**`:
@@ -637,7 +637,7 @@ Both tables: RLS CRUD where `user_id = auth.uid()`.
 - Reads `ocean_profiles` for the authenticated user; returns 404 if profile not found
 - OpenRouter prompt: given OCEAN scores, generate a single short morning message (≤ 3 sentences) that reflects the user's known tendencies back at them in a warm, non-prescriptive tone
 - Output: upserts `morning_messages` for today's date; returns `{ message_text, generated_for_date }`
-- Model resolution: `OPENROUTER_MORNING_MESSAGE_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`
+- Model resolution: `OPENROUTER_MORNING_MESSAGE_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite`
 - Idempotent within a day: if a row for today already exists (possible if client retries), return existing message without calling OpenRouter
 - Logging: follows ADR-003; `phase: "morning_message"`; message text logged only as a character-count preview
 
@@ -694,7 +694,7 @@ If the user leaves mid-session (app backgrounded, killed), the next Journal tab 
 
 | Component                               | Location                                            | Owner                   | Description                                                                                                                                                                                                                                                                                                                                             |
 | --------------------------------------- | --------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `journal-next-question` (edge function) | `supabase/functions/journal-next-question/index.ts` | @backend-developer      | `POST` — accepts session ID, completed turn history, and optional `user_state` snapshot; returns `{ "question": "...", "turn_index": N }` or `{ "done": true }`. Enforces 3-turn max server-side (returns `done` unconditionally if `turns.length >= 3`). Model: `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.0-flash-001`. |
+| `journal-next-question` (edge function) | `supabase/functions/journal-next-question/index.ts` | @backend-developer      | `POST` — accepts session ID, completed turn history, and optional `user_state` snapshot; returns `{ "question": "...", "turn_index": N }` or `{ "done": true }`. Enforces 3-turn max server-side (returns `done` unconditionally if `turns.length >= 3`). Model: `OPENROUTER_JOURNAL_MODEL` → `OPENROUTER_TOPIC_MODEL` → `google/gemini-2.5-flash-lite`. |
 | `journal-save-session` (edge function)  | `supabase/functions/journal-save-session/index.ts`  | @backend-developer      | `POST` — accepts session ID; validates ownership and at least one answered entry; marks session `completed`; returns save confirmation. Fires-and-forgets `updateUserState()`: reads current `user_state.content` + new session Q&A pairs → OpenRouter incremental merge → upserts `user_state`.                                                        |
 | `journal_sessions` table                | `supabase/migrations/006_journal.sql`               | @database-expert        | One row per session. `status`: `'pending'` (in-progress) | `'completed'` | `'abandoned'`. `opening_question_version` tracks which `JOURNAL_OPENING_QUESTION_V`* constant was used. RLS: `user_id = auth.uid()`.                                                                                                                                         |
 | `journal_entries` table                 | `supabase/migrations/006_journal.sql`               | @database-expert        | One row per turn within a session. Columns: `turn_index` (0–2), `question` text (set when displayed), `answer` (NULL until submitted), `answered_at`. UNIQUE `(session_id, turn_index)`. RLS via `user_id` column.                                                                                                                                      |
