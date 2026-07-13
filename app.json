@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "runtimeVersion": "1.0.2",
+      "runtimeVersion": "1.0.1",
       "bundleIdentifier": "com.context.hr.sanctuary"
     },
     "android": {
@@ -31,7 +31,7 @@
         "android.permission.WRITE_CALENDAR"
       ],
       "package": "com.context.hr.sanctuary",
-      "runtimeVersion": "1.0.2"
+      "runtimeVersion": "1.0.1"
     },
     "web": {
       "bundler": "metro",
