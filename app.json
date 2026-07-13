@@ -2,7 +2,7 @@
   "expo": {
     "name": "Sanctuary",
     "slug": "sanctuary",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "sanctuary",
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "runtimeVersion": "1.0.1",
+      "runtimeVersion": "1.0.2",
       "bundleIdentifier": "com.context.hr.sanctuary"
     },
     "android": {
@@ -31,7 +31,7 @@
         "android.permission.WRITE_CALENDAR"
       ],
       "package": "com.context.hr.sanctuary",
-      "runtimeVersion": "1.0.1"
+      "runtimeVersion": "1.0.2"
     },
     "web": {
       "bundler": "metro",
