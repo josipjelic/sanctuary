@@ -13,7 +13,13 @@
 
 ## Up Next (prioritized)
 
-*(nothing queued — journal tasks #043–#049 were removed when the AI-guided journal feature was reverted; see ADR-007)*
+- [ ] #043 — AI-guided journal: architecture + ADR (AI conversation model, user state memory layer, evening reminder pattern, schema guidelines, edge function contracts) [area: infra] → [.tasks/043-journal-architecture.md](.tasks/043-journal-architecture.md)
+- [ ] #044 — AI-guided journal: UX design (journal conversation screen, evening reminder settings, user state profile view, resume/start-fresh prompt) [area: design] → [.tasks/044-journal-ux-design.md](.tasks/044-journal-ux-design.md)
+- [ ] #045 — AI-guided journal: database schema (journal_sessions, journal_entries, user_state tables + migration 006_journal.sql + RLS + indexes) [area: database] → [.tasks/045-journal-database-schema.md](.tasks/045-journal-database-schema.md)
+- [ ] #046 — AI-guided journal: backend edge functions (journal-next-question, journal-save-session + user state update logic + ADR-003 logging) [area: backend] → [.tasks/046-journal-backend.md](.tasks/046-journal-backend.md)
+- [ ] #047 — AI-guided journal: mobile screens (journal tab + conversation screen + history screen + evening reminder scheduling + settings additions + resume/start-fresh flow) [area: mobile] → [.tasks/047-journal-mobile.md](.tasks/047-journal-mobile.md)
+- [ ] #048 — AI-guided journal: tests (session state machine, user state update, evening notification scheduling, max-3-questions enforcement, RLS) [area: qa] → [.tasks/048-journal-tests.md](.tasks/048-journal-tests.md)
+- [ ] #049 — AI-guided journal: USER_GUIDE.md journal section (how to use journal, evening reminders, what user state / profile is) [area: docs] → [.tasks/049-journal-docs.md](.tasks/049-journal-docs.md)
 
 ---
 

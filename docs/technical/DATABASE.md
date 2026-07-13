@@ -11,7 +11,7 @@ Read by: All agents. Always read before writing queries or designing schema chan
 > **Engine**: PostgreSQL 15 (managed by Supabase)
 > **Access layer**: `@supabase/supabase-js` client (direct table queries with RLS)
 > **Connection**: Via `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` (client) and service role key (edge functions only)
-> **Last updated**: 2026-07-13 (AI-Guided Journal reverted, ADR-007 — journal tables remain in the database but are inert; no code paths touch them)
+> **Last updated**: 2026-04-12 (migration `007_journal`; AI-Guided Journal tables: `journal_sessions`, `journal_entries`, `user_state`)
 
 ---
 
@@ -50,11 +50,11 @@ auth.users (managed by Supabase Auth)
   |
   +--< morning_messages    (one per user per calendar day — AI-generated motivational card)
   |
-  +--< journal_sessions    (INERT — journal feature reverted; see ADR-007)
+  +--< journal_sessions    (one per sitting of the AI-guided journal flow)
   |      |
-  |      +--< journal_entries  (INERT)
+  |      +--< journal_entries  (one per question-answer turn within a session)
   |
-  +--< user_state          (INERT)
+  +--< user_state          (one per user — living ~200-word reflection analysis)
 ```
 
 **Key relationships**:
@@ -297,6 +297,116 @@ auth.users (managed by Supabase Auth)
 
 ---
 
+### journal (migration 007_journal.sql)
+
+---
+
+### journal_sessions
+
+**Purpose**: One row per AI-guided journal session (a single sitting). Created when the user opens the Journal tab (`status: 'pending'`). Transitions to `'completed'` when the user taps "Save Journal" (via `journal-save-session` edge function) or to `'abandoned'` when the user discards a pending session to start fresh. Enables genuine resume UX: pending sessions within 24 hours are surfaced as resume candidates on next Journal tab open.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | uuid | PK, NOT NULL, DEFAULT gen_random_uuid() | Primary key |
+| user_id | uuid | NOT NULL, FK → auth.users.id ON DELETE CASCADE | Owner |
+| status | text | NOT NULL, DEFAULT 'pending', CHECK (status IN ('pending', 'completed', 'abandoned')) | Session lifecycle state |
+| opening_question_version | text | NOT NULL, DEFAULT 'v1' | Which `JOURNAL_OPENING_QUESTION_V*` constant was shown; versioned for future A/B testing |
+| started_at | timestamptz | NOT NULL, DEFAULT now() | When the user opened the session |
+| completed_at | timestamptz | NULL | Set by `journal-save-session` when status → 'completed'; NULL for pending and abandoned rows |
+| created_at | timestamptz | NOT NULL, DEFAULT now() | Row creation time |
+| updated_at | timestamptz | NOT NULL, DEFAULT now() | Last modification time (set explicitly in UPDATE statements) |
+
+**Constraints**:
+- `journal_sessions_status_check`: CHECK `status IN ('pending', 'completed', 'abandoned')` — text + CHECK rather than ENUM to allow future value additions without an exclusive lock on ALTER TYPE
+
+**Indexes**:
+- `idx_journal_sessions_user_started` on `(user_id, started_at DESC)` — primary query pattern: journal history screen (newest-first per user) and resume detection (combined with status filter)
+- `idx_journal_sessions_user_pending` on `(user_id, status) WHERE status = 'pending'` — partial index for the resume-detection query on Journal tab open; excludes completed and abandoned rows (the majority at steady state), keeping the index small
+
+**Relationships**:
+- `user_id` → `auth.users.id` (ON DELETE CASCADE)
+
+**RLS policies**: SELECT / INSERT / UPDATE / DELETE where `user_id = auth.uid()`.
+
+**Notes**: `completed_at` is NULL for both `pending` and `abandoned` sessions; it is only set on the `completed` transition. A future cleanup job may transition stale `pending` sessions (older than 24 hours) to `abandoned` — no automated transition exists in v1. The partial index `idx_journal_sessions_user_pending` is the primary index for the resume-detection query: `WHERE user_id = $1 AND status = 'pending' AND started_at > now() - interval '24 hours'`.
+
+---
+
+### journal_entries
+
+**Purpose**: One row per question-answer turn within a journal session (max 3 turns per session: `turn_index` 0, 1, 2). Rows are written incrementally per ADR-006 Decision 4: a row is inserted (with `answer = NULL`) when the question is displayed to the user, and updated (with `answer` and `answered_at` set) when the user submits their answer. This incremental persistence enables genuine session resume after app kill — any submitted answer is already stored and reloadable.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | uuid | PK, NOT NULL, DEFAULT gen_random_uuid() | Primary key |
+| session_id | uuid | NOT NULL, FK → journal_sessions.id ON DELETE CASCADE | Parent session |
+| user_id | uuid | NOT NULL, FK → auth.users.id ON DELETE CASCADE | Owner — denormalized from parent session for RLS simplicity |
+| turn_index | smallint | NOT NULL, CHECK (0 ≤ turn_index ≤ 2) | 0 = opening question, 1 = first AI follow-up, 2 = second AI follow-up |
+| question | text | NOT NULL | The question text displayed to the user (set when the question is shown) |
+| answer | text | NULL | The user's answer; NULL when the row is first created (question shown but not yet answered) |
+| answered_at | timestamptz | NULL | Set to `now()` when the answer is submitted; NULL until answered |
+| created_at | timestamptz | NOT NULL, DEFAULT now() | Row creation time (when question was displayed) |
+
+**Constraints**:
+- `journal_entries_session_turn_unique`: UNIQUE `(session_id, turn_index)` — prevents duplicate turns within a session; enables idempotent insert with `ON CONFLICT ON CONSTRAINT journal_entries_session_turn_unique DO UPDATE`
+- `journal_entries_turn_index_range`: CHECK `turn_index >= 0 AND turn_index <= 2` — DB-level backstop on the 3-turn maximum (authoritative enforcement is server-side in `journal-next-question`)
+
+**Indexes**:
+- `idx_journal_entries_session_turn` on `(session_id, turn_index)` — primary query pattern: load all Q&A pairs for a session in turn order (also covered by the UNIQUE constraint's implicit index; the named index is created explicitly for monitoring consistency)
+
+**Relationships**:
+- `session_id` → `journal_sessions.id` (ON DELETE CASCADE)
+- `user_id` → `auth.users.id` (ON DELETE CASCADE)
+
+**RLS policies**: SELECT / INSERT / UPDATE / DELETE where `user_id = auth.uid()`.
+
+**Notes**: `user_id` is denormalized from the parent `journal_sessions` row so RLS policies on `journal_entries` can use `user_id = auth.uid()` directly without a JOIN on every query. The application (mobile client and edge functions) must always set `user_id` to match `journal_sessions.user_id` when inserting. The `answer` column being nullable is intentional: it represents the "question displayed, answer pending" state between row creation and answer submission.
+
+---
+
+### user_state
+
+**Purpose**: One row per user (UNIQUE on `user_id`). Stores the living ~200-word third-person analysis that accumulates patterns, recurring themes, and facts the user has shared across all completed journal sessions. This analysis is passed as read-only context to `journal-next-question` and is visible to the user on the "Your profile" screen in Settings. The analysis is never shown mid-session to avoid biasing responses. Updated fire-and-forget by `journal-save-session` after every completed session using the incremental merge approach (ADR-006 Decision 2).
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | uuid | PK, NOT NULL, DEFAULT gen_random_uuid() | Primary key |
+| user_id | uuid | NOT NULL, UNIQUE, FK → auth.users.id ON DELETE CASCADE | Owner — one row per user |
+| content | text | NULL | The ~200-word third-person analysis; NULL until the first session is completed |
+| word_count | smallint | NULL | Approximate word count of `content`; maintained by the edge function for monitoring (ensures the analysis stays near the 200-word target) |
+| session_count | integer | NOT NULL, DEFAULT 0 | How many completed sessions have contributed to this analysis; displayed on the "Your profile" screen |
+| last_session_id | uuid | NULL, FK → journal_sessions.id ON DELETE SET NULL | The most recent session merged into this analysis; kept for debugging correlation |
+| last_updated_at | timestamptz | NULL | Set to `now()` by the edge function each time `content` is updated; NULL until the first session is completed |
+| created_at | timestamptz | NOT NULL, DEFAULT now() | Row creation time |
+| updated_at | timestamptz | NOT NULL, DEFAULT now() | Last modification time (set explicitly in UPDATE statements) |
+
+**Constraints**:
+- `user_state_user_id_unique`: UNIQUE `(user_id)` — one state row per user; enables efficient upsert: `ON CONFLICT ON CONSTRAINT user_state_user_id_unique DO UPDATE`
+
+**Indexes**:
+- `idx_user_state_user_id` on `(user_id)` — point lookup; the UNIQUE constraint already creates an implicit index covering this column (the explicit named index is retained for monitoring consistency with the rest of the schema)
+
+**Relationships**:
+- `user_id` → `auth.users.id` (ON DELETE CASCADE)
+- `last_session_id` → `journal_sessions.id` (ON DELETE SET NULL — nullable; deleting a session does not orphan the user_state row)
+
+**RLS policies**: SELECT / INSERT / UPDATE / DELETE where `user_id = auth.uid()`.
+
+**Notes**: `content` is nullable by design — a new user has no analysis until their first journal session completes. The edge function upserts this row using `ON CONFLICT ON CONSTRAINT user_state_user_id_unique DO UPDATE SET content = ..., word_count = ..., session_count = session_count + 1, last_session_id = ..., last_updated_at = now(), updated_at = now()`. The `last_session_id` FK uses `ON DELETE SET NULL` (not CASCADE) so that deleting a test/development session does not delete the user's accumulated analysis.
+
+---
+
+### user_preferences — journal keys (migration 007_journal.sql)
+
+No schema change. The following keys are added to the existing `user_preferences` key-value table by the mobile client. See the `user_preferences` table definition above for the full table schema and upsert pattern.
+
+| Key | Value type | Default | Description |
+|-----|-----------|---------|-------------|
+| `evening_notification_time` | JSON string `"HH:MM"` | `"21:00"` (app logic) | User-configured time for the nightly journal reminder |
+| `evening_notification_id` | JSON string | absent until enabled | The `expo-notifications` identifier for the recurring `DailyTriggerInput` evening notification; stored so the client can cancel or reschedule when the time preference changes |
+
+---
+
 ## Migrations Log
 
 | Migration File | Date | Description | Reversible | Deployment Risk |
@@ -307,7 +417,7 @@ auth.users (managed by Supabase Auth)
 | `004_reminders.sql` | 2026-03-30 | Create reminders and user_preferences tables; add reminder_detection_status to thoughts | Yes — see rollback DDL in migration file | Low — two new tables + additive column on thoughts (no lock on large tables) |
 | `005_ocean_profiles.sql` | 2026-04-11 | Create ocean_profiles and morning_messages tables for OCEAN personality onboarding subsystem | Yes — see rollback DDL in migration file | Low — two new tables only (no changes to existing tables) |
 | `006_ocean_profile_reasoning.sql` | 2026-04-11 | Add `reasoning` JSONB column to ocean_profiles for per-dimension AI reasoning | Yes — see rollback DDL in migration file | Low — additive nullable column (no table rewrite) |
-| `007_journal.sql` | 2026-04-12 | Create journal_sessions, journal_entries, and user_state tables for the AI-Guided Journal subsystem (ADR-006); document two new user_preferences keys. **Feature reverted 2026-07-13 (ADR-007)** — migration kept for history; tables remain in the DB but are inert | Yes — see rollback DDL in migration file | Low — three new tables only (no changes to existing tables) |
+| `007_journal.sql` | 2026-04-12 | Create journal_sessions, journal_entries, and user_state tables for the AI-Guided Journal subsystem (ADR-006); document two new user_preferences keys | Yes — see rollback DDL in migration file | Low — three new tables only (no changes to existing tables) |
 
 ---
 
@@ -420,6 +530,56 @@ WHERE user_id = auth.uid()
   AND shown_at IS NULL;
 ```
 
+**Detect a pending journal session for resume**:
+```sql
+SELECT id, started_at, opening_question_version
+FROM journal_sessions
+WHERE user_id = auth.uid()
+  AND status = 'pending'
+  AND started_at > now() - interval '24 hours'
+ORDER BY started_at DESC
+LIMIT 1;
+```
+
+**Load all Q&A pairs for a session (resume or read-only history)**:
+```sql
+SELECT turn_index, question, answer, answered_at
+FROM journal_entries
+WHERE session_id = $1
+ORDER BY turn_index ASC;
+```
+
+**Fetch a user's journal history (newest first)**:
+```sql
+SELECT id, status, started_at, completed_at, opening_question_version
+FROM journal_sessions
+WHERE user_id = auth.uid()
+  AND status = 'completed'
+ORDER BY started_at DESC
+LIMIT 20;
+```
+
+**Upsert user_state after a completed session**:
+```sql
+INSERT INTO user_state (user_id, content, word_count, session_count, last_session_id, last_updated_at, updated_at)
+VALUES (auth.uid(), $1, $2, 1, $3, now(), now())
+ON CONFLICT ON CONSTRAINT user_state_user_id_unique
+DO UPDATE SET
+  content         = EXCLUDED.content,
+  word_count      = EXCLUDED.word_count,
+  session_count   = user_state.session_count + 1,
+  last_session_id = EXCLUDED.last_session_id,
+  last_updated_at = now(),
+  updated_at      = now();
+```
+
+**Fetch user_state for journal-next-question context**:
+```sql
+SELECT content, session_count
+FROM user_state
+WHERE user_id = auth.uid();
+```
+
 ---
 
 ## Known Issues & Tech Debt
@@ -428,4 +588,3 @@ WHERE user_id = auth.uid()
 |-------|--------|------|
 | No full-text search index | `ILIKE` searches will be slow at scale | Add `tsvector` column and GIN index in v2 |
 | Model-reported match scores | Topic reuse threshold depends on LLM calibration | Tune prompts; optional analytics on score distribution |
-| Inert journal tables (`journal_sessions`, `journal_entries`, `user_state`) left behind by the ADR-007 revert | Unused schema surface; may hold journal data from before the revert | Archive/drop in a future reviewed migration once data retention is decided |

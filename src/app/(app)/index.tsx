@@ -11,7 +11,11 @@ import { logger } from "@/lib/logger";
 import {
   LEAD_TIME_OPTIONS,
   type LeadTime,
+  cancelEveningJournalReminder,
   labelForLeadTime,
+  requestNotificationPermission,
+  rescheduleEveningJournalReminder,
+  scheduleEveningJournalReminder,
 } from "@/lib/notifications";
 import { getReminderTimeContext } from "@/lib/reminderTimeContext";
 import { supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
@@ -49,6 +53,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -133,6 +138,16 @@ export default function QuickCaptureScreen() {
   const [morningTime, setMorningTime] = useState("07:30");
   const [morningPickerVisible, setMorningPickerVisible] = useState(false);
 
+  // Journal settings
+  const [eveningReminderEnabled, setEveningReminderEnabled] = useState(false);
+  const [eveningNotificationTime, setEveningNotificationTime] =
+    useState("21:00");
+  const [eveningNotificationId, setEveningNotificationId] = useState<
+    string | null
+  >(null);
+  const [eveningPickerVisible, setEveningPickerVisible] = useState(false);
+  const [eveningPermissionDenied, setEveningPermissionDenied] = useState(false);
+
   // Morning message
   const [isMorningWindow, setIsMorningWindow] = useState(false);
   const [morningMessage, setMorningMessage] = useState<string | undefined>(
@@ -180,12 +195,24 @@ export default function QuickCaptureScreen() {
       const { data } = await supabase
         .from("user_preferences")
         .select("key, value")
-        .in("key", ["notification_lead_time", "morning_notification_time"]);
+        .in("key", [
+          "notification_lead_time",
+          "morning_notification_time",
+          "evening_notification_enabled",
+          "evening_notification_time",
+          "evening_notification_id",
+        ]);
       for (const row of data ?? []) {
         if (row.key === "notification_lead_time") {
           setLeadTime(row.value as string as LeadTime);
         } else if (row.key === "morning_notification_time") {
           setMorningTime(row.value as string);
+        } else if (row.key === "evening_notification_enabled") {
+          setEveningReminderEnabled(row.value === "true");
+        } else if (row.key === "evening_notification_time") {
+          setEveningNotificationTime(row.value as string);
+        } else if (row.key === "evening_notification_id") {
+          setEveningNotificationId(row.value as string);
         }
       }
     })();
@@ -683,6 +710,128 @@ export default function QuickCaptureScreen() {
     return d;
   }
 
+  function eveningTimeAsDate(): Date {
+    const [h, m] = eveningNotificationTime.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d;
+  }
+
+  function formatEveningTime(time: string): string {
+    const [h, m] = time.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+
+  async function handleEveningReminderToggle(value: boolean) {
+    void AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
+      if (!reduced) {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      }
+    });
+
+    if (value) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        setEveningPermissionDenied(true);
+        setTimeout(() => setEveningPermissionDenied(false), 4000);
+        return;
+      }
+      try {
+        const id = await scheduleEveningJournalReminder(
+          eveningNotificationTime,
+        );
+        setEveningReminderEnabled(true);
+        setEveningNotificationId(id);
+        await supabase.from("user_preferences").upsert(
+          [
+            {
+              key: "evening_notification_enabled",
+              value: "true",
+              updated_at: new Date().toISOString(),
+            },
+            {
+              key: "evening_notification_id",
+              value: id,
+              updated_at: new Date().toISOString(),
+            },
+          ],
+          { onConflict: "user_id, key" },
+        );
+      } catch (err) {
+        logger.error("handleEveningReminderToggle: schedule failed", err);
+      }
+    } else {
+      setEveningReminderEnabled(false);
+      if (eveningNotificationId) {
+        try {
+          await cancelEveningJournalReminder(eveningNotificationId);
+        } catch (err) {
+          logger.error("handleEveningReminderToggle: cancel failed", err);
+        }
+      }
+      setEveningNotificationId(null);
+      await supabase.from("user_preferences").upsert(
+        [
+          {
+            key: "evening_notification_enabled",
+            value: "false",
+            updated_at: new Date().toISOString(),
+          },
+          {
+            key: "evening_notification_id",
+            value: "",
+            updated_at: new Date().toISOString(),
+          },
+        ],
+        { onConflict: "user_id, key" },
+      );
+    }
+  }
+
+  async function saveEveningTime(date: Date) {
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    const timeStr = `${hh}:${mm}`;
+    setEveningNotificationTime(timeStr);
+    if (eveningReminderEnabled) {
+      try {
+        const newId = await rescheduleEveningJournalReminder(
+          eveningNotificationId,
+          timeStr,
+        );
+        setEveningNotificationId(newId);
+        await supabase.from("user_preferences").upsert(
+          [
+            {
+              key: "evening_notification_time",
+              value: timeStr,
+              updated_at: new Date().toISOString(),
+            },
+            {
+              key: "evening_notification_id",
+              value: newId,
+              updated_at: new Date().toISOString(),
+            },
+          ],
+          { onConflict: "user_id, key" },
+        );
+      } catch (err) {
+        logger.error("saveEveningTime: reschedule failed", err);
+      }
+    } else {
+      await supabase.from("user_preferences").upsert(
+        {
+          key: "evening_notification_time",
+          value: timeStr,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id, key" },
+      );
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <KeyboardAvoidingView
@@ -1119,6 +1268,125 @@ export default function QuickCaptureScreen() {
               />
             )}
 
+            {/* Journal section separator */}
+            <View style={styles.settingsSectionDivider} />
+
+            {/* Journal section label */}
+            <Text
+              style={styles.settingsSectionLabel}
+              accessibilityRole="header"
+            >
+              JOURNAL
+            </Text>
+
+            {/* Evening reminder toggle row */}
+            <View style={styles.settingsToggleRow}>
+              <View style={styles.settingsLanguageTextBlock}>
+                <Text style={styles.settingsLanguageLabel}>
+                  Evening reminder
+                </Text>
+                <Text style={styles.settingsLanguageHint}>
+                  Daily nudge to reflect on your day
+                </Text>
+              </View>
+              <Switch
+                value={eveningReminderEnabled}
+                onValueChange={(v) => void handleEveningReminderToggle(v)}
+                thumbColor={colors.surfaceContainerLowest}
+                trackColor={{
+                  false: colors.surfaceContainerHigh,
+                  true: colors.primary,
+                }}
+                accessibilityRole="switch"
+                accessibilityLabel="Evening reminder"
+                accessibilityHint="Toggles a daily notification at your chosen time to remind you to journal"
+                accessibilityState={{ checked: eveningReminderEnabled }}
+                testID="settings-evening-reminder-switch"
+              />
+            </View>
+
+            {eveningPermissionDenied && (
+              <Text style={styles.eveningPermissionError}>
+                Notification permission required. Enable in Settings.
+              </Text>
+            )}
+
+            {/* Evening time row — conditional */}
+            {eveningReminderEnabled && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.settingsLanguageRow,
+                  pressed && styles.settingsLanguageRowPressed,
+                ]}
+                onPress={() => setEveningPickerVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel={`Reminder time: ${formatEveningTime(eveningNotificationTime)}. Tap to change.`}
+                accessibilityHint="Opens a time picker"
+                testID="settings-evening-time"
+              >
+                <View style={styles.settingsLanguageTextBlock}>
+                  <Text style={styles.settingsLanguageLabel}>
+                    Reminder time
+                  </Text>
+                  <Text style={styles.settingsLanguageHint}>
+                    When you receive your evening reminder
+                  </Text>
+                </View>
+                <View style={styles.settingsLanguageValueRow}>
+                  <Text style={styles.settingsLanguageValue} numberOfLines={1}>
+                    {formatEveningTime(eveningNotificationTime)}
+                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={colors.secondary}
+                  />
+                </View>
+              </Pressable>
+            )}
+
+            {/* Android evening time picker */}
+            {eveningPickerVisible && Platform.OS === "android" && (
+              <DateTimePicker
+                value={eveningTimeAsDate()}
+                mode="time"
+                display="default"
+                onChange={(_, selected) => {
+                  setEveningPickerVisible(false);
+                  if (selected) {
+                    void saveEveningTime(selected);
+                  }
+                }}
+              />
+            )}
+
+            {/* Your journal profile row */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.settingsLanguageRow,
+                pressed && styles.settingsLanguageRowPressed,
+              ]}
+              onPress={() => {
+                setSettingsVisible(false);
+                router.push("/(app)/journal/profile");
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Your journal profile"
+              accessibilityHint="Shows what Sanctuary has learned from your journal sessions"
+              testID="settings-journal-profile"
+            >
+              <View style={styles.settingsLanguageTextBlock}>
+                <Text style={styles.settingsLanguageLabel}>
+                  Your journal profile
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.secondary}
+              />
+            </Pressable>
+
             <Button
               label="Apply"
               variant="primary"
@@ -1337,6 +1605,53 @@ export default function QuickCaptureScreen() {
                   label="Done"
                   variant="primary"
                   onPress={() => setMorningPickerVisible(false)}
+                />
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* iOS evening time picker sheet */}
+      {eveningPickerVisible && Platform.OS === "ios" && (
+        <Modal
+          visible
+          animationType="slide"
+          transparent
+          onRequestClose={() => setEveningPickerVisible(false)}
+        >
+          <Pressable
+            style={styles.settingsModalBackdrop}
+            onPress={() => setEveningPickerVisible(false)}
+            accessibilityLabel="Cancel time selection"
+          >
+            <Pressable
+              style={styles.settingsModalSheet}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <Text style={styles.settingsModalTitle}>
+                Evening reminder time
+              </Text>
+              <DateTimePicker
+                value={eveningTimeAsDate()}
+                mode="time"
+                display="spinner"
+                onChange={(_, selected) => {
+                  if (selected) {
+                    void saveEveningTime(selected);
+                  }
+                }}
+              />
+              <View style={styles.settingsModalActions}>
+                <Button
+                  label="Cancel"
+                  variant="secondary"
+                  onPress={() => setEveningPickerVisible(false)}
+                />
+                <Button
+                  label="Done"
+                  variant="primary"
+                  onPress={() => setEveningPickerVisible(false)}
                 />
               </View>
             </Pressable>
@@ -1683,6 +1998,20 @@ const styles = StyleSheet.create({
   },
   recentChevron: {
     opacity: 0.45,
+  },
+  settingsToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.s4,
+    paddingHorizontal: spacing.s2,
+    minHeight: 44,
+    marginHorizontal: -spacing.s2,
+  },
+  eveningPermissionError: {
+    ...typography.labelMd,
+    color: colors.error,
+    marginTop: spacing.s2,
   },
   successToast: {
     position: "absolute",

@@ -1,11 +1,15 @@
 /**
  * score-ocean-profile edge function.
  * Accepts free-text OCEAN questionnaire answers, calls OpenRouter to score all
- * five Big Five dimensions, and upserts the result into `ocean_profiles`.
+ * five Big Five dimensions, upserts the result into `ocean_profiles`, and
+ * fire-and-forgets an initial user_state seed from the questionnaire answers.
  * ADR-003: answer text is limited to truncated previews in logs; OCEAN scores
  * are never logged.
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import {
+  createClient,
+  type SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { logAiError, logAiInfo, truncateForLog } from "../_shared/ai-log.ts";
 
 const corsHeaders: Record<string, string> = {
@@ -118,6 +122,218 @@ Return ONLY valid JSON — no markdown fences, no extra keys. Example shape (ill
     "neuroticism": "You appear emotionally steady and handle stress without much anxiety."
   }
 }`;
+
+function formatAnswersForPrompt(answers: AnswerItem[]): string {
+  return answers
+    .map((a, i) => `Q${i + 1}: ${a.question}\nA: ${a.answer}`)
+    .join("\n\n");
+}
+
+/**
+ * Seeds or merges user_state from OCEAN questionnaire answers.
+ * Called fire-and-forget after ocean_profiles is successfully saved.
+ * Never throws — all errors are logged and swallowed.
+ */
+async function updateUserStateFromOcean(
+  userId: string,
+  answers: AnswerItem[],
+  supabase: SupabaseClient,
+  openrouterKey: string,
+  model: string,
+): Promise<void> {
+  const startMs = Date.now();
+
+  const { data: stateRow, error: stateError } = await supabase
+    .from("user_state")
+    .select("content")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (stateError) {
+    logAiError({
+      event: "ai.error",
+      function: "score-ocean-profile",
+      phase: "onboarding_state_seed",
+      model,
+      user_id: userId,
+      error: { message: "Failed to fetch user_state", kind: "db_read" },
+    });
+    return;
+  }
+
+  const priorContent =
+    (stateRow as { content?: string | null } | null)?.content ?? null;
+
+  const priorBlock = priorContent?.trim()
+    ? priorContent.trim()
+    : "(No prior profile — this is the user's first profile.)";
+
+  const systemPrompt = `You are building a private, evolving user profile for the Sanctuary journaling app. Your task is to write a fully synthesised, coherent profile that integrates what was already known about the user with insights from a personality questionnaire they just completed during onboarding.
+
+This is a COMPLETE REWRITE — do not copy the prior profile verbatim or append new observations to the end of it. Read both the prior profile and the questionnaire answers, then produce a single unified profile that feels like one coherent document.
+
+Rules:
+- Write in third person (e.g. "The user..." or "They...")
+- Target length: ~250 words (200–300 acceptable)
+- Synthesise across: personality traits and tendencies revealed by the answers, recurring themes, apparent values, emotional patterns, what energises or weighs on them, relationships or people mentioned, creative interests, goals or challenges expressed
+- NEVER infer or assume things not explicitly mentioned by the user
+- Naturally weave in important context from the prior profile — do not list old facts then new facts; integrate them
+- Replace or update observations that the new answers contradict or evolve
+- Focus on stable traits that will remain meaningful as baseline context for future journal sessions
+- Do not mention that this came from a questionnaire
+- Output ONLY the profile text — no preamble, no headings, no meta-commentary
+
+Prior profile (may be empty):
+${priorBlock}`;
+
+  const userMessage = `Personality questionnaire answers:\n\n${formatAnswersForPrompt(answers)}\n\nWrite the updated profile.`;
+
+  logAiInfo({
+    event: "ai.request.start",
+    function: "score-ocean-profile",
+    phase: "onboarding_state_seed",
+    model,
+    user_id: userId,
+    request_summary: {
+      answer_count: answers.length,
+      has_prior_state: priorContent !== null,
+      prior_state_char_count: priorContent?.length ?? 0,
+      answer_previews: answers.map((a) => truncateForLog(a.answer, 80)),
+    },
+  });
+
+  const httpReferer = Deno.env.get("OPENROUTER_HTTP_REFERER");
+  const orHeaders: Record<string, string> = {
+    Authorization: `Bearer ${openrouterKey}`,
+    "Content-Type": "application/json",
+    "X-Title": "Sanctuary",
+  };
+  if (httpReferer) {
+    orHeaders["HTTP-Referer"] = httpReferer;
+  }
+
+  let updatedContent: string;
+  try {
+    const orRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: orHeaders,
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system" as const, content: systemPrompt },
+          { role: "user" as const, content: userMessage },
+        ],
+      }),
+    });
+
+    const latencyMs = Date.now() - startMs;
+
+    if (!orRes.ok) {
+      const errText = await orRes.text();
+      logAiError({
+        event: "ai.error",
+        function: "score-ocean-profile",
+        phase: "onboarding_state_seed",
+        model,
+        user_id: userId,
+        error: {
+          message: "OpenRouter request failed",
+          http_status: orRes.status,
+          kind: "openrouter_http",
+        },
+        request_summary: { latency_ms: latencyMs },
+        response_summary: { body_preview: truncateForLog(errText, 400) },
+        openrouter_response: { http_status: orRes.status, body: errText },
+      });
+      return;
+    }
+
+    const orData = (await orRes.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    updatedContent = orData.choices?.[0]?.message?.content?.trim() ?? "";
+
+    if (!updatedContent) {
+      logAiError({
+        event: "ai.error",
+        function: "score-ocean-profile",
+        phase: "onboarding_state_seed",
+        model,
+        user_id: userId,
+        error: {
+          message: "Model returned empty user state content",
+          kind: "empty_response",
+        },
+        request_summary: { latency_ms: latencyMs },
+      });
+      return;
+    }
+  } catch (err) {
+    const latencyMs = Date.now() - startMs;
+    logAiError({
+      event: "ai.error",
+      function: "score-ocean-profile",
+      phase: "onboarding_state_seed",
+      model,
+      user_id: userId,
+      error: {
+        message:
+          err instanceof Error ? err.message : "OpenRouter fetch failed",
+        kind: "openrouter_fetch",
+      },
+      request_summary: { latency_ms: latencyMs },
+    });
+    return;
+  }
+
+  const wordCount = updatedContent.split(/\s+/).filter(Boolean).length;
+  const now = new Date().toISOString();
+
+  // Only update content, word_count, last_updated_at, updated_at.
+  // session_count and last_session_id are left untouched — they belong to the
+  // journal session lifecycle and are not affected by the OCEAN onboarding flow.
+  const { error: upsertError } = await supabase.from("user_state").upsert(
+    {
+      user_id: userId,
+      content: updatedContent,
+      word_count: wordCount,
+      last_updated_at: now,
+      updated_at: now,
+    },
+    { onConflict: "user_id", ignoreDuplicates: false },
+  );
+
+  const latencyMs = Date.now() - startMs;
+
+  if (upsertError) {
+    logAiError({
+      event: "ai.error",
+      function: "score-ocean-profile",
+      phase: "onboarding_state_seed",
+      model,
+      user_id: userId,
+      error: {
+        message: "Failed to upsert user_state",
+        kind: "db_write",
+      },
+      request_summary: { latency_ms: latencyMs },
+    });
+    return;
+  }
+
+  logAiInfo({
+    event: "ai.response.complete",
+    function: "score-ocean-profile",
+    phase: "onboarding_state_seed",
+    model,
+    user_id: userId,
+    response_summary: {
+      word_count: wordCount,
+      updated_state_char_count: updatedContent.length,
+      latency_ms: latencyMs,
+    },
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -383,6 +599,16 @@ Deno.serve(async (req) => {
     );
     return jsonResponse({ error: "Failed to save profile" }, 500);
   }
+
+  // Fire-and-forget: seed user_state from the OCEAN questionnaire answers so
+  // that the very first journal session already has personalised context.
+  updateUserStateFromOcean(
+    user.id,
+    validatedAnswers,
+    supabase,
+    openrouterKey,
+    model,
+  ).catch(() => {});
 
   return jsonResponse({ profile: scores, reasoning });
 });
