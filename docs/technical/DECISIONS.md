@@ -25,7 +25,8 @@ Read by: All agents. Check this file before proposing changes that may conflict 
 | ADR-003 | AI I/O observability via Supabase Edge Function logs | Accepted | 2026-03-30 |
 | ADR-004 | AI reminder detection and client-side local notification scheduling | Accepted | 2026-03-30 |
 | ADR-005 | OCEAN personality onboarding and morning messages architecture | Accepted | 2026-04-11 |
-| ADR-006 | AI-guided journal, user state memory, and evening reminder | Accepted | 2026-04-11 |
+| ADR-006 | AI-guided journal, user state memory, and evening reminder | Superseded by ADR-007 | 2026-04-11 |
+| ADR-007 | Revert the AI-guided journal feature | Accepted | 2026-07-13 |
 
 ---
 
@@ -344,7 +345,7 @@ The question set is stored as a versioned constant in the client and edge functi
 ## ADR-006: AI-Guided Journal, User State Memory, and Evening Reminder
 
 **Date**: 2026-04-11
-**Status**: Accepted
+**Status**: Superseded by ADR-007
 **Deciders**: Josip / @systems-architect
 
 ### Context
@@ -495,3 +496,30 @@ There is no separate `active` state. A session is `pending` from creation until 
 - **Positive**: The journal feature reuses the existing OpenRouter edge-function infrastructure, ADR-003 observability, and the ADR-004/ADR-005 `expo-notifications` local notification pattern — no new external dependencies. The 200-word user state keeps AI token costs bounded per call regardless of how many prior sessions exist. Incremental persistence enables genuine resume UX. The fixed opening question is versioned, enabling future A/B testing without invalidating existing sessions. The evening reminder follows identical code patterns to the ADR-005 morning reminder, minimising implementation novelty.
 - **Negative**: Incremental persistence creates up to ~6 DB writes per session (vs 1 for a final-save-only approach). The incremental user state merge may drift over many sessions; a full-rebuild correction utility is not planned for v1. Evening notification content is generic (not AI-personalised in the push body — same trade-off as the ADR-005 morning notification). The `user_state` analysis must not be shown mid-session to the user to avoid biasing their responses.
 - **Neutral**: Three new tables (`journal_sessions`, `journal_entries`, `user_state`) and two new edge functions (`journal-next-question`, `journal-save-session`) are added. The `user_preferences` table gains two new keys: `evening_notification_id` (text) and `evening_notification_time` (string `"HH:MM"`, default `"21:00"`). Navigation gains a new Journal tab (4th tab in bottom nav). Journal history is a separate screen from the Thoughts inbox.
+
+---
+
+## ADR-007: Revert the AI-Guided Journal Feature
+
+**Date**: 2026-07-13
+**Status**: Accepted
+**Deciders**: Josip
+
+### Context
+
+The AI-guided journal subsystem (ADR-006) shipped in April 2026: journal tab and session screens, `journal-next-question` and `journal-save-session` edge functions, migration `007_journal.sql` (`journal_sessions`, `journal_entries`, `user_state`), the evening reminder, `user_state` seeding from OCEAN onboarding, and `user_state` context in morning-message generation. The product owner has directed that the journaling feature be removed.
+
+### Decision
+
+Revert the journal feature from the codebase while preserving database history and user data:
+
+1. **Client**: remove the Journal tab, all `src/app/(app)/journal/` screens, the Settings "Journal" section (evening reminder toggle/time, journal profile row), and the evening reminder helpers in `src/lib/notifications.ts`.
+2. **Edge functions**: delete `journal-next-question` and `journal-save-session` (code and `config.toml` entries). Remove the fire-and-forget `user_state` seeding from `score-ocean-profile` and the `user_state` context from `generate-morning-message` (the recent daily check-in context is retained — check-ins are not part of the journal feature).
+3. **Database**: migration `007_journal.sql` is **kept** in `supabase/migrations/` — it is already applied to the hosted project, and deleting an applied migration file breaks `supabase db push` history. The three journal tables remain in the database as **inert** (RLS-protected, no code paths touch them). Dropping or archiving them — and deciding what happens to existing journal data — is deferred to a future reviewed migration per `.claude/rules/migrations.md` (no `DROP TABLE` without an archive step and explicit approval).
+4. **Docs**: journal sections removed from ARCHITECTURE.md, API.md, DATABASE.md, and USER_GUIDE.md; journal tasks #043–#049 removed from TODO.md and `.tasks/`.
+
+### Consequences
+
+- **Positive**: The app returns to its pre-journal surface (Capture, Thoughts, Library) with no user-facing journal entry points; OCEAN onboarding and morning messages continue to work, now driven by the profile and recent check-in only.
+- **Negative**: The deployed `journal-next-question` / `journal-save-session` functions must be deleted from the Supabase project separately (`supabase functions delete`), since the deploy workflow only deploys functions present in the repo — it does not remove ones that have been deleted. Until then they remain callable (auth-gated, harmless).
+- **Neutral**: Inert journal tables and any existing journal rows remain in the database (tracked in DATABASE.md Known Issues). `user_preferences` rows with `evening_notification_*` keys may remain for users who enabled the reminder; devices that already scheduled the evening notification will keep receiving it until the OS notification is cancelled or the app is reinstalled — acceptable for the friends-and-family beta. Re-introducing journaling later requires a new ADR.

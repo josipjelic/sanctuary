@@ -2,7 +2,7 @@
 
 # Sanctuary — User Guide
 
-> Last updated: 2026-04-12
+> Last updated: 2026-07-13
 > Version: 0.1.0 (pre-release — features documented as they ship)
 
 ---
@@ -204,137 +204,6 @@ From the **Capture** screen, tap the **gear** icon to open **Settings**, then sc
 
 ---
 
-### Journal (Journal tab)
-
-A quiet space for guided daily reflection. Each session, Sanctuary asks you an open-ended question, then listens to your answer and asks a relevant follow-up based on what you shared. The conversation ends at a natural resting point. There are no right answers, no scores, and nothing to complete perfectly.
-
----
-
-#### Starting a journal session
-
-1. Tap the **Journal** tab (book icon, fourth in the bottom navigation).
-2. Tap **Begin today's journal**.
-
-The first question is always the same:
-
-> *Take a moment to settle in. What's on your mind today — something that happened, a feeling, or just a thought that's been with you?*
-
-Every session starts with this question so the experience feels consistent and familiar. You can take it in any direction — an event from your day, something you felt, or a thought that has been sitting with you.
-
----
-
-#### Answering by voice
-
-Voice is the main way to answer in Sanctuary.
-
-1. Tap the large **mic button** in the centre of the screen. It turns red to show that recording has started.
-2. Speak your answer at your own pace. Take as long as you need.
-3. Tap the mic button again to finish. Sanctuary transcribes what you said and shows the text on screen.
-4. If anything needs correcting, tap **Edit** to adjust your answer before moving on.
-
-The header shows your progress through the session — for example, **2 / 3**.
-
-#### Answering by typing
-
-If you prefer to type, tap **Or type instead** below the mic button. A text field opens where you can write your answer directly.
-
-Once you have an answer from voice, you can still tap **Edit** to switch to the text field and make changes.
-
-#### Moving through the session
-
-Tap **Next** to submit your answer and move to the following question. The button becomes active once your answer is long enough to work with.
-
-From the second question onwards, a **Skip this question** link appears below the Next button. Use it if a question does not feel relevant — skipping is always fine.
-
-Each session moves through up to three questions in total. After you answer the first, Sanctuary considers what you shared and asks a follow-up that fits. The session concludes naturally when the conversation has reached a good resting point — sometimes that is after two questions, sometimes three.
-
-#### Saving your session
-
-When you reach the last question, the **Next** button changes to **Save journal**. Tap it to save.
-
-**What to expect**: A "Reflection saved" screen appears with a checkmark. It returns you to the Journal tab automatically after a few seconds. From there you can also tap **View your profile** to see what Sanctuary has learned about you so far (see [Your journal profile](#your-journal-profile) below).
-
-#### Leaving partway through
-
-Tap the **back arrow** (top left) at any point to leave the session. A sheet appears with two options:
-
-- **Keep writing** — stays in the session
-- **Leave for now** — exits and saves your progress
-
-Your answers so far are saved automatically as you go. Nothing is lost if you leave.
-
----
-
-#### Resuming an interrupted session
-
-If you left a session unfinished within the last 24 hours, the Journal tab shows a card with when the session was started and a preview of your first answer.
-
-- Tap **Continue** to pick up where you left off.
-- Tap **Start fresh** to set aside the unfinished session and begin a new one from scratch.
-
-If more than 24 hours have passed since you started the session, it will no longer be offered for resuming. Tap **Begin today's journal** to start fresh.
-
----
-
-#### Past entries
-
-Tap **Past entries** near the bottom of the Journal tab to see all your completed sessions.
-
-Each entry shows:
-
-- The date of the session
-- A short preview of how you opened that session
-- How many questions you answered
-
-Past entries are read-only. They are there to look back on, not to edit.
-
----
-
-#### Evening reminder
-
-An optional daily notification that nudges you to journal each evening.
-
-**To turn it on:**
-
-1. From the **Capture** screen, tap the **gear icon** to open Settings.
-2. Scroll to the **Journal** section.
-3. Toggle **Evening reminder** on.
-
-When you enable it, Sanctuary asks for notification permission if it has not been granted already. Tap **Allow** — without permission, the reminder cannot reach you. (You can also enable it later in your device's Settings app under Sanctuary → Notifications.)
-
-**What the notification says:**
-
-> *Your journal is waiting — take a moment for yourself.*
-
-**To change the time:**
-
-1. Make sure **Evening reminder** is turned on.
-2. Tap **Reminder time** to open the time picker.
-3. Choose your preferred time and confirm.
-
-The default time is **9:00 PM**. The reminder fires daily at the time you set.
-
-To turn the reminder off, toggle **Evening reminder** back to off.
-
----
-
-#### Your journal profile
-
-After each completed session, Sanctuary builds a short summary of what it has noticed about you from your journal sessions — the kinds of things you reflect on, the themes that come up, and how you tend to describe your experiences. This is your **journal profile**.
-
-The profile helps Sanctuary ask more relevant follow-up questions in future sessions. It is never shown to you mid-session, so it has no influence on how you answer.
-
-**Where to find it:**
-
-- Open **Settings** (gear icon on the Capture screen), scroll to the **Journal** section, and tap **Your journal profile**.
-- Or tap **View your profile** on the "Reflection saved" screen right after finishing a session.
-
-The profile builds gradually over time. After your first session it will be short; it grows richer as you journal more. Pull down on the profile screen to refresh if you have just finished a session and want to see the latest version.
-
-**Privacy:** Your journal profile is private. It is stored securely and used only to personalise your journal experience — it is never shared with anyone, and it does not affect any other part of Sanctuary.
-
----
-
 ### Daily Check-in
 
 **Coming in a future release.** The database supports daily check-ins, but there is no check-in screen in the app yet.
@@ -349,7 +218,6 @@ In that sheet you can:
 
 - Choose **transcription language** (for voice — how the model is asked to interpret speech; options vary by build).
 - Configure **Reminders** — set the notification lead time and morning digest time (see the Reminders section above).
-- Configure **Journal** — turn the evening reminder on or off, set the reminder time, and view your journal profile (see the Journal section above).
 - **Sign out** of Sanctuary.
 
 **Changing your password** is not done inside this modal. Use **Forgot password** on the sign-in screen to receive a reset email when your Supabase project has reset emails configured.
@@ -370,7 +238,6 @@ In that sheet you can:
 | Reminder pill not appearing after capture                                  | AI found no clear future time reference in the text                        | This is expected — try rephrasing with a specific date or time                                  |
 | Notification did not fire                                                  | Notification permission was denied, or notifications are off for Sanctuary | System Settings → Sanctuary → Notifications → Allow                                             |
 | Reminder suggests the wrong date or time                                   | AI resolved a relative reference differently than you intended             | Tap the suggested time in the Reminder sheet to edit it before approving                        |
-| Journal follow-up questions seem generic and don't reference past sessions | Your journal profile is empty — it builds over multiple sessions           | This is expected on first use. After a few sessions, questions will become more tailored to you |
 
 
 ### Getting Help

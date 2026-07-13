@@ -1,10 +1,10 @@
 /**
  * generate-morning-message edge function.
- * Fetches the authenticated user's OCEAN profile, longitudinal user_state, and
- * most recent daily check-in, then asks OpenRouter to generate a personalised
- * morning message. Stateless — the edge function returns the message but does
- * NOT persist it; the client is responsible for caching to `morning_messages`.
- * ADR-003: OCEAN scores and user state content are never logged.
+ * Fetches the authenticated user's OCEAN profile and most recent daily
+ * check-in, then asks OpenRouter to generate a personalised morning message.
+ * Stateless — the edge function returns the message but does NOT persist it;
+ * the client is responsible for caching to `morning_messages`.
+ * ADR-003: OCEAN scores are never logged.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { logAiError, logAiInfo, truncateForLog } from "../_shared/ai-log.ts";
@@ -33,7 +33,6 @@ interface OceanProfile {
 
 function buildMorningMessagePrompt(
   profile: OceanProfile,
-  userStateContent: string | null,
   recentCheckin: { mood: string | null; intention: string | null } | null,
 ): string {
   function level(v: number): string {
@@ -51,7 +50,8 @@ function buildMorningMessagePrompt(
   ].join("\n");
 
   const checkinLines =
-    recentCheckin && (recentCheckin.mood?.trim() || recentCheckin.intention?.trim())
+    recentCheckin &&
+    (recentCheckin.mood?.trim() || recentCheckin.intention?.trim())
       ? [
           recentCheckin.mood?.trim()
             ? `- Mood: ${recentCheckin.mood.trim()}`
@@ -65,17 +65,11 @@ function buildMorningMessagePrompt(
       : null;
 
   const parts: string[] = [
-    `You are writing a warm, personalised morning message for someone based on their Big Five personality profile${userStateContent ? ", what they have been going through lately" : ""}${checkinLines ? ", and their recent check-in" : ""}.
+    `You are writing a warm, personalised morning message for someone based on their Big Five personality profile${checkinLines ? " and their recent check-in" : ""}.
 
 Personality profile (Big Five dimensions, each 0.0–1.0):
 ${oceanLines}`,
   ];
-
-  if (userStateContent?.trim()) {
-    parts.push(
-      `What this person has been going through (from their journal — use to make the message feel like it comes from someone who knows them):\n${userStateContent.trim()}`,
-    );
-  }
 
   if (checkinLines) {
     parts.push(`Their most recent daily check-in:\n${checkinLines}`);
@@ -83,8 +77,8 @@ ${oceanLines}`,
 
   parts.push(`Write a morning message of 3–5 sentences (~60–90 words). Guidelines:
 - Speak directly to the person ("you", not "they")
-- Reflect their actual personality and, if available, what they have been going through — high openness might mean acknowledging their curiosity; high neuroticism might mean gentle grounding; low extraversion might mean honouring quiet time
-- If a recent check-in or journal context is available, let it shape the message's theme naturally — do not simply echo the words back
+- Reflect their actual personality — high openness might mean acknowledging their curiosity; high neuroticism might mean gentle grounding; low extraversion might mean honouring quiet time
+- If a recent check-in is available, let it shape the message's theme naturally — do not simply echo the words back
 - Tone: calm, warm, specific to this person — like a thoughtful friend who knows you well, not a life coach or algorithm
 - Do NOT give generic advice ("have a great day", "stay positive")
 - Do NOT mention scores, personality tests, or the Big Five
@@ -136,23 +130,18 @@ Deno.serve(async (req) => {
     // Empty or missing body is fine; ignore parse errors.
   }
 
-  // Fetch OCEAN profile, user_state, and most recent check-in in parallel.
-  // user_state and check-in are non-fatal — message still generates without them.
+  // Fetch OCEAN profile and most recent check-in in parallel.
+  // The check-in is non-fatal — message still generates without it.
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
 
-  const [profileResult, userStateResult, checkinResult] = await Promise.all([
+  const [profileResult, checkinResult] = await Promise.all([
     supabase
       .from("ocean_profiles")
       .select(
         "openness, conscientiousness, extraversion, agreeableness, neuroticism",
       )
-      .eq("user_id", user.id)
-      .maybeSingle(),
-    supabase
-      .from("user_state")
-      .select("content")
       .eq("user_id", user.id)
       .maybeSingle(),
     supabase
@@ -179,17 +168,6 @@ Deno.serve(async (req) => {
 
   const profile = profileResult.data as OceanProfile;
 
-  const userStateContent: string | null =
-    (userStateResult.data as { content?: string | null } | null)?.content ??
-    null;
-
-  if (userStateResult.error) {
-    console.warn(
-      "[generate-morning-message] user_state fetch error",
-      userStateResult.error,
-    );
-  }
-
   if (checkinResult.error) {
     console.warn(
       "[generate-morning-message] daily_checkins fetch error",
@@ -199,7 +177,10 @@ Deno.serve(async (req) => {
 
   const recentCheckin =
     checkinResult.data !== null && checkinResult.data !== undefined
-      ? (checkinResult.data as { mood: string | null; intention: string | null })
+      ? (checkinResult.data as {
+          mood: string | null;
+          intention: string | null;
+        })
       : null;
 
   const openrouterKey = Deno.env.get("OPENROUTER_API_KEY");
@@ -214,14 +195,14 @@ Deno.serve(async (req) => {
 
   const httpReferer = Deno.env.get("OPENROUTER_HTTP_REFERER");
 
-  const prompt = buildMorningMessagePrompt(profile, userStateContent, recentCheckin);
+  const prompt = buildMorningMessagePrompt(profile, recentCheckin);
 
   const requestBody = {
     model,
     messages: [{ role: "user" as const, content: prompt }],
   };
 
-  // ADR-003: OCEAN scores and user state content must not appear in logs.
+  // ADR-003: OCEAN scores must not appear in logs.
   logAiInfo({
     event: "ai.request.start",
     function: "generate-morning-message",
@@ -230,7 +211,6 @@ Deno.serve(async (req) => {
     user_id: user.id,
     request_summary: {
       has_profile: true,
-      has_user_state: userStateContent !== null,
       has_checkin: recentCheckin !== null,
       prompt_chars: prompt.length,
     },

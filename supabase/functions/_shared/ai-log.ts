@@ -9,9 +9,7 @@ export type AiLogPhase =
   | "topics"
   | "reminders"
   | "onboarding"
-  | "morning-message"
-  | "journal_question"
-  | "journal_state_update";
+  | "morning-message";
 
 export type AiLogEvent =
   | "ai.request.start"

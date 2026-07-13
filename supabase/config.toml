@@ -135,12 +135,6 @@ verify_jwt = false
 [functions.transcribe-answer]
 verify_jwt = false
 
-[functions.journal-next-question]
-verify_jwt = false
-
-[functions.journal-save-session]
-verify_jwt = false
-
 [edge_runtime]
 enabled = true
 policy = "oneshot"
