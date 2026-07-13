@@ -636,3 +636,4 @@ The PRD Security NFR requires **no user data in device logs or in analytics SDK 
 | 2026-04-11 | Added `POST /score-ocean-profile` and `POST /generate-morning-message` for OCEAN personality onboarding subsystem (tasks #039, #040; FR-060, FR-070) |
 | 2026-04-12 | Added `POST /journal-next-question` and `POST /journal-save-session` (AI-Guided Journal subsystem; ADR-006; task #046; FR-030, FR-060–063) |
 | 2026-04-12 | Observability: extended `phase` values and `function` list to include `journal_question` and `journal_state_update` |
+| 2026-07-13 | Journal endpoints removed (ADR-007) and reinstated the same day (ADR-008) — no net change to this document |

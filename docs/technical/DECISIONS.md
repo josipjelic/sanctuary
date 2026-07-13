@@ -26,6 +26,8 @@ Read by: All agents. Check this file before proposing changes that may conflict 
 | ADR-004 | AI reminder detection and client-side local notification scheduling | Accepted | 2026-03-30 |
 | ADR-005 | OCEAN personality onboarding and morning messages architecture | Accepted | 2026-04-11 |
 | ADR-006 | AI-guided journal, user state memory, and evening reminder | Accepted | 2026-04-11 |
+| ADR-007 | Revert the AI-guided journal feature | Superseded by ADR-008 | 2026-07-13 |
+| ADR-008 | Reinstate the AI-guided journal feature | Accepted | 2026-07-13 |
 
 ---
 
@@ -495,3 +497,46 @@ There is no separate `active` state. A session is `pending` from creation until 
 - **Positive**: The journal feature reuses the existing OpenRouter edge-function infrastructure, ADR-003 observability, and the ADR-004/ADR-005 `expo-notifications` local notification pattern — no new external dependencies. The 200-word user state keeps AI token costs bounded per call regardless of how many prior sessions exist. Incremental persistence enables genuine resume UX. The fixed opening question is versioned, enabling future A/B testing without invalidating existing sessions. The evening reminder follows identical code patterns to the ADR-005 morning reminder, minimising implementation novelty.
 - **Negative**: Incremental persistence creates up to ~6 DB writes per session (vs 1 for a final-save-only approach). The incremental user state merge may drift over many sessions; a full-rebuild correction utility is not planned for v1. Evening notification content is generic (not AI-personalised in the push body — same trade-off as the ADR-005 morning notification). The `user_state` analysis must not be shown mid-session to the user to avoid biasing their responses.
 - **Neutral**: Three new tables (`journal_sessions`, `journal_entries`, `user_state`) and two new edge functions (`journal-next-question`, `journal-save-session`) are added. The `user_preferences` table gains two new keys: `evening_notification_id` (text) and `evening_notification_time` (string `"HH:MM"`, default `"21:00"`). Navigation gains a new Journal tab (4th tab in bottom nav). Journal history is a separate screen from the Thoughts inbox.
+
+---
+
+## ADR-007: Revert the AI-Guided Journal Feature
+
+**Date**: 2026-07-13
+**Status**: Superseded by ADR-008
+**Deciders**: Josip
+
+### Context
+
+The product owner directed removal of the AI-guided journal subsystem (ADR-006). The revert shipped to `main` on 2026-07-13: journal screens, edge functions, evening reminder, `user_state` seeding/context, docs, and tasks #043–#049 were removed. Migration `007_journal.sql` and the journal tables were kept (applied history; inert tables).
+
+### Decision
+
+Remove the journal feature from the codebase while preserving database history and data. (Full detail is in the reverted commit `ec6356c`.)
+
+### Consequences
+
+Superseded the same day by ADR-008 — the product owner reversed the decision and the revert commit was itself reverted (`git revert ec6356c`), restoring the feature.
+
+---
+
+## ADR-008: Reinstate the AI-Guided Journal Feature
+
+**Date**: 2026-07-13
+**Status**: Accepted
+**Deciders**: Josip
+
+### Context
+
+Hours after the ADR-007 revert was merged and deployed, the product owner directed that journaling remain in the app.
+
+### Decision
+
+Revert the revert (`git revert ec6356c`, commit on `main`), restoring the ADR-006 subsystem in full: journal tab and screens, `journal-next-question` / `journal-save-session` edge functions and `config.toml` entries, evening reminder helpers and Settings section, `user_state` seeding in `score-ocean-profile`, `user_state` context in `generate-morning-message`, journal docs sections, and tasks #043–#049. ADR-006 governs the subsystem again.
+
+### Consequences
+
+- **Positive**: No data was lost during the revert window — migration `007_journal.sql` and the journal tables (with any existing rows) were never dropped, and the deployed `journal-next-question` / `journal-save-session` edge functions were never deleted from the Supabase project, so the backend was journal-capable throughout.
+- **Negative**: Preview-channel users who received the journal-free EAS update briefly lost the Journal tab; the next preview update restores it. The docs carry a same-day revert/reinstate round-trip in their changelogs.
+- **Neutral**: `score-ocean-profile` and `generate-morning-message` were redeployed without `user_state` logic during the window; the reinstate push redeploys them with it restored.
+
